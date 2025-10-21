@@ -250,7 +250,7 @@ export default function AreaDoCandidatoPage() {
             </div>
 
             <div className="text-center mb-16">
-                <Link href="https://docs.google.com/forms/d/e/1FAlpQLSfC5iL7A_4BnXuREeuDaEv-_KHN2cX8mjlj_-qNjwx64SD-ex/viewform" target="_blank" rel="noopener noreferrer" className="bg-orange-500 text-white font-bold text-2xl py-4 px-12 rounded-lg hover:bg-orange-600 transition-transform duration-300 ease-in-out hover:scale-105 inline-block shadow-lg">
+                <Link href="https://docs.google.com/forms/d/e/1FAIpQLSfC5iL7A_4BnXuREeuDaEv-_KHN2cX8mjlj_-qNjwx64SD-ew/viewform" target="_blank" rel="noopener noreferrer" className="bg-orange-500 text-white font-bold text-2xl py-4 px-12 rounded-lg hover:bg-orange-600 transition-transform duration-300 ease-in-out hover:scale-105 inline-block shadow-lg">
                     Inscreva-se Agora!
                 </Link>
             </div>
@@ -309,3 +309,4 @@ export default function AreaDoCandidatoPage() {
   );
 
 }
+
