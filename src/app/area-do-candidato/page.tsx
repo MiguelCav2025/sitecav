@@ -182,7 +182,7 @@ export default function AreaDoCandidatoPage() {
             {/* Card Principal de Informações */}
             <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-10 mb-16">
                  <p className="text-base mb-4 text-center bg-blue-50 p-4 rounded-lg">
-                    Estão abertas a partir do dia {processData.inscription_start_date} até o dia {processData.inscription_end_date}, as inscrições para os interessados em participar dos cursos de formação em Cine/TV e Animação, a serem ministrados no CAV, {processData.semester}.
+                    Estão abertas a partir do dia 15/10/2025 até o dia 30/11/2025, as inscrições para os interessados em participar dos cursos de formação em Cine/TV e Animação, a serem ministrados no CAV, no 1° semestre de 2026.
                  </p>
                  <p className="my-6 text-gray-700 text-center text-sm leading-relaxed">Os cursos são gratuitos e terão duração de 03 (três) semestres, com aulas e atividades diárias a serem ministradas nos períodos matutino (9h00 às 12h00) ou noturno (19h00 às 22h00) em <strong>FORMATO PRESENCIAL</strong>, no CAV, localizado na Rua Helena Jacquey, 208 – Rudge Ramos – São Bernardo do Campo/SP.</p>
 
@@ -216,10 +216,10 @@ export default function AreaDoCandidatoPage() {
                         bgColor="bg-blue-100"
                     >
                         <div className="space-y-2 text-sm text-blue-800">
-                            <p><strong>Data:</strong> {processData.exam_date}</p>
-                            <p><strong>Horário:</strong> {processData.exam_time}</p>
-                            <p><strong>Local:</strong> {processData.exam_location}</p>
-                            <p className="mt-2"><strong>Resultado:</strong> {processData.result_date}</p>
+                            <p><strong>Data:</strong> 06/12/2025</p>
+                            <p><strong>Horário:</strong> 09h00 às 12h00</p>
+                            <p><strong>Local:</strong> CAV - Centro de audiovisual - Rua Helena Jacquey, 208 - Rudge Ramos - SBC</p>
+                            <p className="mt-2"><strong>Resultado:</strong> 15/12/2025</p>
                         </div>
                     </InfoCard>
                 </div>
@@ -250,7 +250,7 @@ export default function AreaDoCandidatoPage() {
             </div>
 
             <div className="text-center mb-16">
-                <Link href={processData.inscription_link} target="_blank" rel="noopener noreferrer" className="bg-orange-500 text-white font-bold text-2xl py-4 px-12 rounded-lg hover:bg-orange-600 transition-transform duration-300 ease-in-out hover:scale-105 inline-block shadow-lg">
+                <Link href="https://docs.google.com/forms/d/e/1FAlpQLSfC5iL7A_4BnXuREeuDaEv-_KHN2cX8mjlj_-qNjwx64SD-ex/viewform" target="_blank" rel="noopener noreferrer" className="bg-orange-500 text-white font-bold text-2xl py-4 px-12 rounded-lg hover:bg-orange-600 transition-transform duration-300 ease-in-out hover:scale-105 inline-block shadow-lg">
                     Inscreva-se Agora!
                 </Link>
             </div>
@@ -307,4 +307,5 @@ export default function AreaDoCandidatoPage() {
         </div>
     </div>
   );
+
 }
