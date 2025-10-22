@@ -176,7 +176,7 @@ export default function AreaDoCandidatoPage() {
         <div className="container mx-auto">
             <div className="text-center mb-12">
                 <h1 className="text-5xl font-extrabold text-white mb-2">Área do Candidato</h1>
-                <p className="text-xl text-[#fd9801]">Processo Seletivo CAV – {processData.semester}</p>
+                <p className="text-xl text-[#fd9801]">Processo Seletivo CAV – 1º Semestre de 2026</p>
             </div>
             
             {/* Card Principal de Informações */}
@@ -309,4 +309,5 @@ export default function AreaDoCandidatoPage() {
   );
 
 }
+
 
