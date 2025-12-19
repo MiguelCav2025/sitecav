@@ -44,16 +44,21 @@ export default async function Home() {
         <HomeCarousel banners={banners ?? []} />
       </section>
 
+      
+      <section className="section-responsive bg-yellow-100 py-8">
+  <div className="container mx-auto text-center">
+    <a href="/RESULTADOS_PROVAS.docx" className="text-2xl md:text-3xl text-blue-900 font-semibold hover:underline">
+      Clique aqui para acessar o resultado do processo seletivo
+    </a>
+  </div>
+</section>
+      
       <section id="quem-somos" className="section-responsive">
         <div className="container mx-auto container-responsive">
           <h2 className="text-hero text-blue-900 text-center spacing-section">Quem Somos</h2>
           <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-responsive text-blue-900 text-justify leading-relaxed">
             <div className="space-y-6">
-              <p style={{ textAlign: 'center' }}>
-              <a href="/RESULTADOS_PROVAS.docx">Clique aqui para acessar o resultado do processo seletivo</a>
-              </p>
-
-              
+                         
               <p className="text-responsive">
                 Inaugurado em novembro de 2012, o CAV é um centro de formação e apoio à produção audiovisual, um dos campos da economia que mais cresce, capaz de gerar anualmente mais de 25 bilhões de reais na economia brasileira.
               </p>
@@ -70,6 +75,7 @@ export default async function Home() {
               </p>
             </div>
           </div>
+          
           <div className="mt-12 flex justify-center">
             <Image
               src="/images/LOGO LARANJA CAV.png" 
