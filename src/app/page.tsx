@@ -49,6 +49,11 @@ export default async function Home() {
           <h2 className="text-hero text-blue-900 text-center spacing-section">Quem Somos</h2>
           <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-responsive text-blue-900 text-justify leading-relaxed">
             <div className="space-y-6">
+              <p style="text-align: center;">
+  <a href="public/RESULTADOS_PROVAS.docx">Clique aqui para acessar o resultado do processo seletivo</a>
+</p>
+
+              
               <p className="text-responsive">
                 Inaugurado em novembro de 2012, o CAV é um centro de formação e apoio à produção audiovisual, um dos campos da economia que mais cresce, capaz de gerar anualmente mais de 25 bilhões de reais na economia brasileira.
               </p>
