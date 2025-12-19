@@ -49,9 +49,7 @@ export default async function Home() {
           <h2 className="text-hero text-blue-900 text-center spacing-section">Quem Somos</h2>
           <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-responsive text-blue-900 text-justify leading-relaxed">
             <div className="space-y-6">
-              <p style="text-align: center;">
-  <a href="public/RESULTADOS_PROVAS.docx">Clique aqui para acessar o resultado do processo seletivo</a>
-</p>
+              <p className="text-center"> <a href="/RESULTADOS_PROVAS.docx">Clique aqui para acessar o resultado do processo seletivo</a> </p>
 
               
               <p className="text-responsive">
