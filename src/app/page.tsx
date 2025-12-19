@@ -45,13 +45,7 @@ export default async function Home() {
       </section>
 
       
-      <section className="section-responsive bg-yellow-100 py-8">
-  <div className="container mx-auto text-center">
-    <a href="/RESULTADOS_PROVAS.docx" className="text-2xl md:text-3xl text-blue-900 font-semibold hover:underline">
-      Clique aqui para acessar o resultado do processo seletivo
-    </a>
-  </div>
-</section>
+     
       
       <section id="quem-somos" className="section-responsive">
         <div className="container mx-auto container-responsive">
