@@ -170,7 +170,7 @@ export default function ResultadoProcessoSeletivoPage() {
                             <div className="mt-4 flex items-center gap-2 bg-blue-50 p-3 rounded-lg">
                                 <Calendar className="h-5 w-5 text-blue-600" />
                                 <span className="text-blue-800 font-semibold">
-                                    Início do ano letivo: 26 de fevereiro de 2026
+                                    Início do ano letivo: 02 de Março de 2026
                                 </span>
                             </div>
                         </div>
@@ -239,3 +239,4 @@ export default function ResultadoProcessoSeletivoPage() {
         </div>
     );
 }
+
