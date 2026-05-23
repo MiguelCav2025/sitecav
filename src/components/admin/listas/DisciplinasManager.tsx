@@ -609,7 +609,7 @@ export default function DisciplinasManager() {
                             value={form.professores_por_turma[t.id] || "none"}
                             onValueChange={v => setForm(f => ({ ...f, professores_por_turma: { ...f.professores_por_turma, [t.id]: v === "none" ? "" : v } }))}
                           >
-                            <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Professor (opcional)" /></SelectTrigger>
+                            <SelectTrigger className="w-44 h-8 text-xs text-gray-700"><SelectValue placeholder="Professor (opcional)" /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="none">Sem professor</SelectItem>
                               {professores.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
