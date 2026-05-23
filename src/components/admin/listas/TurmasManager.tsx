@@ -497,7 +497,7 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
           onClick={() => setFormAberto(v => !v)}
           className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-50 transition-colors"
         >
-          <span className="text-base font-semibold flex items-center gap-2">
+          <span className="text-base font-semibold text-gray-800 flex items-center gap-2">
             <Plus className="h-4 w-4" /> Nova Turma
           </span>
           {formAberto ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
