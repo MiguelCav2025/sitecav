@@ -154,10 +154,12 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
         <div className="space-y-3 bg-gray-50 rounded-xl p-4">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-gray-700">Adicionar alunos</p>
-            <Button size="sm" variant="outline" onClick={handleImportar} disabled={importando}>
-              {importando ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Download className="h-3.5 w-3.5 mr-1" />}
-              Importar do PS
-            </Button>
+            {calcularSemestreDoCurso(turma.semestre) === "1º semestre do curso" && (
+              <Button size="sm" variant="outline" onClick={handleImportar} disabled={importando}>
+                {importando ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Download className="h-3.5 w-3.5 mr-1" />}
+                Importar do Processo Seletivo
+              </Button>
+            )}
           </div>
 
           {/* Cabeçalho das colunas */}
