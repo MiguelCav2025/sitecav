@@ -23,9 +23,12 @@ export async function POST(req: NextRequest) {
       const resultado = await mammoth.extractRawText({ buffer });
       textoExtraido = resultado.value;
     } else if (file.name.toLowerCase().endsWith(".pdf")) {
-      // Import dinâmico evita que pdf-parse acesse filesystem na inicialização do módulo
-      // (problema conhecido em ambientes serverless como Vercel)
-      const pdfParse = (await import("pdf-parse")).default;
+      // Usa o arquivo interno da lib para evitar o problema de carregamento
+      // de arquivos de teste que o entry point principal do pdf-parse faz
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (
+        buffer: Buffer
+      ) => Promise<{ text: string }>;
       const resultado = await pdfParse(buffer);
       textoExtraido = resultado.text;
     } else {
