@@ -139,17 +139,28 @@ function AulasDaDisciplinaModal({
   disciplina,
   professores,
   onClose,
+  onChangeEmoji,
 }: {
   disciplina: Disciplina;
   professores: Professor[];
   onClose: () => void;
+  onChangeEmoji: (emoji: string) => void;
 }) {
   const supabase = createClient();
   const [aulas, setAulas] = useState<AulaDaDisciplina[]>([]);
   const [loading, setLoading] = useState(true);
+  const [emojiAtual, setEmojiAtual] = useState(disciplina.emoji ?? "📚");
+  const [emojiAberto, setEmojiAberto] = useState(false);
   // professor atual por turma_id
   const [profPorTurma, setProfPorTurma] = useState<Record<string, string>>({});
   const [salvandoProf, setSalvandoProf] = useState<Record<string, boolean>>({});
+
+  const handleSalvarEmoji = async (e: string) => {
+    setEmojiAtual(e);
+    setEmojiAberto(false);
+    await supabase.from("disciplinas").update({ emoji: e }).eq("id", disciplina.id);
+    onChangeEmoji(e);
+  };
 
   const carregarAulas = () => {
     supabase
@@ -206,7 +217,32 @@ function AulasDaDisciplinaModal({
     <DialogContent className="!max-w-3xl max-h-[85vh] flex flex-col">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
-          <BookOpen className="h-5 w-5 text-blue-600" />
+          {/* Emoji clicável */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setEmojiAberto(v => !v)}
+              className="text-2xl w-9 h-9 rounded-lg hover:bg-gray-100 flex items-center justify-center transition-colors"
+              title="Trocar emoji"
+            >
+              {emojiAtual}
+            </button>
+            {emojiAberto && (
+              <div className="absolute left-0 top-10 z-50 bg-white border border-gray-200 rounded-xl p-2 shadow-xl flex flex-wrap gap-1 w-56">
+                <p className="w-full text-xs text-gray-400 mb-1 px-1">Escolha um emoji</p>
+                {EMOJIS_DISCIPLINA.map(e => (
+                  <button
+                    key={e}
+                    type="button"
+                    onClick={() => handleSalvarEmoji(e)}
+                    className={`w-8 h-8 text-lg rounded-lg flex items-center justify-center hover:bg-gray-100 transition-colors ${emojiAtual === e ? "bg-blue-100 ring-2 ring-blue-400" : ""}`}
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           {disciplina.nome}
           <span className="text-sm font-normal text-gray-500 ml-1">
             · {disciplina.curso} · {disciplina.semestre_do_curso}º semestre
@@ -814,6 +850,10 @@ export default function DisciplinasManager() {
             disciplina={disciplinaSelecionada}
             professores={professores}
             onClose={() => setDisciplinaSelecionada(null)}
+            onChangeEmoji={emoji => {
+              setDisciplinas(prev => prev.map(d => d.id === disciplinaSelecionada.id ? { ...d, emoji } : d));
+              setDisciplinaSelecionada(prev => prev ? { ...prev, emoji } : prev);
+            }}
           />
         )}
       </Dialog>
