@@ -38,17 +38,11 @@ export default function ProfessorDashboard() {
 
       setNomeProfessor(prof.nome);
 
-      // Busca turmas do professor
-      const { data: pt } = await supabase.from("professor_turmas").select("turma_id").eq("professor_id", prof.id);
-      const turmaIds = (pt ?? []).map((x: any) => x.turma_id);
-
-      if (turmaIds.length === 0) { setLoading(false); return; }
-
-      // Busca aulas das turmas do professor (pendentes de chamada)
+      // Busca aulas diretamente pelo professor_id (vínculo via disciplinas)
       const { data: aulasData } = await supabase
         .from("aulas")
         .select("*, turma:turmas(id, nome), disciplina:disciplinas(nome)")
-        .in("turma_id", turmaIds)
+        .eq("professor_id", prof.id)
         .order("numero", { ascending: true });
 
       setAulas((aulasData ?? []) as Aula[]);
