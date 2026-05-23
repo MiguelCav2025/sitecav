@@ -498,48 +498,73 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
       ) : turmas.length === 0 ? (
         <p className="text-sm text-white/50 italic">Nenhuma turma cadastrada.</p>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-8">
           {CURSOS.map(curso => {
             const lista = turmasPorCurso[curso];
             if (!lista || lista.length === 0) return null;
+
+            // Ordena por semestre do curso (1,2,3) e dentro de cada um Manhã antes de Noite
+            const ORDEM_SEM = ["1º semestre do curso", "2º semestre do curso", "3º semestre do curso", "Ainda não iniciou", "Curso concluído"];
+            const ORDEM_TURNO = ["Manhã", "Noite"];
+            const sorted = [...lista].sort((a, b) => {
+              const sA = ORDEM_SEM.indexOf(calcularSemestreDoCurso(a.semestre));
+              const sB = ORDEM_SEM.indexOf(calcularSemestreDoCurso(b.semestre));
+              if (sA !== sB) return sA - sB;
+              return ORDEM_TURNO.indexOf(a.turno) - ORDEM_TURNO.indexOf(b.turno);
+            });
+
+            // Agrupa por semestre do curso para exibir em linhas separadas
+            const grupos: Record<string, Turma[]> = {};
+            sorted.forEach(t => {
+              const sem = calcularSemestreDoCurso(t.semestre);
+              if (!grupos[sem]) grupos[sem] = [];
+              grupos[sem].push(t);
+            });
+
             return (
-              <div key={curso}>
-                <p className="text-white/70 text-xs font-semibold uppercase tracking-wider mb-3">{curso}</p>
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {lista.map(t => {
-                    const semCurso = calcularSemestreDoCurso(t.semestre);
-                    return (
-                      <button
-                        key={t.id}
-                        onClick={() => setTurmaSelecionada(t)}
-                        className="bg-white rounded-xl p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all text-left w-full group cursor-pointer"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="space-y-2 flex-1">
-                            <div>
-                              <p className="font-semibold text-gray-800 group-hover:text-blue-700 transition-colors">{t.turno}</p>
-                              <p className="text-xs text-gray-400">Entrada: {t.semestre}</p>
+              <div key={curso} className="space-y-4">
+                <p className="text-white/70 text-xs font-semibold uppercase tracking-wider">{curso}</p>
+
+                {ORDEM_SEM.filter(sem => grupos[sem]?.length).map(sem => (
+                  <div key={sem} className="space-y-2">
+                    {/* Rótulo da linha de semestre */}
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badgeSemestre(sem)}`}>{sem}</span>
+                      <div className="flex-1 h-px bg-white/10" />
+                    </div>
+
+                    {/* Cards da linha: Manhã | Noite */}
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      {grupos[sem].map(t => (
+                        <button
+                          key={t.id}
+                          onClick={() => setTurmaSelecionada(t)}
+                          className="bg-white rounded-xl p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all text-left w-full group cursor-pointer"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="space-y-2 flex-1">
+                              <div>
+                                <p className="font-semibold text-gray-800 group-hover:text-blue-700 transition-colors">{t.turno}</p>
+                                <p className="text-xs text-gray-400">Entrada: {t.semestre}</p>
+                              </div>
+                              <p className="text-xs text-gray-400 flex items-center gap-1 pt-1">
+                                <Users className="h-3 w-3" />
+                                {t._alunos_count} aluno{t._alunos_count !== 1 ? "s" : ""}
+                                <span className="ml-auto text-blue-500 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Ver alunos →</span>
+                              </p>
                             </div>
-                            <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full ${badgeSemestre(semCurso)}`}>
-                              {semCurso}
-                            </span>
-                            <p className="text-xs text-gray-400 flex items-center gap-1 pt-1">
-                              <Users className="h-3 w-3" />
-                              {t._alunos_count} aluno{t._alunos_count !== 1 ? "s" : ""}
-                              <span className="ml-auto text-blue-500 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Ver alunos →</span>
-                            </p>
+                            <button
+                              onClick={e => { e.stopPropagation(); handleExcluir(t.id); }}
+                              className="text-red-300 hover:text-red-600 p-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
                           </div>
-                          <button
-                            onClick={e => { e.stopPropagation(); handleExcluir(t.id); }}
-                            className="text-red-300 hover:text-red-600 p-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             );
           })}
