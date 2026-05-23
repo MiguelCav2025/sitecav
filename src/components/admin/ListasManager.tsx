@@ -54,7 +54,7 @@ export default function ListasManager() {
       </div>
 
       {/* Sub-tabs */}
-      <Tabs value={subTab} onValueChange={setSubTab}>
+      <Tabs value={subTab} onValueChange={v => setSubTab(v as "turmas" | "disciplinas" | "professores")}>
         <TabsList className="flex flex-wrap gap-1 h-auto bg-white/10 border border-white/20 p-1 rounded-xl">
           <TabsTrigger
             value="turmas"
