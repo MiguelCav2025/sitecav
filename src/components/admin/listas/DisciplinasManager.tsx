@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Plus, Trash2, Loader2, BookOpen, CheckCircle, AlertCircle,
-  GraduationCap, Users, ChevronDown, ChevronUp, UserCheck
+  GraduationCap, UserCheck, Calendar
 } from "lucide-react";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -34,6 +34,7 @@ interface Disciplina {
   curso: string;
   semestre_do_curso: number;
   total_aulas: number;
+  dia_da_semana: number | null;
   created_at: string;
 }
 
@@ -52,27 +53,32 @@ const SEMESTRES_CURSO = [
   { value: "2", label: "2º semestre do curso" },
   { value: "3", label: "3º semestre do curso" },
 ];
+const DIAS = [
+  { value: "1", label: "Segunda" },
+  { value: "2", label: "Terça" },
+  { value: "3", label: "Quarta" },
+  { value: "4", label: "Quinta" },
+  { value: "5", label: "Sexta" },
+];
 
-// Calcula em qual semestre do curso uma turma está agora
+const badgeSem = (s: number) => {
+  if (s === 1) return { badge: "bg-green-100 text-green-700", border: "border-green-200", header: "bg-green-50" };
+  if (s === 2) return { badge: "bg-blue-100 text-blue-700", border: "border-blue-200", header: "bg-blue-50" };
+  return { badge: "bg-purple-100 text-purple-700", border: "border-purple-200", header: "bg-purple-50" };
+};
+
 function calcularSemestreDoCurso(semestreEntrada: string): number {
   const hoje = new Date();
   const anoAtual = hoje.getFullYear();
   const semestreAtual = hoje.getMonth() < 6 ? 1 : 2;
   const [anoEntrada, semEntrada] = semestreEntrada.split("/").map(Number);
   if (!anoEntrada || !semEntrada) return 0;
-  const total = (anoAtual - anoEntrada) * 2 + (semestreAtual - semEntrada) + 1;
-  return total;
+  return (anoAtual - anoEntrada) * 2 + (semestreAtual - semEntrada) + 1;
 }
 
-// ── Modal de aulas por turma ──────────────────────────────────────────────────
+// ── Modal de aulas por disciplina ─────────────────────────────────────────────
 
-function AulasDaDisciplinaModal({
-  disciplina,
-  onClose,
-}: {
-  disciplina: Disciplina;
-  onClose: () => void;
-}) {
+function AulasDaDisciplinaModal({ disciplina, onClose }: { disciplina: Disciplina; onClose: () => void }) {
   const supabase = createClient();
   const [aulas, setAulas] = useState<AulaDaDisciplina[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,7 +95,6 @@ function AulasDaDisciplinaModal({
       });
   }, [disciplina.id]);
 
-  // Agrupa por turma
   const porTurma: Record<string, AulaDaDisciplina[]> = {};
   aulas.forEach(a => {
     const key = `${a.turma.turno} — Entrada ${a.turma.semestre}`;
@@ -100,7 +105,7 @@ function AulasDaDisciplinaModal({
   const totalFeitas = aulas.filter(a => a.chamada_aberta).length;
 
   return (
-    <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+    <DialogContent className="!max-w-3xl max-h-[85vh] flex flex-col">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <BookOpen className="h-5 w-5 text-blue-600" />
@@ -112,16 +117,10 @@ function AulasDaDisciplinaModal({
       </DialogHeader>
 
       <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-        <div className="flex gap-3 text-sm">
-          <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-medium">
-            {disciplina.total_aulas} aulas/turma
-          </span>
-          <span className="bg-green-50 text-green-700 px-3 py-1 rounded-full font-medium">
-            {totalFeitas} chamadas feitas
-          </span>
-          <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full font-medium">
-            {aulas.length - totalFeitas} pendentes
-          </span>
+        <div className="flex gap-3 text-sm flex-wrap">
+          <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-medium">{disciplina.total_aulas} aulas/turma</span>
+          <span className="bg-green-50 text-green-700 px-3 py-1 rounded-full font-medium">{totalFeitas} chamadas feitas</span>
+          <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full font-medium">{aulas.length - totalFeitas} pendentes</span>
         </div>
 
         {loading ? (
@@ -166,6 +165,58 @@ function AulasDaDisciplinaModal({
   );
 }
 
+// ── Card compacto de disciplina na grade ──────────────────────────────────────
+
+function DisciplinaCard({
+  disciplina,
+  professores,
+  onVerAulas,
+  onExcluir,
+  onChangeDia,
+}: {
+  disciplina: Disciplina;
+  professores: Professor[];
+  onVerAulas: () => void;
+  onExcluir: () => void;
+  onChangeDia: (dia: number | null) => void;
+}) {
+  return (
+    <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-sm hover:shadow-md transition-shadow group">
+      <div className="flex items-start justify-between gap-1 mb-2">
+        <p className="font-semibold text-gray-800 text-sm leading-tight flex-1">{disciplina.nome}</p>
+        <button
+          onClick={onExcluir}
+          className="text-red-300 hover:text-red-600 p-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <p className="text-xs text-gray-400 mb-2">{disciplina.total_aulas} aulas</p>
+      <div className="flex items-center gap-1 justify-between">
+        <button
+          onClick={onVerAulas}
+          className="text-xs text-blue-600 hover:text-blue-800 font-medium hover:underline"
+        >
+          Ver aulas
+        </button>
+        {/* Seletor de dia inline */}
+        <Select
+          value={disciplina.dia_da_semana?.toString() ?? "none"}
+          onValueChange={v => onChangeDia(v === "none" ? null : parseInt(v))}
+        >
+          <SelectTrigger className="h-6 text-xs w-24 border-dashed border-gray-300 text-gray-500">
+            <SelectValue placeholder="Dia" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Sem dia</SelectItem>
+            {DIAS.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+}
+
 // ── DisciplinasManager principal ──────────────────────────────────────────────
 
 export default function DisciplinasManager() {
@@ -178,17 +229,16 @@ export default function DisciplinasManager() {
   const [salvando, setSalvando] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
   const [disciplinaSelecionada, setDisciplinaSelecionada] = useState<Disciplina | null>(null);
-  const [expandidas, setExpandidas] = useState<Record<string, boolean>>({});
 
   const [form, setForm] = useState({
     nome: "",
     curso: "",
     semestre_do_curso: "",
     total_aulas: "16",
-    professores_por_turma: {} as Record<string, string>, // turma_id → professor_id
+    dia_da_semana: "",
+    professores_por_turma: {} as Record<string, string>,
   });
 
-  // Turmas que correspondem ao curso + semestre selecionados no form
   const turmasAfetadas = turmas.filter(t => {
     if (!form.curso || !form.semestre_do_curso) return false;
     return t.curso === form.curso && calcularSemestreDoCurso(t.semestre) === parseInt(form.semestre_do_curso);
@@ -197,7 +247,7 @@ export default function DisciplinasManager() {
   const fetchDados = useCallback(async () => {
     setLoading(true);
     const [{ data: discs }, { data: ts }, { data: ps }] = await Promise.all([
-      supabase.from("disciplinas").select("*").order("curso").order("semestre_do_curso").order("nome"),
+      supabase.from("disciplinas").select("*").order("curso").order("semestre_do_curso").order("dia_da_semana", { ascending: true, nullsFirst: false }).order("nome"),
       supabase.from("turmas").select("id, nome, semestre, curso, turno").order("semestre", { ascending: false }),
       supabase.from("professores").select("id, nome").order("nome"),
     ]);
@@ -224,7 +274,6 @@ export default function DisciplinasManager() {
 
     setSalvando(true);
 
-    // 1. Cria a disciplina
     const { data: novaDisc, error: errDisc } = await supabase
       .from("disciplinas")
       .insert([{
@@ -232,6 +281,7 @@ export default function DisciplinasManager() {
         curso: form.curso,
         semestre_do_curso: parseInt(form.semestre_do_curso),
         total_aulas: parseInt(form.total_aulas),
+        dia_da_semana: form.dia_da_semana ? parseInt(form.dia_da_semana) : null,
       }])
       .select()
       .single();
@@ -242,7 +292,6 @@ export default function DisciplinasManager() {
       return;
     }
 
-    // 2. Gera as aulas para cada turma afetada
     const aulasParaInserir: object[] = [];
     turmasAfetadas.forEach(turma => {
       const professorId = form.professores_por_turma[turma.id] || null;
@@ -263,7 +312,7 @@ export default function DisciplinasManager() {
     } else {
       const total = turmasAfetadas.length * parseInt(form.total_aulas);
       showMsg("ok", `"${form.nome}" criada! ${total} aulas geradas para ${turmasAfetadas.length} turma(s).`);
-      setForm({ nome: "", curso: "", semestre_do_curso: "", total_aulas: "16", professores_por_turma: {} });
+      setForm({ nome: "", curso: "", semestre_do_curso: "", total_aulas: "16", dia_da_semana: "", professores_por_turma: {} });
     }
 
     fetchDados();
@@ -277,20 +326,19 @@ export default function DisciplinasManager() {
     fetchDados();
   };
 
-  const toggleExpandida = (id: string) =>
-    setExpandidas(prev => ({ ...prev, [id]: !prev[id] }));
+  const handleChangeDia = async (id: string, dia: number | null) => {
+    await supabase.from("disciplinas").update({ dia_da_semana: dia }).eq("id", id);
+    setDisciplinas(prev => prev.map(d => d.id === id ? { ...d, dia_da_semana: dia } : d));
+  };
 
-  // Agrupa disciplinas por curso para exibição
-  const disciplinasPorCurso = CURSOS.reduce<Record<string, Disciplina[]>>((acc, curso) => {
-    acc[curso] = disciplinas.filter(d => d.curso === curso);
+  // Agrupa disciplinas: curso → semestre → dia_da_semana
+  const porCursoSemestre = CURSOS.reduce<Record<string, Record<number, Disciplina[]>>>((acc, curso) => {
+    acc[curso] = {};
+    [1, 2, 3].forEach(sem => {
+      acc[curso][sem] = disciplinas.filter(d => d.curso === curso && d.semestre_do_curso === sem);
+    });
     return acc;
   }, {});
-
-  const badgeSem = (s: number) => {
-    if (s === 1) return "bg-green-100 text-green-700";
-    if (s === 2) return "bg-blue-100 text-blue-700";
-    return "bg-purple-100 text-purple-700";
-  };
 
   return (
     <div className="space-y-6">
@@ -303,17 +351,10 @@ export default function DisciplinasManager() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
-
-          {/* Campos principais */}
           <div className="space-y-4">
             <div className="space-y-1">
               <Label>Nome da disciplina *</Label>
-              <Input
-                className="w-full"
-                placeholder="ex: Direção de Fotografia III"
-                value={form.nome}
-                onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
-              />
+              <Input className="w-full" placeholder="ex: Direção de Fotografia III" value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} />
             </div>
             <div className="space-y-1">
               <Label>Curso *</Label>
@@ -326,39 +367,40 @@ export default function DisciplinasManager() {
               <Label>Semestre do curso *</Label>
               <Select value={form.semestre_do_curso} onValueChange={v => setForm(f => ({ ...f, semestre_do_curso: v, professores_por_turma: {} }))}>
                 <SelectTrigger className="w-full"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>
-                  {SEMESTRES_CURSO.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                </SelectContent>
+                <SelectContent>{SEMESTRES_CURSO.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
-              <Label>Quantidade de aulas no semestre *</Label>
-              <Input
-                className="w-full"
-                type="number"
-                min="1"
-                max="200"
-                value={form.total_aulas}
-                onChange={e => setForm(f => ({ ...f, total_aulas: e.target.value }))}
-              />
-              <p className="text-xs text-gray-400">Serão geradas automaticamente para cada turma</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label>Dia da semana</Label>
+                <Select value={form.dia_da_semana || "none"} onValueChange={v => setForm(f => ({ ...f, dia_da_semana: v === "none" ? "" : v }))}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Selecione (opcional)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não definido</SelectItem>
+                    {DIAS.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Qtd. de aulas *</Label>
+                <Input className="w-full" type="number" min="1" max="200" value={form.total_aulas} onChange={e => setForm(f => ({ ...f, total_aulas: e.target.value }))} />
+                <p className="text-xs text-gray-400">Geradas automaticamente por turma</p>
+              </div>
             </div>
           </div>
 
-          {/* Preview das turmas afetadas + seletor de professor por turma */}
           {form.curso && form.semestre_do_curso && (
             <div className={`rounded-xl p-4 border ${turmasAfetadas.length > 0 ? "bg-blue-50 border-blue-200" : "bg-amber-50 border-amber-200"}`}>
               {turmasAfetadas.length === 0 ? (
                 <p className="text-sm text-amber-700 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   Nenhuma turma de <strong>{form.curso}</strong> está no <strong>{form.semestre_do_curso}º semestre</strong> agora.
-                  Verifique se as turmas foram criadas com a data de entrada correta.
                 </p>
               ) : (
                 <div className="space-y-3">
                   <p className="text-sm font-semibold text-blue-800 flex items-center gap-2">
                     <GraduationCap className="h-4 w-4" />
-                    {turmasAfetadas.length} turma{turmasAfetadas.length !== 1 ? "s" : ""} afetada{turmasAfetadas.length !== 1 ? "s" : ""} — serão geradas {turmasAfetadas.length * parseInt(form.total_aulas || "0")} aulas no total
+                    {turmasAfetadas.length} turma{turmasAfetadas.length !== 1 ? "s" : ""} · {turmasAfetadas.length * parseInt(form.total_aulas || "0")} aulas no total
                   </p>
                   <div className="space-y-2">
                     {turmasAfetadas.map(t => (
@@ -371,14 +413,9 @@ export default function DisciplinasManager() {
                           <UserCheck className="h-4 w-4 text-gray-400" />
                           <Select
                             value={form.professores_por_turma[t.id] || "none"}
-                            onValueChange={v => setForm(f => ({
-                              ...f,
-                              professores_por_turma: { ...f.professores_por_turma, [t.id]: v === "none" ? "" : v }
-                            }))}
+                            onValueChange={v => setForm(f => ({ ...f, professores_por_turma: { ...f.professores_por_turma, [t.id]: v === "none" ? "" : v } }))}
                           >
-                            <SelectTrigger className="w-44 h-8 text-xs">
-                              <SelectValue placeholder="Professor (opcional)" />
-                            </SelectTrigger>
+                            <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Professor (opcional)" /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="none">Sem professor</SelectItem>
                               {professores.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
@@ -407,75 +444,97 @@ export default function DisciplinasManager() {
         </CardContent>
       </Card>
 
-      {/* Lista de disciplinas */}
+      {/* Grade semanal por curso e semestre */}
       {loading ? (
         <div className="flex items-center gap-2 text-white/60 py-4"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
       ) : disciplinas.length === 0 ? (
         <p className="text-sm text-white/50 italic">Nenhuma disciplina cadastrada.</p>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-8">
           {CURSOS.map(curso => {
-            const lista = disciplinasPorCurso[curso];
-            if (!lista || lista.length === 0) return null;
-
-            // Agrupa por semestre dentro do curso
-            const porSemestre: Record<number, Disciplina[]> = {};
-            lista.forEach(d => {
-              if (!porSemestre[d.semestre_do_curso]) porSemestre[d.semestre_do_curso] = [];
-              porSemestre[d.semestre_do_curso].push(d);
-            });
-
+            const temAlguma = [1, 2, 3].some(sem => porCursoSemestre[curso][sem].length > 0);
+            if (!temAlguma) return null;
             return (
-              <div key={curso}>
-                <p className="text-white/70 text-xs font-semibold uppercase tracking-wider mb-3">{curso}</p>
-                <div className="space-y-4">
-                  {[1, 2, 3].map(sem => {
-                    const discs = porSemestre[sem];
-                    if (!discs || discs.length === 0) return null;
-                    return (
-                      <div key={sem}>
-                        <p className="text-white/50 text-xs mb-2 flex items-center gap-1">
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${badgeSem(sem)}`}>
-                            {sem}º semestre
-                          </span>
-                        </p>
-                        <div className="space-y-2">
-                          {discs.map(d => (
-                            <div key={d.id} className="bg-white rounded-xl overflow-hidden">
-                              <div
-                                className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
-                                onClick={() => toggleExpandida(d.id)}
-                              >
-                                <div className="flex items-center gap-3">
-                                  <BookOpen className="h-4 w-4 text-blue-500 shrink-0" />
-                                  <div>
-                                    <p className="font-semibold text-gray-800">{d.nome}</p>
-                                    <p className="text-xs text-gray-400">{d.total_aulas} aulas por turma</p>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={e => { e.stopPropagation(); setDisciplinaSelecionada(d); }}
-                                    className="text-xs text-blue-600 hover:text-blue-800 font-medium px-2 py-1 rounded hover:bg-blue-50 transition-colors"
-                                  >
-                                    Ver aulas
-                                  </button>
-                                  <button
-                                    onClick={e => { e.stopPropagation(); handleExcluir(d.id, d.nome); }}
-                                    className="text-red-400 hover:text-red-600 p-1"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                  {expandidas[d.id] ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+              <div key={curso} className="space-y-5">
+                <p className="text-white font-bold text-lg border-b border-white/20 pb-2">{curso}</p>
+
+                {[1, 2, 3].map(sem => {
+                  const discs = porCursoSemestre[curso][sem];
+                  if (discs.length === 0) return null;
+                  const cores = badgeSem(sem);
+
+                  // Agrupa por dia: 1-5 + null (sem dia)
+                  const porDia: Record<string, Disciplina[]> = { "1": [], "2": [], "3": [], "4": [], "5": [], "none": [] };
+                  discs.forEach(d => {
+                    const key = d.dia_da_semana?.toString() ?? "none";
+                    if (!porDia[key]) porDia[key] = [];
+                    porDia[key].push(d);
+                  });
+
+                  const temSemDia = porDia["none"].length > 0;
+
+                  return (
+                    <div key={sem} className="space-y-2">
+                      {/* Cabeçalho do semestre */}
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cores.badge}`}>{sem}º semestre</span>
+                        <div className="flex-1 h-px bg-white/10" />
                       </div>
-                    );
-                  })}
-                </div>
+
+                      {/* Grade Mon-Fri */}
+                      <div className="grid grid-cols-5 gap-2">
+                        {DIAS.map(dia => (
+                          <div key={dia.value} className="space-y-1.5">
+                            {/* Cabeçalho do dia */}
+                            <div className={`text-center text-xs font-semibold py-1.5 rounded-lg ${cores.header} ${cores.badge.split(" ")[1]}`}>
+                              <Calendar className="h-3 w-3 mx-auto mb-0.5" />
+                              {dia.label}
+                            </div>
+                            {/* Disciplinas do dia */}
+                            {porDia[dia.value].length === 0 ? (
+                              <div className="border-2 border-dashed border-white/10 rounded-xl h-16 flex items-center justify-center">
+                                <span className="text-white/20 text-xs">—</span>
+                              </div>
+                            ) : (
+                              porDia[dia.value].map(d => (
+                                <DisciplinaCard
+                                  key={d.id}
+                                  disciplina={d}
+                                  professores={professores}
+                                  onVerAulas={() => setDisciplinaSelecionada(d)}
+                                  onExcluir={() => handleExcluir(d.id, d.nome)}
+                                  onChangeDia={dia => handleChangeDia(d.id, dia)}
+                                />
+                              ))
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Disciplinas sem dia definido */}
+                      {temSemDia && (
+                        <div className="mt-1">
+                          <p className="text-xs text-white/40 mb-1.5 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" /> Sem dia definido — clique em &quot;Dia&quot; no card para atribuir
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {porDia["none"].map(d => (
+                              <div key={d.id} className="w-48">
+                                <DisciplinaCard
+                                  disciplina={d}
+                                  professores={professores}
+                                  onVerAulas={() => setDisciplinaSelecionada(d)}
+                                  onExcluir={() => handleExcluir(d.id, d.nome)}
+                                  onChangeDia={dia => handleChangeDia(d.id, dia)}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
