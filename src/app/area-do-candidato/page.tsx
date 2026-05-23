@@ -1,6 +1,7 @@
 import { createSupabaseServerClient as createClient } from "@/lib/supabase/server";
-import { CheckCircle, Users, GraduationCap, Calendar, Mail, ExternalLink, MapPin, Clock, ClipboardList } from "lucide-react";
+import { CheckCircle, Users, GraduationCap, Calendar, Mail, ExternalLink, MapPin, Clock, ClipboardList, BookOpen, Film, Link2 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -23,6 +24,21 @@ interface Resultado {
   nome: string;
   ordem: number;
   semestre: string;
+}
+
+interface ReferenceVideo {
+  id: string;
+  title: string;
+  video_url: string;
+  thumbnail_url: string | null;
+  course: string;
+}
+
+interface Bibliography {
+  id: string;
+  title: string;
+  url: string;
+  course: string;
 }
 
 // ─── Subcomponente: Tabela de aprovados ───────────────────────────────────────
@@ -188,9 +204,129 @@ function PaginaResultados({ resultados }: { resultados: Resultado[] }) {
   );
 }
 
+// ─── Subcomponente: Filmografia e Bibliografia ────────────────────────────────
+
+function FilmografiaBibliografia({
+  videos,
+  bibliografias,
+}: {
+  videos: ReferenceVideo[];
+  bibliografias: Bibliography[];
+}) {
+  const cursos = ["Animação", "Cine/TV"];
+  const temConteudo = videos.length > 0 || bibliografias.length > 0;
+  if (!temConteudo) return null;
+
+  return (
+    <div className="mt-10 border-t border-white/20 pt-10">
+      <h2 className="text-2xl md:text-3xl font-bold text-white text-center mb-2 flex items-center justify-center gap-3">
+        <Film className="h-7 w-7 text-orange-400" />
+        Filmografia e Bibliografia
+      </h2>
+      <p className="text-center text-blue-200 text-sm mb-10">
+        Material de referência indicado para os cursos
+      </p>
+
+      {cursos.map((curso) => {
+        const videosC = videos.filter((v) => v.course === curso);
+        const biblioC = bibliografias.filter((b) => b.course === curso);
+        if (videosC.length === 0 && biblioC.length === 0) return null;
+
+        return (
+          <div key={curso} className="mb-12">
+            <h3 className="text-xl font-bold text-orange-400 mb-6 flex items-center gap-2">
+              <span className="w-2 h-6 bg-orange-400 rounded-full" />
+              {curso}
+            </h3>
+
+            {/* Filmografia */}
+            {videosC.length > 0 && (
+              <div className="mb-6">
+                <p className="text-white/70 text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-1">
+                  <Film className="h-3.5 w-3.5" /> Filmografia
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {videosC.map((v) => (
+                    <Link
+                      key={v.id}
+                      href={v.video_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group block bg-white/10 rounded-xl overflow-hidden hover:bg-white/20 transition-all hover:-translate-y-0.5"
+                    >
+                      <div className="aspect-video relative">
+                        {v.thumbnail_url ? (
+                          <Image
+                            src={v.thumbnail_url}
+                            alt={v.title}
+                            fill
+                            className="object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-blue-800 flex items-center justify-center">
+                            <Film className="h-8 w-8 text-white/40" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                          <div className="w-10 h-10 bg-white/90 rounded-full flex items-center justify-center">
+                            <svg className="w-4 h-4 text-blue-900 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M8 5v14l11-7z" />
+                            </svg>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-white text-xs font-medium p-2 line-clamp-2">{v.title}</p>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Bibliografia */}
+            {biblioC.length > 0 && (
+              <div>
+                <p className="text-white/70 text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-1">
+                  <BookOpen className="h-3.5 w-3.5" /> Bibliografia
+                </p>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {biblioC.map((b) => (
+                    <Link
+                      key={b.id}
+                      href={b.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 bg-white/10 hover:bg-white/20 rounded-xl p-3 transition-all group"
+                    >
+                      <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center shrink-0">
+                        <Link2 className="h-4 w-4 text-orange-400" />
+                      </div>
+                      <span className="text-white text-sm font-medium group-hover:text-orange-300 transition-colors line-clamp-2">
+                        {b.title}
+                      </span>
+                      <ExternalLink className="h-3.5 w-3.5 text-white/40 shrink-0 ml-auto" />
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Subcomponente: Página de Processo Seletivo ───────────────────────────────
 
-function PaginaProcessoSeletivo({ dados }: { dados: ProcessData }) {
+function PaginaProcessoSeletivo({
+  dados,
+  videos,
+  bibliografias,
+}: {
+  dados: ProcessData;
+  videos: ReferenceVideo[];
+  bibliografias: Bibliography[];
+}) {
   return (
     <div className="bg-blue-900 min-h-screen pt-18 py-8 px-4 md:px-12">
       <div className="container mx-auto">
@@ -319,9 +455,12 @@ function PaginaProcessoSeletivo({ dados }: { dados: ProcessData }) {
           </div>
         </div>
 
+        {/* Filmografia e Bibliografia */}
+        <FilmografiaBibliografia videos={videos} bibliografias={bibliografias} />
+
         {/* Botão de inscrição */}
         {dados.inscription_link && (
-          <div className="text-center pb-8">
+          <div className="text-center py-10">
             <Link
               href={dados.inscription_link}
               target="_blank"
@@ -343,29 +482,37 @@ function PaginaProcessoSeletivo({ dados }: { dados: ProcessData }) {
 export default async function AreaDoCandidatoPage() {
   const supabase = await createClient();
 
-  // Busca configuração ativa
-  const { data: processRows } = await supabase
-    .from("process_data")
-    .select("*")
-    .eq("is_active", true)
-    .order("created_at", { ascending: false })
-    .limit(1);
+  // Busca configuração ativa e material de referência em paralelo
+  const [{ data: processRows }, { data: videosData }, { data: biblioData }] = await Promise.all([
+    supabase
+      .from("process_data")
+      .select("*")
+      .eq("is_active", true)
+      .order("created_at", { ascending: false })
+      .limit(1),
+    supabase
+      .from("reference_videos")
+      .select("id, title, video_url, thumbnail_url, course")
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("reference_bibliographies")
+      .select("id, title, url, course")
+      .order("created_at", { ascending: true }),
+  ]);
 
   const processData = processRows?.[0] as ProcessData | undefined;
   const pageMode = processData?.page_mode ?? "processo_seletivo";
+  const videos = (videosData ?? []) as ReferenceVideo[];
+  const bibliografias = (biblioData ?? []) as Bibliography[];
 
   // Se modo resultados, busca candidatos ativos
-  let resultados: Resultado[] = [];
   if (pageMode === "resultados") {
     const { data } = await supabase
       .from("resultados_processo")
       .select("*")
       .eq("is_active", true)
       .order("ordem", { ascending: true });
-    resultados = (data ?? []) as Resultado[];
-  }
-
-  if (pageMode === "resultados") {
+    const resultados = (data ?? []) as Resultado[];
     return <PaginaResultados resultados={resultados} />;
   }
 
@@ -379,5 +526,5 @@ export default async function AreaDoCandidatoPage() {
     );
   }
 
-  return <PaginaProcessoSeletivo dados={processData} />;
+  return <PaginaProcessoSeletivo dados={processData} videos={videos} bibliografias={bibliografias} />;
 }

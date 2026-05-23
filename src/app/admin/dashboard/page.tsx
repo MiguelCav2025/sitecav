@@ -26,11 +26,13 @@ const ProcessDataManager = dynamic(() => import('@/components/admin/ProcessDataM
 const OficinaManager = dynamic(() => import('@/components/admin/OficinaManager'), { ssr: false });
 const ArteEducadorManager = dynamic(() => import('@/components/admin/ArteEducadorManager'), { ssr: false });
 const AdminManager = dynamic(() => import('@/components/admin/AdminManager'), { ssr: false });
+const ListasManager = dynamic(() => import('@/components/admin/ListasManager'), { ssr: false });
+const RelatoriosManager = dynamic(() => import('@/components/admin/RelatoriosManager'), { ssr: false });
 
 const VALID_TABS = [
   "banners","portfolio","institutional_projects","photo_gallery",
   "oficinas","arte_educadores","downloads","process_data",
-  "ref_videos","ref_biblio","admin",
+  "ref_videos","ref_biblio","listas","relatorios","admin",
 ];
 
 function DashboardInner() {
@@ -57,6 +59,8 @@ function DashboardInner() {
     { value: "process_data", label: "Processo Seletivo" },
     { value: "ref_videos", label: "Filmografia" },
     { value: "ref_biblio", label: "Bibliografia" },
+    { value: "listas", label: "Listas" },
+    { value: "relatorios", label: "Relatórios" },
     { value: "admin", label: "Admin" },
   ];
 
@@ -165,6 +169,12 @@ function DashboardInner() {
         </TabsContent>
         <TabsContent value="arte_educadores" className="mt-4">
           <ArteEducadorManager />
+        </TabsContent>
+        <TabsContent value="listas" className="mt-4">
+          <ListasManager />
+        </TabsContent>
+        <TabsContent value="relatorios" className="mt-4">
+          <RelatoriosManager />
         </TabsContent>
         <TabsContent value="admin" className="mt-4">
           {/* Componente AdminManager será criado e importado dinamicamente */}
