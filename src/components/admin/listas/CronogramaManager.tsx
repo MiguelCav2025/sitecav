@@ -52,6 +52,8 @@ export default function CronogramaManager() {
   const [form, setForm] = useState({ semestre: "", data_inicio: "", data_fim: "" });
   // Feriados em edição por cronograma
   const [feriadoInput, setFeriadoInput] = useState<Record<string, string>>({});
+  // Edição inline de datas por cronograma
+  const [editDatas, setEditDatas] = useState<Record<string, { inicio: string; fim: string }>>({});
 
   const fetch = async () => {
     setLoading(true);
@@ -59,7 +61,12 @@ export default function CronogramaManager() {
       .from("cronogramas")
       .select("*")
       .order("data_inicio", { ascending: false });
-    setCronogramas(data ?? []);
+    const rows = data ?? [];
+    setCronogramas(rows);
+    // inicializa editDatas com os valores atuais
+    const init: Record<string, { inicio: string; fim: string }> = {};
+    rows.forEach(c => { init[c.id] = { inicio: c.data_inicio, fim: c.data_fim }; });
+    setEditDatas(init);
     setLoading(false);
   };
 
@@ -107,6 +114,15 @@ export default function CronogramaManager() {
     await supabase.from("cronogramas").update({ feriados: novosFeriados }).eq("id", cron.id);
     setCronogramas(prev => prev.map(c => c.id === cron.id ? { ...c, feriados: novosFeriados } : c));
     setFeriadoInput(prev => ({ ...prev, [cron.id]: "" }));
+  };
+
+  const handleSalvarDatas = async (cronId: string) => {
+    const ed = editDatas[cronId];
+    if (!ed) return;
+    if (ed.inicio > ed.fim) return showMsg("erro", "Data de início deve ser anterior ao fim.");
+    await supabase.from("cronogramas").update({ data_inicio: ed.inicio, data_fim: ed.fim }).eq("id", cronId);
+    setCronogramas(prev => prev.map(c => c.id === cronId ? { ...c, data_inicio: ed.inicio, data_fim: ed.fim } : c));
+    showMsg("ok", "Datas atualizadas!");
   };
 
   const handleRemoverFeriado = async (cron: Cronograma, data: string) => {
@@ -231,35 +247,75 @@ export default function CronogramaManager() {
 
                 {aberto && (
                   <div className="border-t px-4 py-4 space-y-4">
-                    {/* Resumo de aulas por dia */}
-                    {ocorrencias && (
-                      <div>
-                        <p className="text-xs font-semibold text-gray-500 mb-2">Aulas disponíveis por dia da semana</p>
-                        <div className="flex gap-4 flex-wrap">
-                          {Object.entries(ocorrencias).map(([dia, qtd]) => (
-                            <div key={dia} className="text-center bg-gray-50 rounded-lg px-4 py-2">
-                              <p className="text-xs text-gray-400">{DIAS_SEMANA[parseInt(dia)]}</p>
-                              <p className="text-xl font-bold text-gray-700">{qtd}</p>
-                              <p className="text-xs text-gray-400">aulas</p>
-                            </div>
-                          ))}
+
+                    {/* Edição de datas */}
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-gray-500">Período letivo</p>
+                      <div className="flex flex-wrap items-end gap-3">
+                        <div className="space-y-1">
+                          <label className="text-xs text-gray-500">Início</label>
+                          <input
+                            type="date"
+                            className="block h-8 text-xs text-gray-800 border border-gray-300 rounded-lg px-2 focus:outline-none focus:border-blue-500"
+                            value={editDatas[cron.id]?.inicio ?? cron.data_inicio}
+                            onChange={e => setEditDatas(prev => ({ ...prev, [cron.id]: { ...prev[cron.id], inicio: e.target.value } }))}
+                          />
                         </div>
+                        <div className="space-y-1">
+                          <label className="text-xs text-gray-500">Fim</label>
+                          <input
+                            type="date"
+                            className="block h-8 text-xs text-gray-800 border border-gray-300 rounded-lg px-2 focus:outline-none focus:border-blue-500"
+                            value={editDatas[cron.id]?.fim ?? cron.data_fim}
+                            onChange={e => setEditDatas(prev => ({ ...prev, [cron.id]: { ...prev[cron.id], fim: e.target.value } }))}
+                          />
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs text-gray-700"
+                          onClick={() => handleSalvarDatas(cron.id)}
+                        >
+                          Salvar datas
+                        </Button>
                       </div>
-                    )}
+                    </div>
+
+                    {/* Resumo de aulas por dia (recalcula com datas editadas) */}
+                    {(() => {
+                      const inicio = editDatas[cron.id]?.inicio ?? cron.data_inicio;
+                      const fim = editDatas[cron.id]?.fim ?? cron.data_fim;
+                      const oc = inicio && fim && inicio <= fim ? contarOcorrencias(inicio, fim, cron.feriados) : null;
+                      if (!oc) return null;
+                      return (
+                        <div>
+                          <p className="text-xs font-semibold text-gray-500 mb-2">Aulas disponíveis por dia da semana</p>
+                          <div className="flex gap-4 flex-wrap">
+                            {Object.entries(oc).map(([dia, qtd]) => (
+                              <div key={dia} className="text-center bg-gray-50 rounded-lg px-4 py-2">
+                                <p className="text-xs text-gray-400">{DIAS_SEMANA[parseInt(dia)]}</p>
+                                <p className="text-xl font-bold text-gray-700">{qtd}</p>
+                                <p className="text-xs text-gray-400">aulas</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Feriados */}
                     <div className="space-y-2">
                       <p className="text-xs font-semibold text-gray-500">Feriados / Recessos</p>
                       <div className="flex gap-2">
-                        <Input
+                        <input
                           type="date"
-                          className="h-8 text-xs w-44"
+                          className="h-8 text-xs text-gray-800 border border-gray-300 rounded-lg px-2 w-44 focus:outline-none focus:border-blue-500"
                           min={cron.data_inicio}
                           max={cron.data_fim}
                           value={feriadoInput[cron.id] ?? ""}
                           onChange={e => setFeriadoInput(prev => ({ ...prev, [cron.id]: e.target.value }))}
                         />
-                        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleAdicionarFeriado(cron)}>
+                        <Button size="sm" variant="outline" className="h-8 text-xs text-gray-700" onClick={() => handleAdicionarFeriado(cron)}>
                           + Adicionar
                         </Button>
                       </div>
