@@ -491,21 +491,20 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
       </div>
 
       {/* Criar turma — accordion fechado por default */}
-      <Card>
-        <CardHeader
-          className="cursor-pointer select-none"
+      <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+        <button
+          type="button"
           onClick={() => setFormAberto(v => !v)}
+          className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-50 transition-colors"
         >
-          <CardTitle className="text-base flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <Plus className="h-4 w-4" /> Nova Turma
-            </span>
-            {formAberto ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
-          </CardTitle>
-        </CardHeader>
+          <span className="text-base font-semibold flex items-center gap-2">
+            <Plus className="h-4 w-4" /> Nova Turma
+          </span>
+          {formAberto ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+        </button>
 
         {formAberto && (
-          <CardContent className="space-y-4">
+          <div className="px-6 pb-6 space-y-4 border-t">
             <div className="space-y-4">
               <div className="space-y-1">
                 <Label>Semestre de entrada</Label>
@@ -551,9 +550,9 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
               {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
               Criar Turma
             </Button>
-          </CardContent>
+          </div>
         )}
-      </Card>
+      </div>
 
       {/* Lista de turmas */}
       {loading ? (
