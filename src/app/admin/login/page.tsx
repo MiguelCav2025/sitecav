@@ -76,7 +76,7 @@ export default function LoginPage() {
               />
             </div>
             {error && <p className="text-sm text-red-500 text-center">{error}</p>}
-            <Button type="submit" className="w-full py-3 text-base">
+            <Button type="submit" variant="orange" className="w-full py-3 text-base font-semibold tracking-wide">
               Entrar
             </Button>
           </form>
