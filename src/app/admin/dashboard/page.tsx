@@ -1,11 +1,11 @@
 'use client';
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import type { User } from "@supabase/supabase-js";
 import dynamic from "next/dynamic";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { useBreakpoint } from "@/hooks/useBreakpoint";
 import {
   Select,
@@ -27,13 +27,23 @@ const OficinaManager = dynamic(() => import('@/components/admin/OficinaManager')
 const ArteEducadorManager = dynamic(() => import('@/components/admin/ArteEducadorManager'), { ssr: false });
 const AdminManager = dynamic(() => import('@/components/admin/AdminManager'), { ssr: false });
 
-export default function DashboardPage() {
+const VALID_TABS = [
+  "banners","portfolio","institutional_projects","photo_gallery",
+  "oficinas","arte_educadores","downloads","process_data",
+  "ref_videos","ref_biblio","admin",
+];
+
+function DashboardInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
   const [user, setUser] = useState<User | null>(null);
   const breakpoint = useBreakpoint();
-  const [tab, setTab] = useState("banners");
   const tabsListRef = useRef<HTMLDivElement>(null);
+
+  const tabFromUrl = searchParams.get("tab") ?? "";
+  const initialTab = VALID_TABS.includes(tabFromUrl) ? tabFromUrl : "banners";
+  const [tab, setTab] = useState(initialTab);
 
   // Lista de abas centralizada para fácil manutenção e ordem preservada
   const tabs = [
@@ -52,6 +62,13 @@ export default function DashboardPage() {
 
   // Definir a cor azul do fundo do sistema
   const azulFundo = '#2563eb'; // Substitua pelo valor exato se for diferente
+
+  // Persiste a aba na URL para sobreviver ao reload
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", tab);
+    router.replace(`/admin/dashboard?${params.toString()}`, { scroll: false });
+  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Garante que o scroll horizontal sempre comece do início
   useEffect(() => {
@@ -82,9 +99,7 @@ export default function DashboardPage() {
     getUser();
   }, [router, supabase.auth]);
 
-  if (!user) {
-    return null; // Não renderiza nada até o usuário ser verificado
-  }
+  if (!user) return null;
 
   return (
     <div className="container mx-auto py-10 px-14">
@@ -159,5 +174,13 @@ export default function DashboardPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <DashboardInner />
+    </Suspense>
   );
 } 
