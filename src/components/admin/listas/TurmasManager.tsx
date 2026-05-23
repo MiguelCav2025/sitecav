@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Trash2, Users, Loader2, CheckCircle, AlertCircle, Info, GraduationCap, Download, X } from "lucide-react";
+import { Plus, Trash2, Users, Loader2, CheckCircle, AlertCircle, Info, GraduationCap, Download, X, ChevronDown, ChevronUp } from "lucide-react";
 
 interface Turma {
   id: string;
@@ -433,6 +433,7 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
   const [form, setForm] = useState({ semestre: "", curso: "", turno: "" });
   const [turmaSelecionada, setTurmaSelecionada] = useState<Turma | null>(null);
+  const [formAberto, setFormAberto] = useState(false);
 
   const preview = form.curso && form.turno && form.semestre
     ? `${form.curso} · ${form.turno} · Entrada ${form.semestre}`
@@ -489,60 +490,69 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
         </div>
       </div>
 
-      {/* Criar turma */}
+      {/* Criar turma — accordion fechado por default */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Plus className="h-4 w-4" /> Nova Turma
+        <CardHeader
+          className="cursor-pointer select-none"
+          onClick={() => setFormAberto(v => !v)}
+        >
+          <CardTitle className="text-base flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <Plus className="h-4 w-4" /> Nova Turma
+            </span>
+            {formAberto ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-4">
-            <div className="space-y-1">
-              <Label>Semestre de entrada</Label>
-              <Input
-                className="w-full"
-                placeholder="ex: 2026/2"
-                value={form.semestre}
-                onChange={e => setForm(f => ({ ...f, semestre: e.target.value }))}
-              />
-              <p className="text-xs text-gray-400">Quando este grupo começou o curso</p>
-            </div>
-            <div className="space-y-1">
-              <Label>Curso</Label>
-              <Select value={form.curso} onValueChange={v => setForm(f => ({ ...f, curso: v }))}>
-                <SelectTrigger className="w-full"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{CURSOS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>Turno</Label>
-              <Select value={form.turno} onValueChange={v => setForm(f => ({ ...f, turno: v }))}>
-                <SelectTrigger className="w-full"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{TURNOS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-          </div>
 
-          {preview && (
-            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700">
-              <GraduationCap className="h-4 w-4 text-gray-400 shrink-0" />
-              <span>Será criada como: <strong>{preview}</strong></span>
+        {formAberto && (
+          <CardContent className="space-y-4">
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <Label>Semestre de entrada</Label>
+                <Input
+                  className="w-full"
+                  placeholder="ex: 2026/2"
+                  value={form.semestre}
+                  onChange={e => setForm(f => ({ ...f, semestre: e.target.value }))}
+                />
+                <p className="text-xs text-gray-400">Quando este grupo começou o curso</p>
+              </div>
+              <div className="space-y-1">
+                <Label>Curso</Label>
+                <Select value={form.curso} onValueChange={v => setForm(f => ({ ...f, curso: v }))}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>{CURSOS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Turno</Label>
+                <Select value={form.turno} onValueChange={v => setForm(f => ({ ...f, turno: v }))}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>{TURNOS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
             </div>
-          )}
 
-          {msg && (
-            <div className={`flex items-center gap-2 p-3 rounded-lg text-sm ${msg.tipo === "ok" ? "bg-green-50 border border-green-200 text-green-800" : "bg-red-50 border border-red-200 text-red-800"}`}>
-              {msg.tipo === "ok" ? <CheckCircle className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
-              {msg.texto}
-            </div>
-          )}
+            {preview && (
+              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700">
+                <GraduationCap className="h-4 w-4 text-gray-400 shrink-0" />
+                <span>Será criada como: <strong>{preview}</strong></span>
+              </div>
+            )}
 
-          <Button onClick={handleCriar} disabled={salvando}>
-            {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-            Criar Turma
-          </Button>
-        </CardContent>
+            {msg && (
+              <div className={`flex items-center gap-2 p-3 rounded-lg text-sm ${msg.tipo === "ok" ? "bg-green-50 border border-green-200 text-green-800" : "bg-red-50 border border-red-200 text-red-800"}`}>
+                {msg.tipo === "ok" ? <CheckCircle className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
+                {msg.texto}
+              </div>
+            )}
+
+            <Button onClick={handleCriar} disabled={salvando}>
+              {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+              Criar Turma
+            </Button>
+          </CardContent>
+        )}
       </Card>
 
       {/* Lista de turmas */}
