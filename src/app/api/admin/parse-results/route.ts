@@ -4,9 +4,8 @@ import { extrairNomes } from "./extractor";
 
 export type { CandidatoExtraido } from "./extractor";
 
-// pdf-parse não exporta default em ESM — usar require
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require("pdf-parse") as (buffer: Buffer) => Promise<{ text: string }>;
+// Força runtime Node.js (necessário para mammoth e pdf-parse no Vercel)
+export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,14 +19,20 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let textoExtraido = "";
 
-    if (file.name.endsWith(".docx")) {
+    if (file.name.toLowerCase().endsWith(".docx")) {
       const resultado = await mammoth.extractRawText({ buffer });
       textoExtraido = resultado.value;
-    } else if (file.name.endsWith(".pdf")) {
+    } else if (file.name.toLowerCase().endsWith(".pdf")) {
+      // Import dinâmico evita que pdf-parse acesse filesystem na inicialização do módulo
+      // (problema conhecido em ambientes serverless como Vercel)
+      const pdfParse = (await import("pdf-parse")).default;
       const resultado = await pdfParse(buffer);
       textoExtraido = resultado.text;
     } else {
-      return NextResponse.json({ error: "Formato não suportado. Use .docx ou .pdf" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Formato não suportado. Use .docx ou .pdf" },
+        { status: 400 }
+      );
     }
 
     const candidatos = extrairNomes(textoExtraido);
