@@ -128,10 +128,10 @@ export default function AulasManager() {
                 </div>
                 <div className="space-y-1">
                   <Label>Professor</Label>
-                  <Select value={form.professor_id} onValueChange={v => setForm(f => ({ ...f, professor_id: v }))}>
+                  <Select value={form.professor_id || "none"} onValueChange={v => setForm(f => ({ ...f, professor_id: v === "none" ? "" : v }))}>
                     <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Sem professor</SelectItem>
+                      <SelectItem value="none">Sem professor</SelectItem>
                       {professores.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
                     </SelectContent>
                   </Select>
