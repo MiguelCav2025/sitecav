@@ -42,6 +42,12 @@ function labelTurma(turma: Turma): string {
   return `${semDocurso(turma.semestre)} · ${turma.curso} ${turma.turno}`;
 }
 
+function formatarData(iso: string | null): string {
+  if (!iso) return "Sem data definida";
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
 // ── Tipos de tela ──────────────────────────────────────────────────────────────
 type Tela =
   | { tipo: "disciplinas" }
@@ -320,7 +326,7 @@ export default function ProfessorDashboard() {
               <div className="flex-1 min-w-0">
                 <p className="text-white font-semibold">Aula {aula.numero}</p>
                 <p className="text-white/50 text-xs">
-                  {aula.data_aula ? aula.data_aula : "Sem data definida"}
+                  {formatarData(aula.data_aula)}
                   {aula.chamada_aberta ? " · ✅ Chamada feita" : " · Pendente"}
                 </p>
               </div>
