@@ -77,6 +77,21 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
   const [linhas, setLinhas] = useState<Linha[]>([linhaVazia()]);
 
+  // Edição inline de e-mail
+  const [editandoEmail, setEditandoEmail] = useState<string | null>(null);
+  const [emailEdit, setEmailEdit] = useState("");
+
+  const iniciarEdicaoEmail = (a: Aluno) => {
+    setEditandoEmail(a.id);
+    setEmailEdit(a.email ?? "");
+  };
+
+  const salvarEmail = async (id: string) => {
+    await supabase.from("alunos").update({ email: emailEdit.trim() || null }).eq("id", id);
+    setAlunos(prev => prev.map(a => a.id === id ? { ...a, email: emailEdit.trim() || null } : a));
+    setEditandoEmail(null);
+  };
+
   // Estado da etapa de revisão de importação
   const [revisao, setRevisao] = useState<CandidatoRevisao[] | null>(null);
   const [semestre_resultado, setSemestreResultado] = useState<string>("");
@@ -358,9 +373,40 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {alunos.map(a => (
-                    <tr key={a.id} className="hover:bg-gray-50">
+                    <tr key={a.id} className="hover:bg-gray-50 group/row">
                       <td className="px-4 py-2 font-medium text-gray-800">{a.nome}</td>
-                      <td className="px-4 py-2 text-gray-500 text-xs">{a.email ?? "—"}</td>
+                      <td className="px-4 py-1.5">
+                        {editandoEmail === a.id ? (
+                          <div className="flex items-center gap-1">
+                            <Input
+                              autoFocus
+                              type="email"
+                              value={emailEdit}
+                              onChange={e => setEmailEdit(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === "Enter") salvarEmail(a.id);
+                                if (e.key === "Escape") setEditandoEmail(null);
+                              }}
+                              className="h-7 text-xs w-full"
+                              placeholder="email@exemplo.com"
+                            />
+                            <button onClick={() => salvarEmail(a.id)} className="text-green-600 hover:text-green-800 shrink-0">
+                              <CheckCircle className="h-4 w-4" />
+                            </button>
+                            <button onClick={() => setEditandoEmail(null)} className="text-gray-400 hover:text-gray-600 shrink-0">
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => iniciarEdicaoEmail(a)}
+                            className="text-xs text-gray-500 hover:text-blue-600 hover:underline cursor-pointer text-left w-full"
+                            title="Clique para editar e-mail"
+                          >
+                            {a.email ?? <span className="text-gray-300 italic">adicionar e-mail</span>}
+                          </button>
+                        )}
+                      </td>
                       <td className="px-4 py-2">
                         <button onClick={() => handleExcluir(a.id)} className="text-red-400 hover:text-red-600">
                           <X className="h-4 w-4" />
