@@ -102,9 +102,9 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
 
       {/* Lista de turmas */}
       {loading ? (
-        <div className="flex items-center gap-2 text-gray-500 py-4"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
+        <div className="flex items-center gap-2 text-white/60 py-4"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
       ) : turmas.length === 0 ? (
-        <p className="text-sm text-gray-400 italic">Nenhuma turma cadastrada.</p>
+        <p className="text-sm text-white/50 italic">Nenhuma turma cadastrada.</p>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {turmas.map(t => (

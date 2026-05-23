@@ -150,34 +150,41 @@ export default function ProfessoresManager() {
 
       {/* Lista */}
       {loading ? (
-        <div className="flex items-center gap-2 text-gray-400 py-4"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
+        <div className="flex items-center gap-2 text-white/60 py-4"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
       ) : professores.length === 0 ? (
-        <p className="text-sm text-gray-400 italic">Nenhum professor cadastrado.</p>
+        <p className="text-sm text-white/50 italic">Nenhum professor cadastrado.</p>
       ) : (
-        <div className="border rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">Nome</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">E-mail</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">Turmas</th>
-                <th className="px-4 py-3 w-10"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {professores.map(p => (
-                <tr key={p.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-800 flex items-center gap-2"><UserCheck className="h-4 w-4 text-blue-500" />{p.nome}</td>
-                  <td className="px-4 py-3 text-gray-500">{p.email}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{getTurmasDoProf(p) || "—"}</td>
-                  <td className="px-4 py-3">
-                    <button onClick={() => handleExcluir(p.id)} className="text-red-400 hover:text-red-600 p-1"><Trash2 className="h-4 w-4" /></button>
-                  </td>
+        <Card>
+          <CardContent className="p-0">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Nome</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">E-mail</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Turmas</th>
+                  <th className="px-4 py-3 w-10"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {professores.map(p => (
+                  <tr key={p.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2 font-medium text-gray-800">
+                        <UserCheck className="h-4 w-4 text-blue-500 shrink-0" />
+                        {p.nome}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-500">{p.email}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{getTurmasDoProf(p) || "—"}</td>
+                    <td className="px-4 py-3">
+                      <button onClick={() => handleExcluir(p.id)} className="text-red-400 hover:text-red-600 p-1"><Trash2 className="h-4 w-4" /></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

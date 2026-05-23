@@ -149,44 +149,48 @@ export default function AulasManager() {
 
           {/* Lista de aulas */}
           {loading ? (
-            <div className="flex items-center gap-2 text-gray-400 py-4"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
+            <div className="flex items-center gap-2 text-white/60 py-4"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
           ) : aulas.length === 0 ? (
-            <p className="text-sm text-gray-400 italic">Nenhuma aula cadastrada. Use "Gerar várias" para criar as aulas do semestre.</p>
+            <p className="text-sm text-white/50 italic">Nenhuma aula cadastrada. Use "Gerar várias" para criar as aulas do semestre de uma vez.</p>
           ) : (
-            <div className="border rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Aula</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Semana</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Professor</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Descrição</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Chamada</th>
-                    <th className="px-4 py-3 w-10"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {aulas.map(a => (
-                    <tr key={a.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium text-gray-800 flex items-center gap-2">
-                        <BookOpen className="h-4 w-4 text-blue-400" /> Aula {a.numero}
-                      </td>
-                      <td className="px-4 py-3 text-gray-500">{a.semana ? `Semana ${a.semana}` : "—"}</td>
-                      <td className="px-4 py-3 text-gray-600">{a.professor?.nome ?? "—"}</td>
-                      <td className="px-4 py-3 text-gray-500 text-xs">{a.descricao ?? "—"}</td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${a.chamada_aberta ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                          {a.chamada_aberta ? "Aberta" : "Pendente"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <button onClick={() => handleExcluir(a.id)} className="text-red-400 hover:text-red-600 p-1"><Trash2 className="h-4 w-4" /></button>
-                      </td>
+            <Card>
+              <CardContent className="p-0">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-600">Aula</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-600">Semana</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-600">Professor</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-600">Descrição</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-600">Chamada</th>
+                      <th className="px-4 py-3 w-10"></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {aulas.map(a => (
+                      <tr key={a.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2 font-medium text-gray-800">
+                            <BookOpen className="h-4 w-4 text-blue-400 shrink-0" /> Aula {a.numero}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-gray-500">{a.semana ? `Semana ${a.semana}` : "—"}</td>
+                        <td className="px-4 py-3 text-gray-600">{a.professor?.nome ?? "—"}</td>
+                        <td className="px-4 py-3 text-gray-500 text-xs">{a.descricao ?? "—"}</td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs px-2 py-1 rounded-full font-medium ${a.chamada_aberta ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                            {a.chamada_aberta ? "Feita" : "Pendente"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <button onClick={() => handleExcluir(a.id)} className="text-red-400 hover:text-red-600 p-1"><Trash2 className="h-4 w-4" /></button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
           )}
         </>
       )}
