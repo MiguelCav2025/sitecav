@@ -138,7 +138,7 @@ export default function ProcessDataForm({ initialData, onSave, loading = false }
               Período de Inscrições
             </h3>
             
-            <div>
+            <div className="space-y-1">
               <Label htmlFor="inscription_start_date">Data de Início</Label>
               <Input
                 id="inscription_start_date"
@@ -156,7 +156,7 @@ export default function ProcessDataForm({ initialData, onSave, loading = false }
               )}
             </div>
 
-            <div>
+            <div className="space-y-1">
               <Label htmlFor="inscription_end_date">Data de Fim</Label>
               <Input
                 id="inscription_end_date"
@@ -174,7 +174,7 @@ export default function ProcessDataForm({ initialData, onSave, loading = false }
               )}
             </div>
 
-            <div>
+            <div className="space-y-1">
               <Label htmlFor="semester">Semestre</Label>
               <Input
                 id="semester"
@@ -200,7 +200,7 @@ export default function ProcessDataForm({ initialData, onSave, loading = false }
               Dados da Prova
             </h3>
             
-            <div>
+            <div className="space-y-1">
               <Label htmlFor="exam_date">Data da Prova</Label>
               <Input
                 id="exam_date"
@@ -218,7 +218,7 @@ export default function ProcessDataForm({ initialData, onSave, loading = false }
               )}
             </div>
 
-            <div>
+            <div className="space-y-1">
               <Label htmlFor="exam_time">Horário da Prova</Label>
               <Input
                 id="exam_time"
@@ -236,7 +236,7 @@ export default function ProcessDataForm({ initialData, onSave, loading = false }
               )}
             </div>
 
-            <div>
+            <div className="space-y-1">
               <Label htmlFor="exam_location">Local da Prova</Label>
               <Input
                 id="exam_location"
@@ -254,7 +254,7 @@ export default function ProcessDataForm({ initialData, onSave, loading = false }
               )}
             </div>
 
-            <div>
+            <div className="space-y-1">
               <Label htmlFor="result_date">Data do Resultado</Label>
               <Input
                 id="result_date"
@@ -281,7 +281,7 @@ export default function ProcessDataForm({ initialData, onSave, loading = false }
             Link de Inscrição
           </h3>
           
-          <div>
+          <div className="space-y-1">
             <Label htmlFor="inscription_link">URL do Formulário</Label>
             <Textarea
               id="inscription_link"
