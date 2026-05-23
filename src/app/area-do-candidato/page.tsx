@@ -193,7 +193,8 @@ function PaginaResultados({ resultados }: { resultados: Resultado[] }) {
 function PaginaProcessoSeletivo({ dados }: { dados: ProcessData }) {
   return (
     <div className="bg-blue-900 min-h-screen pt-18 py-8 px-4 md:px-12">
-      <div className="container mx-auto max-w-4xl">
+      <div className="container mx-auto">
+
         {/* Cabeçalho */}
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center gap-3 bg-blue-600 text-white px-6 py-2 rounded-full mb-6">
@@ -208,14 +209,14 @@ function PaginaProcessoSeletivo({ dados }: { dados: ProcessData }) {
           )}
         </div>
 
-        {/* Período de inscrições */}
+        {/* Período de inscrições — largura total */}
         {(dados.inscription_start_date || dados.inscription_end_date) && (
           <div className="bg-white rounded-2xl shadow-xl p-6 mb-8">
             <h2 className="text-xl font-bold text-blue-900 mb-3 flex items-center gap-2">
               <Calendar className="h-5 w-5 text-blue-600" />
               Período de Inscrições
             </h2>
-            <p className="text-gray-700">
+            <p className="text-gray-700 text-lg">
               De <strong>{dados.inscription_start_date}</strong> até{" "}
               <strong>{dados.inscription_end_date}</strong>
             </p>
@@ -228,8 +229,8 @@ function PaginaProcessoSeletivo({ dados }: { dados: ProcessData }) {
           </div>
         )}
 
-        {/* Requisitos e Vagas */}
-        <div className="grid md:grid-cols-2 gap-6 mb-8">
+        {/* Requisitos / Vagas / Etapas — 3 colunas no desktop */}
+        <div className="grid md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-2xl shadow-xl p-6">
             <h2 className="text-xl font-bold text-blue-900 mb-4">Requisitos</h2>
             <ul className="list-disc list-inside space-y-2 text-gray-700 text-sm">
@@ -238,6 +239,7 @@ function PaginaProcessoSeletivo({ dados }: { dados: ProcessData }) {
               <li>Disponibilidade para frequentar o curso em regime presencial diário</li>
             </ul>
           </div>
+
           <div className="bg-white rounded-2xl shadow-xl p-6">
             <h2 className="text-xl font-bold text-blue-900 mb-4">Vagas</h2>
             <ul className="list-disc list-inside space-y-2 text-gray-700 text-sm">
@@ -247,86 +249,84 @@ function PaginaProcessoSeletivo({ dados }: { dados: ProcessData }) {
               <li>Cine/TV | Noite: 30 vagas</li>
             </ul>
           </div>
-        </div>
 
-        {/* Etapas */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 mb-8">
-          <h2 className="text-xl font-bold text-blue-900 mb-4">Etapas do Processo Seletivo</h2>
-          <ol className="list-decimal list-inside space-y-4 text-gray-700 text-sm">
-            <li>
-              <strong>ETAPA 1:</strong> Prova diagnóstica com questões de múltipla escolha e
-              questões dissertativas específicas à área de interesse. Pontuação máxima: 100 pontos.
-            </li>
-            <li>
-              <strong>ETAPA 2:</strong> Havendo necessidade, o CAV reserva-se o direito de aplicar
-              entrevista com os candidatos como critério de desempate.
-            </li>
-          </ol>
-          <p className="mt-4 text-xs text-gray-500">
-            Caso o número de participantes seja menor que o de vagas, as vagas remanescentes serão
-            disponibilizadas ao público mediante entrevista.
-          </p>
-        </div>
-
-        {/* Local e Data da Prova */}
-        {(dados.exam_date || dados.exam_time || dados.exam_location) && (
-          <div className="bg-yellow-50 border-l-4 border-yellow-500 rounded-2xl shadow-xl p-6 mb-8">
-            <h2 className="text-xl font-bold text-yellow-800 mb-4 flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Local e Data da Prova
-            </h2>
-            <div className="space-y-2 text-gray-800 text-sm">
-              {dados.exam_date && (
-                <p className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-yellow-600" />
-                  <strong>Data:</strong> {dados.exam_date}
-                </p>
-              )}
-              {dados.exam_time && (
-                <p className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-yellow-600" />
-                  <strong>Horário:</strong> {dados.exam_time}
-                </p>
-              )}
-              {dados.exam_location && (
-                <p className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-yellow-600" />
-                  <strong>Local:</strong> {dados.exam_location}
-                </p>
-              )}
-              {dados.result_date && (
-                <p className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-yellow-600" />
-                  <strong>Resultado:</strong> {dados.result_date}
-                </p>
-              )}
-            </div>
+          <div className="bg-white rounded-2xl shadow-xl p-6">
+            <h2 className="text-xl font-bold text-blue-900 mb-4">Etapas</h2>
+            <ol className="list-decimal list-inside space-y-3 text-gray-700 text-sm">
+              <li>
+                <strong>Prova diagnóstica</strong> — questões de múltipla escolha e dissertativas.
+                Pontuação máxima: 100 pts.
+              </li>
+              <li>
+                <strong>Entrevista</strong> — aplicada se necessário como critério de desempate.
+              </li>
+            </ol>
+            <p className="mt-3 text-xs text-gray-500">
+              Vagas remanescentes serão abertas ao público mediante entrevista.
+            </p>
           </div>
-        )}
+        </div>
 
-        {/* Documentos para matrícula */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 mb-8">
-          <h2 className="text-xl font-bold text-blue-900 mb-4">Documentos para Matrícula</h2>
-          <ul className="list-disc list-inside space-y-2 text-gray-700 text-sm">
-            <li>Documento de Identificação com foto</li>
-            <li>Documento de comprovação de escolaridade</li>
-            <li>Comprovante de Residência</li>
-            <li>2 fotos 3×4</li>
-          </ul>
-          <p className="mt-4 text-sm font-semibold text-red-600">
-            Atenção: Trazer documentos ORIGINAIS — serão usados apenas para consulta e devolvidos
-            imediatamente. NÃO TRAZER CÓPIAS.
-          </p>
+        {/* Data da prova + Documentos — 2 colunas */}
+        <div className="grid md:grid-cols-2 gap-6 mb-8">
+          {(dados.exam_date || dados.exam_time || dados.exam_location) && (
+            <div className="bg-yellow-50 border-l-4 border-yellow-500 rounded-2xl shadow-xl p-6">
+              <h2 className="text-xl font-bold text-yellow-800 mb-4 flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Local e Data da Prova
+              </h2>
+              <div className="space-y-3 text-gray-800 text-sm">
+                {dados.exam_date && (
+                  <p className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-yellow-600 shrink-0" />
+                    <span><strong>Data:</strong> {dados.exam_date}</span>
+                  </p>
+                )}
+                {dados.exam_time && (
+                  <p className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-yellow-600 shrink-0" />
+                    <span><strong>Horário:</strong> {dados.exam_time}</span>
+                  </p>
+                )}
+                {dados.exam_location && (
+                  <p className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-yellow-600 shrink-0" />
+                    <span><strong>Local:</strong> {dados.exam_location}</span>
+                  </p>
+                )}
+                {dados.result_date && (
+                  <p className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-yellow-600 shrink-0" />
+                    <span><strong>Resultado:</strong> {dados.result_date}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white rounded-2xl shadow-xl p-6">
+            <h2 className="text-xl font-bold text-blue-900 mb-4">Documentos para Matrícula</h2>
+            <ul className="list-disc list-inside space-y-2 text-gray-700 text-sm">
+              <li>Documento de Identificação com foto</li>
+              <li>Documento de comprovação de escolaridade</li>
+              <li>Comprovante de Residência</li>
+              <li>2 fotos 3×4</li>
+            </ul>
+            <p className="mt-4 text-sm font-semibold text-red-600">
+              Atenção: Trazer documentos ORIGINAIS — usados apenas para consulta e devolvidos
+              imediatamente. NÃO TRAZER CÓPIAS.
+            </p>
+          </div>
         </div>
 
         {/* Botão de inscrição */}
         {dados.inscription_link && (
-          <div className="text-center">
+          <div className="text-center pb-8">
             <Link
               href={dados.inscription_link}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 px-10 rounded-full text-lg shadow-lg transition-colors"
+              className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold py-4 px-12 rounded-full text-lg shadow-lg transition-all duration-150 hover:-translate-y-0.5 hover:shadow-xl"
             >
               Fazer Inscrição
               <ExternalLink className="h-5 w-5" />
