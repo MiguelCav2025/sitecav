@@ -197,16 +197,26 @@ function AulasDaDisciplinaModal({
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b">
                     <tr>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Aula</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 w-20">Aula</th>
                       <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Data</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Chamada</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 w-24">Chamada</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {aulasT.map(a => (
                       <tr key={a.id} className="hover:bg-gray-50">
                         <td className="px-3 py-2 font-medium text-gray-800">Aula {a.numero}</td>
-                        <td className="px-3 py-2 text-gray-500 text-xs">{a.data_aula ?? "—"}</td>
+                        <td className="px-3 py-1.5">
+                          <input
+                            type="date"
+                            defaultValue={a.data_aula ?? ""}
+                            onChange={async e => {
+                              const val = e.target.value || null;
+                              await supabase.from("aulas").update({ data_aula: val }).eq("id", a.id);
+                            }}
+                            className="text-xs text-gray-700 border border-gray-200 rounded-lg px-2 py-1 w-full cursor-pointer hover:border-blue-400 focus:outline-none focus:border-blue-500"
+                          />
+                        </td>
                         <td className="px-3 py-2">
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${a.chamada_aberta ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
                             {a.chamada_aberta ? "Feita" : "Pendente"}
