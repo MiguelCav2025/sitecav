@@ -595,14 +595,12 @@ export default function DisciplinasManager() {
               <Label className="text-gray-700">Nome da disciplina *</Label>
               <div className="flex gap-2">
                 <div className="relative">
-                  <button
-                    type="button"
-                    className="w-12 h-10 text-xl bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg flex items-center justify-center transition-colors"
-                    title="Escolher emoji"
-                    onClick={() => setForm(f => ({ ...f, _emojiAberto: !f._emojiAberto } as typeof f))}
+                  <div
+                    className="w-12 h-10 text-xl bg-gray-100 border border-gray-300 rounded-lg flex items-center justify-center"
+                    title="Emoji selecionado"
                   >
                     {form.emoji}
-                  </button>
+                  </div>
                 </div>
                 <Input className="flex-1 text-gray-800" placeholder="ex: Direção de Fotografia III" value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} />
               </div>
