@@ -52,6 +52,13 @@ function badgeSemestre(semCurso: string) {
   return "bg-yellow-100 text-yellow-700";
 }
 
+function cardBgSemestre(semCurso: string) {
+  if (semCurso.includes("1º")) return "bg-green-50 hover:bg-green-100/60";
+  if (semCurso.includes("2º")) return "bg-blue-50 hover:bg-blue-100/60";
+  if (semCurso.includes("3º")) return "bg-purple-50 hover:bg-purple-100/60";
+  return "bg-white hover:bg-gray-50";
+}
+
 // ── Modal de Alunos ───────────────────────────────────────────────────────────
 type Linha = { nome: string; email: string };
 const linhaVazia = (): Linha => ({ nome: "", email: "" });
@@ -539,7 +546,7 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
                         <button
                           key={t.id}
                           onClick={() => setTurmaSelecionada(t)}
-                          className="bg-white rounded-xl p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all text-left w-full group cursor-pointer"
+                          className={`${cardBgSemestre(sem)} rounded-xl p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all text-left w-full group cursor-pointer`}
                         >
                           <div className="flex items-start justify-between">
                             <div className="space-y-2 flex-1">
