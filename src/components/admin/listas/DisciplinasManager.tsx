@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Plus, Trash2, Loader2, BookOpen, CheckCircle, AlertCircle,
-  GraduationCap, UserCheck, Calendar
+  GraduationCap, UserCheck, Calendar, ChevronDown, ChevronUp
 } from "lucide-react";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -289,6 +289,7 @@ export default function DisciplinasManager() {
   const [salvando, setSalvando] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
   const [disciplinaSelecionada, setDisciplinaSelecionada] = useState<Disciplina | null>(null);
+  const [formAberto, setFormAberto] = useState(false);
 
   const [form, setForm] = useState({
     nome: "",
@@ -403,14 +404,21 @@ export default function DisciplinasManager() {
   return (
     <div className="space-y-6">
 
-      {/* Criar disciplina */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
+      {/* Criar disciplina — accordion fechado por default */}
+      <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setFormAberto(v => !v)}
+          className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-50 transition-colors"
+        >
+          <span className="text-base font-semibold flex items-center gap-2">
             <Plus className="h-4 w-4" /> Nova Disciplina
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-5">
+          </span>
+          {formAberto ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+        </button>
+
+        {formAberto && (
+        <div className="px-6 pb-6 space-y-5 border-t">
           <div className="space-y-4">
             <div className="space-y-1">
               <Label>Nome da disciplina *</Label>
@@ -501,8 +509,9 @@ export default function DisciplinasManager() {
             {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
             Criar Disciplina e Gerar Aulas
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+        )}
+      </div>
 
       {/* Grade semanal por curso e semestre */}
       {loading ? (
