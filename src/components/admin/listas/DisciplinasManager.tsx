@@ -94,6 +94,22 @@ function semestreLetivoParaTurma(semestreEntrada: string, semestreDoCurso: numbe
   return `${novoAno}/${novoSem}`;
 }
 
+// Conta ocorrências de cada dia útil (1=Seg…5=Sex) no período, excluindo feriados
+function contarOcorrencias(inicio: string, fim: string, feriados: string[]): Record<number, number> {
+  const resultado: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  const feriadosSet = new Set(feriados);
+  const d = new Date(inicio + "T12:00:00");
+  const fimDate = new Date(fim + "T12:00:00");
+  while (d <= fimDate) {
+    const dow = d.getDay();
+    if (dow >= 1 && dow <= 5 && !feriadosSet.has(d.toISOString().split("T")[0])) {
+      resultado[dow] = (resultado[dow] ?? 0) + 1;
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  return resultado;
+}
+
 // Retorna as datas do dia_da_semana no período, excluindo feriados, até totalAulas datas
 function gerarDatasAulas(inicio: string, fim: string, diaSemana: number, feriados: string[], totalAulas: number): (string | null)[] {
   const feriadosSet = new Set(feriados);
@@ -350,6 +366,17 @@ export default function DisciplinasManager() {
     return t.curso === form.curso && calcularSemestreDoCurso(t.semestre) === parseInt(form.semestre_do_curso);
   });
 
+  // Calcula quantas aulas o cronograma oferece para o dia selecionado (usa a primeira turma afetada como referência)
+  const aulasNoCronograma: number | null = (() => {
+    if (!form.dia_da_semana || turmasAfetadas.length === 0 || !form.semestre_do_curso) return null;
+    const turmaRef = turmasAfetadas[0];
+    const semLetivo = semestreLetivoParaTurma(turmaRef.semestre, parseInt(form.semestre_do_curso));
+    const cron = cronogramas.find(c => c.semestre === semLetivo);
+    if (!cron) return null;
+    const oc = contarOcorrencias(cron.data_inicio, cron.data_fim, cron.feriados);
+    return oc[parseInt(form.dia_da_semana)] ?? null;
+  })();
+
   const fetchDados = useCallback(async () => {
     setLoading(true);
     const [{ data: discs }, { data: ts }, { data: ps }, { data: crons }] = await Promise.all([
@@ -505,7 +532,26 @@ export default function DisciplinasManager() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
                 <Label className="text-gray-700">Dia da semana</Label>
-                <Select value={form.dia_da_semana || "none"} onValueChange={v => setForm(f => ({ ...f, dia_da_semana: v === "none" ? "" : v }))}>
+                <Select
+                  value={form.dia_da_semana || "none"}
+                  onValueChange={v => {
+                    const novoDia = v === "none" ? "" : v;
+                    // Auto-preenche total_aulas com o cronograma se possível
+                    if (novoDia && turmasAfetadas.length > 0 && form.semestre_do_curso) {
+                      const semLetivo = semestreLetivoParaTurma(turmasAfetadas[0].semestre, parseInt(form.semestre_do_curso));
+                      const cron = cronogramas.find(c => c.semestre === semLetivo);
+                      if (cron) {
+                        const oc = contarOcorrencias(cron.data_inicio, cron.data_fim, cron.feriados);
+                        const qtd = oc[parseInt(novoDia)];
+                        if (qtd) {
+                          setForm(f => ({ ...f, dia_da_semana: novoDia, total_aulas: String(qtd) }));
+                          return;
+                        }
+                      }
+                    }
+                    setForm(f => ({ ...f, dia_da_semana: novoDia }));
+                  }}
+                >
                   <SelectTrigger className="w-full text-gray-800"><SelectValue placeholder="Não definido (opcional)" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Não definido</SelectItem>
@@ -516,7 +562,23 @@ export default function DisciplinasManager() {
               <div className="space-y-1">
                 <Label className="text-gray-700">Qtd. de aulas *</Label>
                 <Input className="w-full text-gray-800" type="number" min="1" max="200" value={form.total_aulas} onChange={e => setForm(f => ({ ...f, total_aulas: e.target.value }))} />
-                <p className="text-xs text-gray-400">Geradas automaticamente por turma</p>
+                {aulasNoCronograma !== null ? (
+                  <p className={`text-xs flex items-center gap-1 ${parseInt(form.total_aulas) === aulasNoCronograma ? "text-green-600" : "text-amber-600"}`}>
+                    <Calendar className="h-3 w-3" />
+                    Cronograma prevê <strong>{aulasNoCronograma}</strong> aulas neste dia
+                    {parseInt(form.total_aulas) !== aulasNoCronograma && (
+                      <button
+                        type="button"
+                        className="underline ml-1 font-semibold"
+                        onClick={() => setForm(f => ({ ...f, total_aulas: String(aulasNoCronograma) }))}
+                      >
+                        usar {aulasNoCronograma}
+                      </button>
+                    )}
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-400">Geradas automaticamente por turma</p>
+                )}
               </div>
             </div>
           </div>
