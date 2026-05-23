@@ -53,10 +53,10 @@ function badgeSemestre(semCurso: string) {
 }
 
 function cardBgSemestre(semCurso: string) {
-  if (semCurso.includes("1º")) return "bg-green-50 hover:bg-green-100/60";
-  if (semCurso.includes("2º")) return "bg-blue-50 hover:bg-blue-100/60";
-  if (semCurso.includes("3º")) return "bg-purple-50 hover:bg-purple-100/60";
-  return "bg-white hover:bg-gray-50";
+  if (semCurso.includes("1º")) return "bg-green-50";
+  if (semCurso.includes("2º")) return "bg-blue-50";
+  if (semCurso.includes("3º")) return "bg-purple-50";
+  return "bg-white";
 }
 
 // ── Modal de Alunos ───────────────────────────────────────────────────────────
