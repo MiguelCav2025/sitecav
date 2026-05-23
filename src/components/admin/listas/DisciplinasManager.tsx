@@ -78,28 +78,69 @@ function calcularSemestreDoCurso(semestreEntrada: string): number {
 
 // ── Modal de aulas por disciplina ─────────────────────────────────────────────
 
-function AulasDaDisciplinaModal({ disciplina, onClose }: { disciplina: Disciplina; onClose: () => void }) {
+function AulasDaDisciplinaModal({
+  disciplina,
+  professores,
+  onClose,
+}: {
+  disciplina: Disciplina;
+  professores: Professor[];
+  onClose: () => void;
+}) {
   const supabase = createClient();
   const [aulas, setAulas] = useState<AulaDaDisciplina[]>([]);
   const [loading, setLoading] = useState(true);
+  // professor atual por turma_id
+  const [profPorTurma, setProfPorTurma] = useState<Record<string, string>>({});
+  const [salvandoProf, setSalvandoProf] = useState<Record<string, boolean>>({});
 
-  useEffect(() => {
+  const carregarAulas = () => {
     supabase
       .from("aulas")
-      .select("id, numero, chamada_aberta, data_aula, turma:turmas(id, turno, semestre), professor:professores(nome)")
+      .select("id, numero, chamada_aberta, data_aula, turma:turmas(id, turno, semestre), professor:professores(id, nome)")
       .eq("disciplina_id", disciplina.id)
       .order("numero")
       .then(({ data }) => {
-        setAulas((data ?? []) as unknown as AulaDaDisciplina[]);
+        const rows = (data ?? []) as unknown as AulaDaDisciplina[];
+        setAulas(rows);
+        // inicializa o professor por turma pegando o da primeira aula de cada turma
+        const mapa: Record<string, string> = {};
+        rows.forEach(a => {
+          if (!mapa[a.turma.id] && (a.professor as any)?.id) {
+            mapa[a.turma.id] = (a.professor as any).id;
+          }
+        });
+        setProfPorTurma(mapa);
         setLoading(false);
       });
-  }, [disciplina.id]);
+  };
 
-  const porTurma: Record<string, AulaDaDisciplina[]> = {};
+  useEffect(() => { carregarAulas(); }, [disciplina.id]);
+
+  // Atualiza todas as aulas da disciplina para uma turma com o novo professor
+  const handleChangeProfTurma = async (turmaId: string, professorId: string) => {
+    setSalvandoProf(prev => ({ ...prev, [turmaId]: true }));
+    const pid = professorId === "none" ? null : professorId;
+    await supabase
+      .from("aulas")
+      .update({ professor_id: pid })
+      .eq("disciplina_id", disciplina.id)
+      .eq("turma_id", turmaId);
+    setProfPorTurma(prev => ({ ...prev, [turmaId]: professorId }));
+    setSalvandoProf(prev => ({ ...prev, [turmaId]: false }));
+  };
+
+  // Agrupa por turma (chave = turma_id para poder atualizar)
+  const porTurma: Record<string, { label: string; turmaId: string; aulas: AulaDaDisciplina[] }> = {};
   aulas.forEach(a => {
-    const key = `${a.turma.turno} — Entrada ${a.turma.semestre}`;
-    if (!porTurma[key]) porTurma[key] = [];
-    porTurma[key].push(a);
+    if (!porTurma[a.turma.id]) {
+      porTurma[a.turma.id] = {
+        label: `${a.turma.turno} — Entrada ${a.turma.semestre}`,
+        turmaId: a.turma.id,
+        aulas: [],
+      };
+    }
+    porTurma[a.turma.id].aulas.push(a);
   });
 
   const totalFeitas = aulas.filter(a => a.chamada_aberta).length;
@@ -128,15 +169,35 @@ function AulasDaDisciplinaModal({ disciplina, onClose }: { disciplina: Disciplin
         ) : Object.keys(porTurma).length === 0 ? (
           <p className="text-sm text-gray-400 italic py-6 text-center">Nenhuma aula gerada ainda.</p>
         ) : (
-          Object.entries(porTurma).map(([turmaLabel, aulasT]) => (
-            <div key={turmaLabel}>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{turmaLabel}</p>
+          Object.values(porTurma).map(({ label, turmaId, aulas: aulasT }) => (
+            <div key={turmaId}>
+              {/* Cabeçalho da turma com seletor de professor */}
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{label}</p>
+                <div className="flex items-center gap-2">
+                  <UserCheck className="h-3.5 w-3.5 text-gray-400" />
+                  <Select
+                    value={profPorTurma[turmaId] ?? "none"}
+                    onValueChange={v => handleChangeProfTurma(turmaId, v)}
+                    disabled={salvandoProf[turmaId]}
+                  >
+                    <SelectTrigger className="h-7 text-xs w-44">
+                      <SelectValue placeholder="Professor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sem professor</SelectItem>
+                      {professores.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  {salvandoProf[turmaId] && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />}
+                </div>
+              </div>
+
               <div className="border rounded-xl overflow-hidden">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b">
                     <tr>
                       <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Aula</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Professor</th>
                       <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Data</th>
                       <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Chamada</th>
                     </tr>
@@ -145,7 +206,6 @@ function AulasDaDisciplinaModal({ disciplina, onClose }: { disciplina: Disciplin
                     {aulasT.map(a => (
                       <tr key={a.id} className="hover:bg-gray-50">
                         <td className="px-3 py-2 font-medium text-gray-800">Aula {a.numero}</td>
-                        <td className="px-3 py-2 text-gray-500 text-xs">{a.professor?.nome ?? "—"}</td>
                         <td className="px-3 py-2 text-gray-500 text-xs">{a.data_aula ?? "—"}</td>
                         <td className="px-3 py-2">
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${a.chamada_aberta ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
@@ -544,7 +604,11 @@ export default function DisciplinasManager() {
       {/* Modal de aulas */}
       <Dialog open={!!disciplinaSelecionada} onOpenChange={open => { if (!open) setDisciplinaSelecionada(null); }}>
         {disciplinaSelecionada && (
-          <AulasDaDisciplinaModal disciplina={disciplinaSelecionada} onClose={() => setDisciplinaSelecionada(null)} />
+          <AulasDaDisciplinaModal
+            disciplina={disciplinaSelecionada}
+            professores={professores}
+            onClose={() => setDisciplinaSelecionada(null)}
+          />
         )}
       </Dialog>
     </div>
