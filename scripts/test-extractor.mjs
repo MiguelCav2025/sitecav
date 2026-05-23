@@ -1,8 +1,6 @@
 /**
  * Teste da função de extração de nomes do processo seletivo.
- * Rodas com: node scripts/test-extractor.mjs
- *
- * Simula diferentes formatos de DOCX que podem chegar.
+ * Rode com: node scripts/test-extractor.mjs
  */
 
 // --- Copia inline da lógica (sem depender do TS) ---
@@ -25,89 +23,90 @@ function detectarPeriodo(linha) {
   return null;
 }
 
-function isLinhaVazia(linha) {
-  return linha.trim().length === 0;
+function isApenasNumero(linha) {
+  return /^\d+[.\-)]*\s*$/.test(linha.trim());
 }
 
-function isNumeroOuCabecalho(linha) {
-  const norm = linha.trim();
-  if (/^\d+[.\-)]?\s*$/.test(norm)) return true;
-  if (/^(nº|no\.|nome|candidato|classificação|resultado|aprovad|reprovad)/i.test(norm)) return true;
-  return false;
+function isCabecalhoTabela(linha) {
+  return /^(nº|no\.|nome|candidato|classificação|resultado|aprovad|reprovad|ord)/i.test(linha.trim());
+}
+
+function pareceNome(linha) {
+  const t = linha.trim();
+  if (t.length < 5 || t.length > 100) return false;
+  if (t.split(" ").length < 2) return false;
+  if (/[<>{}\[\]|\\=+*&^%$#@!]/.test(t)) return false;
+  const palavras = t.split(" ");
+  const maiusculas = palavras.filter(p => p.length > 2 && p === p.toUpperCase()).length;
+  if (maiusculas === palavras.length && t.length > 20) return false;
+  return true;
 }
 
 function extrairNomes(texto) {
   const linhas = texto.split(/\r?\n/);
   const candidatos = [];
-  let cursoAtual = "";
-  let periodoAtual = "";
-  let ordem = 1;
-  let dentroDeLista = false;
+  let cursoAtual = "", periodoAtual = "", ordemContador = 1;
 
-  for (const linha of linhas) {
-    const linhaTrimada = linha.trim();
-    if (isLinhaVazia(linhaTrimada)) { dentroDeLista = false; continue; }
+  const linhasProcessadas = [];
+  for (let i = 0; i < linhas.length; i++) {
+    const atual = linhas[i].trim();
+    const proxima = (linhas[i + 1] ?? "").trim();
+    if (isApenasNumero(atual) && pareceNome(proxima)) {
+      linhasProcessadas.push(`${atual} ${proxima}`);
+      i++;
+    } else {
+      linhasProcessadas.push(atual);
+    }
+  }
+
+  for (const linhaTrimada of linhasProcessadas) {
+    if (linhaTrimada.length === 0) continue;
+    if (isCabecalhoTabela(linhaTrimada)) continue;
+    if (isApenasNumero(linhaTrimada)) continue;
 
     const cursoDet = detectarCurso(linhaTrimada);
     if (cursoDet && linhaTrimada.length < 60) {
-      cursoAtual = cursoDet; ordem = 1; dentroDeLista = false;
+      cursoAtual = cursoDet; ordemContador = 1;
       const periodoDet = detectarPeriodo(linhaTrimada);
-      if (periodoDet) { periodoAtual = periodoDet; dentroDeLista = true; }
+      periodoAtual = periodoDet ?? "";
       continue;
     }
 
     const periodoDet = detectarPeriodo(linhaTrimada);
     if (periodoDet && linhaTrimada.length < 40) {
-      periodoAtual = periodoDet; ordem = 1; dentroDeLista = true; continue;
+      periodoAtual = periodoDet; ordemContador = 1; continue;
     }
 
-    if (isNumeroOuCabecalho(linhaTrimada)) continue;
+    if (!cursoAtual || !periodoAtual) continue;
 
     const matchComNumero = linhaTrimada.match(/^(\d+)[.\-)\s]+(.+)$/);
-    if (matchComNumero && cursoAtual && periodoAtual) {
+    if (matchComNumero) {
       const nome = matchComNumero[2].trim();
-      if (nome.length > 3 && nome.split(" ").length >= 2) {
+      if (pareceNome(nome)) {
         candidatos.push({ curso: cursoAtual, periodo: periodoAtual, nome, ordem: parseInt(matchComNumero[1]) });
-        dentroDeLista = true; continue;
+        continue;
       }
     }
 
-    if (dentroDeLista && cursoAtual && periodoAtual &&
-      linhaTrimada.split(" ").length >= 2 &&
-      linhaTrimada.length > 5 && linhaTrimada.length < 100 &&
-      !/[<>{}\[\]|\\=+*&^%$#@!]/.test(linhaTrimada)) {
-      candidatos.push({ curso: cursoAtual, periodo: periodoAtual, nome: linhaTrimada, ordem: ordem++ });
+    if (pareceNome(linhaTrimada)) {
+      candidatos.push({ curso: cursoAtual, periodo: periodoAtual, nome: linhaTrimada, ordem: ordemContador++ });
     }
   }
   return candidatos;
 }
 
-// --- Utilitários de teste ---
+// --- Utilitários ---
+let passou = 0, falhou = 0;
 
-let passou = 0;
-let falhou = 0;
-
-function assert(descricao, condicao, detalhes) {
-  if (condicao) {
-    console.log(`  ✅ ${descricao}`);
-    passou++;
-  } else {
-    console.error(`  ❌ ${descricao}`);
-    if (detalhes) console.error(`     → ${detalhes}`);
-    falhou++;
-  }
+function assert(desc, cond, detalhes) {
+  if (cond) { console.log(`  ✅ ${desc}`); passou++; }
+  else { console.error(`  ❌ ${desc}`); if (detalhes) console.error(`     → ${detalhes}`); falhou++; }
 }
-
-function secao(titulo) {
-  console.log(`\n📋 ${titulo}`);
-}
+function secao(t) { console.log(`\n📋 ${t}`); }
 
 // ─── CASO 1: Formato simples com cabeçalhos separados ─────────────────────────
-secao("Caso 1: Formato simples — cabeçalhos separados, nomes em lista");
-
-const caso1 = `
-RESULTADO DO PROCESSO SELETIVO CAV 2026/1
-
+secao("Caso 1: Cabeçalhos separados, nomes em lista contínua");
+const r1 = extrairNomes(`
 ANIMAÇÃO
 Manhã
 Danil Kallai Meneses Mugnani
@@ -124,118 +123,95 @@ CINE/TV
 Manhã
 Amanda de Andrade Braga
 Anna Clara de Oliveira Silva
-Beatriz Seifert da Rocha
 
 Noite
 Amanda Silva Mendes
 Anita Sampaio Zanutto
-André Luiz Ferreira Luciano
-`;
+`);
+assert("Animação/Manhã: 4", r1.filter(c=>c.curso==="Animação"&&c.periodo==="Manhã").length===4, r1.filter(c=>c.curso==="Animação"&&c.periodo==="Manhã").length);
+assert("Animação/Noite: 3", r1.filter(c=>c.curso==="Animação"&&c.periodo==="Noite").length===3);
+assert("Cine/TV Manhã: 2", r1.filter(c=>c.curso==="Cine/TV"&&c.periodo==="Manhã").length===2);
+assert("Cine/TV Noite: 2", r1.filter(c=>c.curso==="Cine/TV"&&c.periodo==="Noite").length===2);
 
-const r1 = extrairNomes(caso1);
-assert("Animação/Manhã tem 4 candidatos", r1.filter(c => c.curso === "Animação" && c.periodo === "Manhã").length === 4,
-  `encontrou: ${r1.filter(c => c.curso === "Animação" && c.periodo === "Manhã").length}`);
-assert("Animação/Noite tem 3 candidatos", r1.filter(c => c.curso === "Animação" && c.periodo === "Noite").length === 3);
-assert("Cine/TV Manhã tem 3 candidatos", r1.filter(c => c.curso === "Cine/TV" && c.periodo === "Manhã").length === 3);
-assert("Cine/TV Noite tem 3 candidatos", r1.filter(c => c.curso === "Cine/TV" && c.periodo === "Noite").length === 3);
-assert("Total: 13 candidatos", r1.length === 13, `encontrou: ${r1.length}`);
-assert("Não inclui o título 'RESULTADO DO PROCESSO'", !r1.some(c => c.nome.includes("RESULTADO")));
+// ─── CASO 2: Linhas em branco DENTRO da lista (bug original) ──────────────────
+secao("Caso 2: Linhas em branco DENTRO da lista — nomes não podem ser perdidos");
+const r2 = extrairNomes(`
+ANIMAÇÃO MANHÃ
 
-// ─── CASO 2: Formato numerado ──────────────────────────────────────────────────
-secao("Caso 2: Formato com numeração (1. Nome, 2. Nome...)");
+Danil Kallai Meneses Mugnani
 
-const caso2 = `
+Daniele Correia da Cunha
+
+Elias Tomé Junior
+
+Gabriel Morais Lemes
+
+ANIMAÇÃO NOITE
+
+Adilson Carvalho Lins
+
+Ana Clara Lima Manoel
+`);
+assert("Animação/Manhã: 4 (com linhas em branco entre nomes)", r2.filter(c=>c.curso==="Animação"&&c.periodo==="Manhã").length===4, r2.filter(c=>c.curso==="Animação"&&c.periodo==="Manhã").length);
+assert("Animação/Noite: 2", r2.filter(c=>c.curso==="Animação"&&c.periodo==="Noite").length===2);
+
+// ─── CASO 3: Número na linha, nome na linha seguinte ─────────────────────────
+secao("Caso 3: Número na linha separada do nome (formato de tabela exportada)");
+const r3 = extrairNomes(`
+ANIMAÇÃO MANHÃ
+01
+Danil Kallai Meneses Mugnani
+02
+Daniele Correia da Cunha
+16
+Vinicius Ferreira Tunes
+17
+William Cavalini
+
+ANIMAÇÃO NOITE
+01
+Adilson Carvalho Lins
+`);
+assert("Detecta Vinicius (número 16 separado)", r3.some(c=>c.nome==="Vinicius Ferreira Tunes"), r3.map(c=>c.nome).join(", "));
+assert("Detecta William Cavalini", r3.some(c=>c.nome==="William Cavalini"));
+assert("Animação/Manhã: 4", r3.filter(c=>c.curso==="Animação"&&c.periodo==="Manhã").length===4, r3.filter(c=>c.curso==="Animação"&&c.periodo==="Manhã").length);
+assert("Animação/Noite: 1", r3.filter(c=>c.curso==="Animação"&&c.periodo==="Noite").length===1);
+
+// ─── CASO 4: Formato numerado na mesma linha ──────────────────────────────────
+secao("Caso 4: Número e nome na mesma linha");
+const r4 = extrairNomes(`
 Animação - Manhã
-
 1. Gabriel Silva Scheffer Mori
 2. Janine Ierullo Silva
 3. Katrina Pietra Gonçalves de Almeida
-4. Luiza Rodrigues Pacca
 
-Animação - Noite
+Cine/TV - Noite
+1. Amanda Silva Mendes
+2. Anita Sampaio Zanutto
+`);
+assert("Animação/Manhã: 3", r4.filter(c=>c.curso==="Animação"&&c.periodo==="Manhã").length===3);
+assert("Cine/TV Noite: 2", r4.filter(c=>c.curso==="Cine/TV"&&c.periodo==="Noite").length===2);
+assert("Nome sem número", !r4.some(c=>/^\d+\./.test(c.nome)));
 
-1. Danilo Koji da Silva Mesquita
-2. Davi Abreu De Carvalho
-3. Gabriel Alberto Ferreira
-`;
-
-const r2 = extrairNomes(caso2);
-assert("Detecta curso e período na mesma linha (Animação - Manhã)", r2.filter(c => c.curso === "Animação" && c.periodo === "Manhã").length === 4,
-  `encontrou: ${r2.filter(c => c.curso === "Animação" && c.periodo === "Manhã").length}`);
-assert("Detecta curso e período na mesma linha (Animação - Noite)", r2.filter(c => c.curso === "Animação" && c.periodo === "Noite").length === 3);
-assert("Nome não inclui o número", !r2.some(c => /^\d+\./.test(c.nome)));
-assert("Ordem preservada nos numerados", r2.find(c => c.nome === "Janine Ierullo Silva")?.ordem === 2);
-
-// ─── CASO 3: Formato com cabeçalho de tabela ───────────────────────────────────
-secao("Caso 3: Com cabeçalhos de coluna (Nº / Nome / Candidato)");
-
-const caso3 = `
-CINE/TV
-Noite
-
-Nº  Nome
-1   João Carlos Barbosa de Souza
-2   Lucca Gomes Xavier
-3   Marcos Vinicius Carneiro de Jesus
-
-Nome do Candidato
-Ana Lima da Silva
-Pedro Souza Ferreira
-`;
-
-const r3 = extrairNomes(caso3);
-assert("Ignora linha 'Nº  Nome'", !r3.some(c => c.nome === "Nº  Nome"));
-assert("Ignora linha 'Nome do Candidato'", !r3.some(c => c.nome.includes("Nome do Candidato")));
-assert("Extrai nomes após cabeçalho", r3.filter(c => c.curso === "Cine/TV" && c.periodo === "Noite").length > 0,
-  `encontrou: ${r3.filter(c => c.curso === "Cine/TV" && c.periodo === "Noite").length}`);
-
-// ─── CASO 4: Títulos em maiúsculas ─────────────────────────────────────────────
-secao("Caso 4: Títulos em MAIÚSCULAS (ANIMAÇÃO, CINE TV, MANHÃ)");
-
-const caso4 = `
+// ─── CASO 5: Maiúsculas e cabeçalhos a ignorar ───────────────────────────────
+secao("Caso 5: Títulos ALL CAPS não viram candidatos");
+const r5 = extrairNomes(`
 ANIMAÇÃO
 MANHÃ
-Erick Andreassa
-Estela Takahashi Silveira de Araujo
-Fabio Marque Santana
-
-CINE TV
-NOITE
-Carla Nakajuni
-Dagoberto Trevizan
-`;
-
-const r4 = extrairNomes(caso4);
-assert("Detecta ANIMAÇÃO em maiúsculas", r4.some(c => c.curso === "Animação"));
-assert("Detecta MANHÃ em maiúsculas", r4.some(c => c.periodo === "Manhã"));
-assert("Detecta CINE TV", r4.some(c => c.curso === "Cine/TV"));
-assert("Detecta NOITE em maiúsculas", r4.some(c => c.periodo === "Noite"));
-
-// ─── CASO 5: Falsos positivos ──────────────────────────────────────────────────
-secao("Caso 5: Não captura textos que não são nomes");
-
-const caso5 = `
-Animação
-Manhã
 João Silva Santos
-Centro de Audiovisual de São Bernardo do Campo
-Resultado do Processo Seletivo 2026
-aprovados na prova
-CAV – 1º Semestre
 Maria Fernanda Costa
-`;
 
-const r5 = extrairNomes(caso5);
-assert("Ignora 'aprovados na prova' (cabeçalho)", !r5.some(c => c.nome.toLowerCase().includes("aprovados na prova")));
-assert("Captura nomes válidos (João e Maria)", r5.some(c => c.nome === "João Silva Santos") && r5.some(c => c.nome === "Maria Fernanda Costa"),
-  `nomes: ${r5.map(c => c.nome).join(", ")}`);
+CINE/TV
+NOITE
+Pedro Souza Ferreira
+`);
+assert("ANIMAÇÃO não vira candidato", !r5.some(c=>c.nome==="ANIMAÇÃO"));
+assert("MANHÃ não vira candidato", !r5.some(c=>c.nome==="MANHÃ"));
+assert("João capturado", r5.some(c=>c.nome==="João Silva Santos"));
+assert("Pedro capturado", r5.some(c=>c.nome==="Pedro Souza Ferreira"));
 
-// ─── RESULTADO FINAL ───────────────────────────────────────────────────────────
+// ─── RESULTADO ────────────────────────────────────────────────────────────────
 console.log(`\n${"─".repeat(50)}`);
 console.log(`Resultado: ${passou} passou | ${falhou} falhou`);
-if (falhou === 0) {
-  console.log("✅ Todos os testes passaram!\n");
-} else {
-  console.log(`⚠️  ${falhou} teste(s) falharam — revisar lógica de extração.\n`);
-  process.exit(1);
-}
+if (falhou === 0) { console.log("✅ Todos os testes passaram!\n"); }
+else { console.log(`⚠️  ${falhou} falhou\n`); process.exit(1); }

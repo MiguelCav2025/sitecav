@@ -122,6 +122,17 @@ export default function BannerManager() {
         </div>
       </CardHeader>
       <CardContent>
+        {/* Dica de dimensões */}
+        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+          <p className="font-semibold mb-1">📐 Proporção ideal para os banners</p>
+          <ul className="space-y-1 text-xs">
+            <li>• <strong>Tamanho recomendado:</strong> 1920 × 600 px (proporção 16:5)</li>
+            <li>• <strong>Formato:</strong> .jpg ou .png com até 300 KB para carregamento rápido</li>
+            <li>• O banner se adapta automaticamente para tablet (16:8) e celular (16:10)</li>
+            <li>• Use o modelo PSD como base para manter a consistência visual</li>
+          </ul>
+        </div>
+
         <div className="flex items-center gap-4 mb-4">
           <Input type="file" onChange={handleFileSelect} disabled={uploading} accept="image/*" />
           <Button 

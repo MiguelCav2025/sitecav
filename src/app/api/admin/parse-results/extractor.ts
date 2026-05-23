@@ -18,20 +18,29 @@ export function detectarCurso(linha: string): string | null {
 
 export function detectarPeriodo(linha: string): string | null {
   const norm = normalizarTexto(linha);
-  if (norm.includes("manha") || norm.includes("manhã") || norm.includes("matutino")) return "Manhã";
+  if (norm.includes("manha") || norm.includes("matutino")) return "Manhã";
   if (norm.includes("noite") || norm.includes("noturno")) return "Noite";
   return null;
 }
 
-function isLinhaVazia(linha: string): boolean {
-  return linha.trim().length === 0;
+function isApenasNumero(linha: string): boolean {
+  return /^\d+[.\-)]*\s*$/.test(linha.trim());
 }
 
-function isNumeroOuCabecalho(linha: string): boolean {
-  const norm = linha.trim();
-  if (/^\d+[.\-)]?\s*$/.test(norm)) return true;
-  if (/^(nº|no\.|nome|candidato|classificação|resultado|aprovad|reprovad)/i.test(norm)) return true;
-  return false;
+function isCabecalhoTabela(linha: string): boolean {
+  return /^(nº|no\.|nome|candidato|classificação|resultado|aprovad|reprovad|ord)/i.test(linha.trim());
+}
+
+function pareceNome(linha: string): boolean {
+  const t = linha.trim();
+  if (t.length < 5 || t.length > 100) return false;
+  if (t.split(" ").length < 2) return false;
+  if (/[<>{}\[\]|\\=+*&^%$#@!]/.test(t)) return false;
+  // Evita linhas que são claramente títulos (muitas MAIÚSCULAS seguidas)
+  const palavras = t.split(" ");
+  const maiusculas = palavras.filter(p => p.length > 2 && p === p.toUpperCase()).length;
+  if (maiusculas === palavras.length && t.length > 20) return false;
+  return true;
 }
 
 export function extrairNomes(texto: string): CandidatoExtraido[] {
@@ -40,67 +49,84 @@ export function extrairNomes(texto: string): CandidatoExtraido[] {
 
   let cursoAtual = "";
   let periodoAtual = "";
-  let ordem = 1;
-  let dentroDeLista = false;
+  let ordemContador = 1;
 
-  for (const linha of linhas) {
-    const linhaTrimada = linha.trim();
+  // Pré-processa: junta número + nome quando estão em linhas separadas
+  // Formato: "01\nJoão Silva" → "01 João Silva"
+  const linhasProcessadas: string[] = [];
+  for (let i = 0; i < linhas.length; i++) {
+    const atual = linhas[i].trim();
+    const proxima = linhas[i + 1]?.trim() ?? "";
 
-    if (isLinhaVazia(linhaTrimada)) {
-      dentroDeLista = false;
-      continue;
+    if (isApenasNumero(atual) && pareceNome(proxima)) {
+      // Número na linha atual + nome na próxima: junta
+      linhasProcessadas.push(`${atual} ${proxima}`);
+      i++; // pula a próxima
+    } else {
+      linhasProcessadas.push(atual);
     }
+  }
 
-    // Detectar seção de curso
+  for (const linhaTrimada of linhasProcessadas) {
+    // Linha vazia: NÃO reseta a seção, apenas continua
+    if (linhaTrimada.length === 0) continue;
+
+    // Ignorar cabeçalhos de tabela
+    if (isCabecalhoTabela(linhaTrimada)) continue;
+
+    // Ignorar números soltos (que não foram mesclados com nome)
+    if (isApenasNumero(linhaTrimada)) continue;
+
+    // Detectar seção — tenta curso E período na mesma linha
     const cursoDet = detectarCurso(linhaTrimada);
     if (cursoDet && linhaTrimada.length < 60) {
       cursoAtual = cursoDet;
-      ordem = 1;
-      dentroDeLista = false;
+      ordemContador = 1;
 
       const periodoDet = detectarPeriodo(linhaTrimada);
       if (periodoDet) {
         periodoAtual = periodoDet;
-        dentroDeLista = true;
+      } else {
+        // Curso sem período na linha — período vem na próxima
+        periodoAtual = "";
       }
       continue;
     }
 
-    // Detectar período
+    // Detectar apenas período
     const periodoDet = detectarPeriodo(linhaTrimada);
     if (periodoDet && linhaTrimada.length < 40) {
       periodoAtual = periodoDet;
-      ordem = 1;
-      dentroDeLista = true;
+      ordemContador = 1;
       continue;
     }
 
-    // Ignorar cabeçalhos
-    if (isNumeroOuCabecalho(linhaTrimada)) continue;
+    // Sem seção definida ainda — pula
+    if (!cursoAtual || !periodoAtual) continue;
 
-    // Linha com número + nome (ex: "1. João Silva" ou "1 João Silva")
+    // Linha com número + nome na mesma linha ("1. João Silva")
     const matchComNumero = linhaTrimada.match(/^(\d+)[.\-)\s]+(.+)$/);
-    if (matchComNumero && cursoAtual && periodoAtual) {
+    if (matchComNumero) {
       const nome = matchComNumero[2].trim();
-      const numOrdem = parseInt(matchComNumero[1]);
-      if (nome.length > 3 && nome.split(" ").length >= 2) {
-        candidatos.push({ curso: cursoAtual, periodo: periodoAtual, nome, ordem: numOrdem });
-        dentroDeLista = true;
+      if (pareceNome(nome)) {
+        candidatos.push({
+          curso: cursoAtual,
+          periodo: periodoAtual,
+          nome,
+          ordem: parseInt(matchComNumero[1]),
+        });
         continue;
       }
     }
 
-    // Nome simples na lista
-    if (
-      dentroDeLista &&
-      cursoAtual &&
-      periodoAtual &&
-      linhaTrimada.split(" ").length >= 2 &&
-      linhaTrimada.length > 5 &&
-      linhaTrimada.length < 100 &&
-      !/[<>{}\[\]|\\=+*&^%$#@!]/.test(linhaTrimada)
-    ) {
-      candidatos.push({ curso: cursoAtual, periodo: periodoAtual, nome: linhaTrimada, ordem: ordem++ });
+    // Nome simples
+    if (pareceNome(linhaTrimada)) {
+      candidatos.push({
+        curso: cursoAtual,
+        periodo: periodoAtual,
+        nome: linhaTrimada,
+        ordem: ordemContador++,
+      });
     }
   }
 
