@@ -84,7 +84,7 @@ function AulasDaDisciplinaModal({
       .eq("disciplina_id", disciplina.id)
       .order("numero")
       .then(({ data }) => {
-        setAulas((data ?? []) as AulaDaDisciplina[]);
+        setAulas((data ?? []) as unknown as AulaDaDisciplina[]);
         setLoading(false);
       });
   }, [disciplina.id]);
