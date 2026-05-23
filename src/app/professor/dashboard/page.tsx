@@ -9,7 +9,7 @@ import {
   Loader2, GraduationCap, Users, ArrowLeft
 } from "lucide-react";
 
-interface Turma { id: string; nome: string; turno: string; semestre: string; }
+interface Turma { id: string; nome: string; turno: string; semestre: string; curso: string; }
 interface Disciplina { id: string; nome: string; }
 interface Aula {
   id: string;
@@ -22,6 +22,25 @@ interface Aula {
 }
 interface Aluno { id: string; nome: string; }
 interface Presenca { aluno_id: string; presente: boolean; }
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function semDocurso(semestreEntrada: string): string {
+  const hoje = new Date();
+  const anoAtual = hoje.getFullYear();
+  const semAtual = hoje.getMonth() < 6 ? 1 : 2;
+  const [ano, sem] = semestreEntrada.split("/").map(Number);
+  if (!ano || !sem) return "";
+  const n = (anoAtual - ano) * 2 + (semAtual - sem) + 1;
+  if (n <= 0) return "Ainda não iniciou";
+  if (n === 1) return "1º semestre";
+  if (n === 2) return "2º semestre";
+  if (n === 3) return "3º semestre";
+  return "Concluído";
+}
+
+function labelTurma(turma: Turma): string {
+  return `${semDocurso(turma.semestre)} · ${turma.curso} ${turma.turno}`;
+}
 
 // ── Tipos de tela ──────────────────────────────────────────────────────────────
 type Tela =
@@ -99,7 +118,7 @@ export default function ProfessorDashboard() {
 
       const { data: aulasData } = await supabase
         .from("aulas")
-        .select("id, numero, semana, chamada_aberta, data_aula, turma:turmas(id, nome, turno, semestre), disciplina:disciplinas(id, nome)")
+        .select("id, numero, semana, chamada_aberta, data_aula, turma:turmas(id, nome, turno, semestre, curso), disciplina:disciplinas(id, nome)")
         .eq("professor_id", prof.id)
         .order("numero", { ascending: true });
 
@@ -201,7 +220,7 @@ export default function ProfessorDashboard() {
       <div className="min-h-screen bg-blue-900 flex flex-col">
         <AppHeader
           titulo={`${aula.disciplina?.nome ?? "Aula"} — Aula ${aula.numero}`}
-          subtitulo={`${aula.turma.turno} · Entrada ${aula.turma.semestre}`}
+          subtitulo={labelTurma(aula.turma)}
           onVoltar={() => {
             if (tela.tipo === "chamada")
               setTela({ tipo: "aulas", disciplinaId: aula.disciplina!.id, disciplinaNome: aula.disciplina!.nome, turma: aula.turma });
@@ -283,7 +302,7 @@ export default function ProfessorDashboard() {
       <div className="min-h-screen bg-blue-900 flex flex-col">
         <AppHeader
           titulo={disciplinaNome}
-          subtitulo={`${turma.turno} · Entrada ${turma.semestre}`}
+          subtitulo={labelTurma(turma)}
           onVoltar={() => setTela({ tipo: "turmas", disciplinaId, disciplinaNome })}
           onSair={handleSair}
         />
@@ -340,8 +359,8 @@ export default function ProfessorDashboard() {
                   <Users className="h-5 w-5 text-orange-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-white font-semibold">{turma.turno}</p>
-                  <p className="text-white/50 text-xs">Entrada {turma.semestre} · {feitas}/{aulasT.length} chamadas feitas</p>
+                  <p className="text-white font-semibold">{turma.curso} {turma.turno}</p>
+                  <p className="text-white/50 text-xs">{semDocurso(turma.semestre)} · {feitas}/{aulasT.length} chamadas feitas</p>
                 </div>
                 <ChevronRight className="h-5 w-5 text-white/30 shrink-0" />
               </button>
