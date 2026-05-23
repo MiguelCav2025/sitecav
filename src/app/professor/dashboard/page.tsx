@@ -303,9 +303,10 @@ export default function ProfessorDashboard() {
   if (tela.tipo === "aulas") {
     const { disciplinaId, disciplinaNome, turma } = tela;
     const aulas = aulasDaTurma(disciplinaId, turma.id);
+    const feitas = aulas.filter(a => a.chamada_aberta).length;
 
     return (
-      <div className="min-h-screen bg-blue-900 flex flex-col">
+      <div className="min-h-screen bg-slate-100 flex flex-col">
         <AppHeader
           titulo={disciplinaNome}
           subtitulo={labelTurma(turma)}
@@ -313,24 +314,45 @@ export default function ProfessorDashboard() {
           onSair={handleSair}
         />
         <div className="flex-1 px-4 py-4 space-y-2 max-w-lg mx-auto w-full">
-          <p className="text-white/50 text-xs mb-3">Selecione a aula para abrir a chamada</p>
+          {/* Progresso */}
+          <div className="bg-white rounded-2xl p-4 shadow-sm mb-2">
+            <div className="flex justify-between text-xs text-gray-500 mb-1.5">
+              <span>Chamadas realizadas</span>
+              <span className="font-semibold text-gray-700">{feitas} / {aulas.length}</span>
+            </div>
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-2 bg-green-500 rounded-full transition-all"
+                style={{ width: aulas.length ? `${(feitas / aulas.length) * 100}%` : "0%" }}
+              />
+            </div>
+          </div>
+
+          <p className="text-xs text-gray-400 font-medium px-1 mb-1">Selecione a aula para abrir a chamada</p>
           {aulas.map(aula => (
             <button
               key={aula.id}
               onClick={() => abrirChamada(aula)}
-              className="w-full bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl p-4 flex items-center gap-3 text-left transition-all active:scale-[0.98]"
+              className={`w-full rounded-2xl p-4 flex items-center gap-3 text-left transition-all active:scale-[0.98] shadow-sm
+                ${aula.chamada_aberta
+                  ? "bg-green-500 hover:bg-green-600"
+                  : "bg-white hover:bg-gray-50"
+                }`}
             >
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${aula.chamada_aberta ? "bg-green-500" : "bg-blue-600"}`}>
-                <span className="text-white font-bold text-sm">{aula.numero}</span>
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 font-bold text-base
+                ${aula.chamada_aberta ? "bg-white/20 text-white" : "bg-blue-950 text-white"}`}>
+                {aula.numero}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-white font-semibold">Aula {aula.numero}</p>
-                <p className="text-white/50 text-xs">
+                <p className={`font-semibold ${aula.chamada_aberta ? "text-white" : "text-gray-900"}`}>
+                  Aula {aula.numero}
+                </p>
+                <p className={`text-xs mt-0.5 ${aula.chamada_aberta ? "text-white/70" : "text-gray-400"}`}>
                   {formatarData(aula.data_aula)}
                   {aula.chamada_aberta ? " · ✅ Chamada feita" : " · Pendente"}
                 </p>
               </div>
-              <ChevronRight className="h-5 w-5 text-white/30 shrink-0" />
+              <ChevronRight className={`h-5 w-5 shrink-0 ${aula.chamada_aberta ? "text-white/50" : "text-gray-300"}`} />
             </button>
           ))}
         </div>
@@ -344,31 +366,38 @@ export default function ProfessorDashboard() {
     const turmas = turmasDaDisciplina(disciplinaId);
 
     return (
-      <div className="min-h-screen bg-blue-900 flex flex-col">
+      <div className="min-h-screen bg-slate-100 flex flex-col">
         <AppHeader
           titulo={disciplinaNome}
           subtitulo="Selecione a turma"
           onVoltar={() => setTela({ tipo: "disciplinas" })}
           onSair={handleSair}
         />
-        <div className="flex-1 px-4 py-4 space-y-2 max-w-lg mx-auto w-full">
+        <div className="flex-1 px-4 py-6 space-y-3 max-w-lg mx-auto w-full">
           {turmas.map(turma => {
             const aulasT = aulasDaTurma(disciplinaId, turma.id);
             const feitas = aulasT.filter(a => a.chamada_aberta).length;
+            const pct = aulasT.length ? Math.round((feitas / aulasT.length) * 100) : 0;
             return (
               <button
                 key={turma.id}
                 onClick={() => setTela({ tipo: "aulas", disciplinaId, disciplinaNome, turma })}
-                className="w-full bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl p-4 flex items-center gap-3 text-left transition-all active:scale-[0.98]"
+                className="w-full bg-white hover:bg-gray-50 rounded-2xl p-4 flex items-center gap-4 text-left transition-all active:scale-[0.98] shadow-sm"
               >
-                <div className="w-10 h-10 rounded-full bg-orange-500/20 border border-orange-400/30 flex items-center justify-center shrink-0">
-                  <Users className="h-5 w-5 text-orange-400" />
+                <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center shrink-0">
+                  <Users className="h-6 w-6 text-orange-500" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-white font-semibold">{turma.curso} {turma.turno}</p>
-                  <p className="text-white/50 text-xs">{semDocurso(turma.semestre)} · {feitas}/{aulasT.length} chamadas feitas</p>
+                  <p className="text-gray-900 font-semibold">{turma.curso} {turma.turno}</p>
+                  <p className="text-gray-400 text-xs mt-0.5">{semDocurso(turma.semestre)}</p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-1.5 bg-green-500 rounded-full" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-xs text-gray-400 shrink-0">{feitas}/{aulasT.length}</span>
+                  </div>
                 </div>
-                <ChevronRight className="h-5 w-5 text-white/30 shrink-0" />
+                <ChevronRight className="h-5 w-5 text-gray-300 shrink-0" />
               </button>
             );
           })}
@@ -379,17 +408,17 @@ export default function ProfessorDashboard() {
 
   // ── Tela: Disciplinas ─────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-blue-900 flex flex-col">
+    <div className="min-h-screen bg-slate-100 flex flex-col">
       <AppHeader
         titulo={`Olá, ${nomeProfessor.split(" ")[0]}`}
         subtitulo="Suas disciplinas"
         onSair={handleSair}
       />
-      <div className="flex-1 px-4 py-4 space-y-2 max-w-lg mx-auto w-full">
+      <div className="flex-1 px-4 py-6 space-y-3 max-w-lg mx-auto w-full">
         {disciplinas.length === 0 ? (
-          <div className="bg-white/10 rounded-2xl p-8 text-center text-white/60 mt-8">
-            <GraduationCap className="h-10 w-10 mx-auto mb-3 opacity-50" />
-            <p>Nenhuma disciplina vinculada ao seu perfil.</p>
+          <div className="bg-white rounded-2xl p-8 text-center text-gray-400 mt-8 shadow-sm">
+            <GraduationCap className="h-10 w-10 mx-auto mb-3 opacity-40" />
+            <p className="text-gray-600">Nenhuma disciplina vinculada.</p>
             <p className="text-xs mt-1">Peça ao administrador para atribuir suas disciplinas.</p>
           </div>
         ) : (
@@ -397,6 +426,7 @@ export default function ProfessorDashboard() {
             const todasAulasDaDisc = todasAulas.filter(a => a.disciplina?.id === disc.id);
             const feitas = todasAulasDaDisc.filter(a => a.chamada_aberta).length;
             const turmas = turmasDaDisciplina(disc.id);
+            const pct = todasAulasDaDisc.length ? Math.round((feitas / todasAulasDaDisc.length) * 100) : 0;
             return (
               <button
                 key={disc.id}
@@ -405,18 +435,24 @@ export default function ProfessorDashboard() {
                     ? setTela({ tipo: "aulas", disciplinaId: disc.id, disciplinaNome: disc.nome, turma: turmas[0] })
                     : setTela({ tipo: "turmas", disciplinaId: disc.id, disciplinaNome: disc.nome })
                 }
-                className="w-full bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl p-4 flex items-center gap-3 text-left transition-all active:scale-[0.98]"
+                className="w-full bg-white hover:bg-gray-50 rounded-2xl p-4 flex items-center gap-4 text-left transition-all active:scale-[0.98] shadow-sm"
               >
-                <div className="w-10 h-10 rounded-xl bg-blue-700/50 flex items-center justify-center shrink-0 text-2xl">
+                <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center shrink-0 text-3xl">
                   {disc.emoji ?? "📚"}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-white font-semibold truncate">{disc.nome}</p>
-                  <p className="text-white/50 text-xs">
-                    {turmas.length} turma{turmas.length !== 1 ? "s" : ""} · {feitas}/{todasAulasDaDisc.length} chamadas feitas
+                  <p className="text-gray-900 font-semibold truncate">{disc.nome}</p>
+                  <p className="text-gray-400 text-xs mt-0.5">
+                    {turmas.length} turma{turmas.length !== 1 ? "s" : ""}
                   </p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-1.5 bg-green-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-xs text-gray-400 shrink-0">{feitas}/{todasAulasDaDisc.length}</span>
+                  </div>
                 </div>
-                <ChevronRight className="h-5 w-5 text-white/30 shrink-0" />
+                <ChevronRight className="h-5 w-5 text-gray-300 shrink-0" />
               </button>
             );
           })
