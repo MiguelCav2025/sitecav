@@ -64,9 +64,11 @@ export default function ProcessDataManager() {
         .eq("is_active", true);
       if (updateError) throw updateError;
 
+      // Remove o id para que o Supabase gere um novo UUID no INSERT
+      const { id: _id, ...dataWithoutId } = data;
       const { error: insertError } = await supabase.from("process_data").insert([
         {
-          ...data,
+          ...dataWithoutId,
           is_active: true,
           page_mode: modoAtual,
           updated_at: new Date().toISOString(),
