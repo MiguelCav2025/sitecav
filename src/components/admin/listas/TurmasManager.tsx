@@ -552,9 +552,9 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
                             <div className="space-y-2 flex-1">
                               <div>
                                 <p className="font-semibold text-gray-800 group-hover:text-blue-700 transition-colors">{t.turno}</p>
-                                <p className="text-xs text-gray-400">Entrada: {t.semestre}</p>
-                              </div>
-                              <p className="text-xs text-gray-400 flex items-center gap-1 pt-1">
+                              <p className="text-xs text-gray-500">Entrada: {t.semestre}</p>
+                            </div>
+                              <p className="text-xs text-gray-600 flex items-center gap-1 pt-1">
                                 <Users className="h-3 w-3" />
                                 {t._alunos_count} aluno{t._alunos_count !== 1 ? "s" : ""}
                                 <span className="ml-auto text-blue-500 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Ver alunos →</span>
