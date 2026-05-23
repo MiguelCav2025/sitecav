@@ -56,14 +56,25 @@ function badgeSemestre(semCurso: string) {
 type Linha = { nome: string; email: string };
 const linhaVazia = (): Linha => ({ nome: "", email: "" });
 
+interface CandidatoRevisao {
+  nome: string;
+  jaNaTurma: boolean;
+  selecionado: boolean;
+}
+
 function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) {
   const supabase = createClient();
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
-  const [importando, setImportando] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
   const [linhas, setLinhas] = useState<Linha[]>([linhaVazia()]);
+
+  // Estado da etapa de revisão de importação
+  const [revisao, setRevisao] = useState<CandidatoRevisao[] | null>(null);
+  const [semestre_resultado, setSemestreResultado] = useState<string>("");
+  const [carregandoRevisao, setCarregandoRevisao] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
 
   const fetchAlunos = async () => {
     setLoading(true);
@@ -78,7 +89,7 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
 
   const showMsg = (tipo: "ok" | "erro", texto: string) => {
     setMsg({ tipo, texto });
-    setTimeout(() => setMsg(null), 4000);
+    setTimeout(() => setMsg(null), 5000);
   };
 
   const updateLinha = (i: number, campo: keyof Linha, valor: string) =>
@@ -111,33 +122,58 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
     setAlunos(prev => prev.filter(a => a.id !== id));
   };
 
-  const handleImportar = async () => {
-    setImportando(true);
-    const curso = turma.nome.includes("Animação") ? "Animação" : "Cine/TV";
-    const periodo = turma.nome.includes("Manhã") ? "Manhã" : "Noite";
+  // Abre revisão: busca candidatos e mostra para conferência antes de importar
+  const handleAbrirRevisao = async () => {
+    setCarregandoRevisao(true);
+    const curso = turma.curso;
+    const periodo = turma.turno;
 
     const { data: resultados } = await supabase
       .from("resultados_processo")
-      .select("nome, curso, periodo")
+      .select("nome, semestre")
       .eq("is_active", true)
       .eq("curso", curso)
-      .eq("periodo", periodo);
+      .eq("periodo", periodo)
+      .order("ordem", { ascending: true });
 
     if (!resultados || resultados.length === 0) {
-      showMsg("erro", `Nenhum aprovado encontrado para ${curso} / ${periodo} nos resultados publicados.`);
-      setImportando(false);
+      showMsg("erro", `Nenhum aprovado encontrado para ${curso} / ${periodo} nos resultados publicados. Verifique se o resultado está ativo na aba "Processo Seletivo".`);
+      setCarregandoRevisao(false);
       return;
     }
 
     const nomesExistentes = new Set(alunos.map(a => a.nome.toLowerCase()));
-    const novos = resultados.filter((r: any) => !nomesExistentes.has(r.nome.toLowerCase()));
+    setSemestreResultado((resultados[0] as any).semestre ?? "");
+    setRevisao(resultados.map((r: any) => ({
+      nome: r.nome,
+      jaNaTurma: nomesExistentes.has(r.nome.toLowerCase()),
+      selecionado: !nomesExistentes.has(r.nome.toLowerCase()),
+    })));
+    setCarregandoRevisao(false);
+  };
 
-    if (novos.length === 0) { showMsg("ok", "Todos os aprovados já estão na turma."); setImportando(false); return; }
+  const toggleCandidato = (i: number) =>
+    setRevisao(prev => prev ? prev.map((c, idx) => idx === i ? { ...c, selecionado: !c.selecionado } : c) : prev);
 
-    const { error } = await supabase.from("alunos").insert(novos.map((r: any) => ({ nome: r.nome, turma_id: turma.id })));
+  const toggleTodos = (valor: boolean) =>
+    setRevisao(prev => prev ? prev.map(c => c.jaNaTurma ? c : { ...c, selecionado: valor }) : prev);
+
+  // Confirma a importação dos selecionados
+  const handleConfirmarImport = async () => {
+    if (!revisao) return;
+    const selecionados = revisao.filter(c => c.selecionado && !c.jaNaTurma);
+    if (selecionados.length === 0) return showMsg("erro", "Nenhum candidato selecionado.");
+    setConfirmando(true);
+    const { error } = await supabase.from("alunos").insert(
+      selecionados.map(c => ({ nome: c.nome, turma_id: turma.id }))
+    );
     if (error) showMsg("erro", "Erro ao importar.");
-    else { showMsg("ok", `${novos.length} aluno(s) importado(s)!`); fetchAlunos(); }
-    setImportando(false);
+    else {
+      showMsg("ok", `${selecionados.length} aluno(s) importado(s) com sucesso!`);
+      setRevisao(null);
+      fetchAlunos();
+    }
+    setConfirmando(false);
   };
 
   return (
@@ -150,13 +186,90 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
       </DialogHeader>
 
       <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-        {/* Formulário de múltiplas linhas */}
+
+        {/* ── Etapa de revisão da importação ── */}
+        {revisao !== null ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-semibold text-gray-800">Revisar aprovados para importação</p>
+                {semestre_resultado && (
+                  <p className="text-xs text-gray-400 mt-0.5">Resultado ativo: <strong>{semestre_resultado}</strong> · {turma.curso} · {turma.turno}</p>
+                )}
+              </div>
+              <button onClick={() => setRevisao(null)} className="text-sm text-gray-400 hover:text-gray-600 cursor-pointer">
+                ← Voltar
+              </button>
+            </div>
+
+            {/* Ações de seleção */}
+            <div className="flex items-center gap-3 text-xs text-gray-500">
+              <button onClick={() => toggleTodos(true)} className="hover:text-blue-600 cursor-pointer underline">Selecionar todos</button>
+              <button onClick={() => toggleTodos(false)} className="hover:text-red-500 cursor-pointer underline">Desmarcar todos</button>
+              <span className="ml-auto font-medium text-gray-700">
+                {revisao.filter(c => c.selecionado).length} de {revisao.filter(c => !c.jaNaTurma).length} novos selecionados
+              </span>
+            </div>
+
+            {/* Lista de candidatos */}
+            <div className="border rounded-xl overflow-hidden max-h-72 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 w-8"></th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Nome</th>
+                    <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {revisao.map((c, i) => (
+                    <tr key={i} className={c.jaNaTurma ? "bg-gray-50 opacity-60" : "hover:bg-blue-50"}>
+                      <td className="px-3 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={c.selecionado}
+                          disabled={c.jaNaTurma}
+                          onChange={() => toggleCandidato(i)}
+                          className="cursor-pointer"
+                        />
+                      </td>
+                      <td className="px-3 py-2 font-medium text-gray-800">{c.nome}</td>
+                      <td className="px-3 py-2 text-center">
+                        {c.jaNaTurma
+                          ? <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Já na turma</span>
+                          : <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">Novo</span>
+                        }
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {msg && (
+              <div className={`flex items-center gap-2 p-2 rounded-lg text-xs ${msg.tipo === "ok" ? "bg-green-50 border border-green-200 text-green-800" : "bg-red-50 border border-red-200 text-red-800"}`}>
+                {msg.tipo === "ok" ? <CheckCircle className="h-3.5 w-3.5 shrink-0" /> : <AlertCircle className="h-3.5 w-3.5 shrink-0" />}
+                {msg.texto}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <Button onClick={handleConfirmarImport} disabled={confirmando || revisao.filter(c => c.selecionado).length === 0}>
+                {confirmando ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <CheckCircle className="h-4 w-4 mr-1" />}
+                Importar {revisao.filter(c => c.selecionado).length} aluno(s)
+              </Button>
+              <Button variant="outline" onClick={() => setRevisao(null)}>Cancelar</Button>
+            </div>
+          </div>
+        ) : (
+
+        /* ── Formulário de adição manual ── */
         <div className="space-y-3 bg-gray-50 rounded-xl p-4">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-gray-700">Adicionar alunos</p>
             {calcularSemestreDoCurso(turma.semestre) === "1º semestre do curso" && (
-              <Button size="sm" variant="outline" onClick={handleImportar} disabled={importando}>
-                {importando ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Download className="h-3.5 w-3.5 mr-1" />}
+              <Button size="sm" variant="outline" onClick={handleAbrirRevisao} disabled={carregandoRevisao}>
+                {carregandoRevisao ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Download className="h-3.5 w-3.5 mr-1" />}
                 Importar do Processo Seletivo
               </Button>
             )}
@@ -216,7 +329,8 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
           </Button>
         </div>
 
-        {/* Lista */}
+        )}
+        {/* Lista de alunos sempre visível */}
         {loading ? (
           <div className="flex items-center gap-2 text-gray-400 py-4"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
         ) : alunos.length === 0 ? (
