@@ -290,10 +290,11 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="space-y-4">
             <div className="space-y-1">
               <Label>Semestre de entrada</Label>
               <Input
+                className="w-full"
                 placeholder="ex: 2026/2"
                 value={form.semestre}
                 onChange={e => setForm(f => ({ ...f, semestre: e.target.value }))}
@@ -303,14 +304,14 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
             <div className="space-y-1">
               <Label>Curso</Label>
               <Select value={form.curso} onValueChange={v => setForm(f => ({ ...f, curso: v }))}>
-                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>{CURSOS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
               <Label>Turno</Label>
               <Select value={form.turno} onValueChange={v => setForm(f => ({ ...f, turno: v }))}>
-                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>{TURNOS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
               </Select>
             </div>

@@ -305,10 +305,11 @@ export default function DisciplinasManager() {
         <CardContent className="space-y-5">
 
           {/* Campos principais */}
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="space-y-1 lg:col-span-2">
+          <div className="space-y-4">
+            <div className="space-y-1">
               <Label>Nome da disciplina *</Label>
               <Input
+                className="w-full"
                 placeholder="ex: Direção de Fotografia III"
                 value={form.nome}
                 onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
@@ -317,25 +318,23 @@ export default function DisciplinasManager() {
             <div className="space-y-1">
               <Label>Curso *</Label>
               <Select value={form.curso} onValueChange={v => setForm(f => ({ ...f, curso: v, semestre_do_curso: "", professores_por_turma: {} }))}>
-                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>{CURSOS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
               <Label>Semestre do curso *</Label>
               <Select value={form.semestre_do_curso} onValueChange={v => setForm(f => ({ ...f, semestre_do_curso: v, professores_por_turma: {} }))}>
-                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
                   {SEMESTRES_CURSO.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-          </div>
-
-          <div className="grid sm:grid-cols-2 gap-4 items-start">
             <div className="space-y-1">
               <Label>Quantidade de aulas no semestre *</Label>
               <Input
+                className="w-full"
                 type="number"
                 min="1"
                 max="200"

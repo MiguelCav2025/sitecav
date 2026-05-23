@@ -105,18 +105,18 @@ export default function ProfessoresManager() {
       <Card>
         <CardHeader><CardTitle className="text-base flex items-center gap-2"><Plus className="h-4 w-4" /> Novo Professor</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid sm:grid-cols-3 gap-4">
+          <div className="space-y-4">
             <div className="space-y-1">
               <Label>Nome *</Label>
-              <Input placeholder="Nome completo" value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} />
+              <Input className="w-full" placeholder="Nome completo" value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} />
             </div>
             <div className="space-y-1">
               <Label>E-mail *</Label>
-              <Input type="email" placeholder="professor@cav.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+              <Input className="w-full" type="email" placeholder="professor@cav.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
             </div>
             <div className="space-y-1">
               <Label>Senha provisória *</Label>
-              <Input type="password" placeholder="Mín. 6 caracteres" value={form.senha} onChange={e => setForm(f => ({ ...f, senha: e.target.value }))} />
+              <Input className="w-full" type="password" placeholder="Mín. 6 caracteres" value={form.senha} onChange={e => setForm(f => ({ ...f, senha: e.target.value }))} />
             </div>
           </div>
 
