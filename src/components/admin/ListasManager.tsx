@@ -3,20 +3,18 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TurmasManager from "./listas/TurmasManager";
-import AlunosManager from "./listas/AlunosManager";
 import ProfessoresManager from "./listas/ProfessoresManager";
 import AulasManager from "./listas/AulasManager";
-import { Users, GraduationCap, BookOpen, UserCheck, ArrowRight } from "lucide-react";
+import { GraduationCap, BookOpen, UserCheck, ArrowRight } from "lucide-react";
 
 const PASSOS = [
-  { num: 1, label: "Crie as Turmas", sub: "ex: Animação Manhã 2026/2", tab: "turmas" },
-  { num: 2, label: "Adicione os Alunos", sub: "por turma, ou importe do PS", tab: "alunos" },
-  { num: 3, label: "Crie as Aulas", sub: "selecione a turma e gere as aulas", tab: "aulas" },
-  { num: 4, label: "Cadastre Professores", sub: "vinculando às turmas deles", tab: "professores" },
+  { num: 1, label: "Crie as Turmas", sub: "clique no card para adicionar alunos", tab: "turmas" },
+  { num: 2, label: "Crie as Aulas", sub: "selecione a turma e gere as aulas", tab: "aulas" },
+  { num: 3, label: "Cadastre Professores", sub: "vinculando às turmas deles", tab: "professores" },
 ];
 
 export default function ListasManager() {
-  const [subTab, setSubTab] = useState("turmas");
+  const [subTab, setSubTab] = useState<"turmas" | "aulas" | "professores">("turmas");
 
   return (
     <div className="space-y-5">
@@ -62,13 +60,7 @@ export default function ListasManager() {
             value="turmas"
             className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-white/70 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm data-[state=active]:font-semibold"
           >
-            <GraduationCap className="h-4 w-4" /> Turmas
-          </TabsTrigger>
-          <TabsTrigger
-            value="alunos"
-            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-white/70 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm data-[state=active]:font-semibold"
-          >
-            <Users className="h-4 w-4" /> Alunos
+            <GraduationCap className="h-4 w-4" /> Turmas e Alunos
           </TabsTrigger>
           <TabsTrigger
             value="aulas"
@@ -85,7 +77,6 @@ export default function ListasManager() {
         </TabsList>
 
         <TabsContent value="turmas" className="mt-4"><TurmasManager /></TabsContent>
-        <TabsContent value="alunos" className="mt-4"><AlunosManager /></TabsContent>
         <TabsContent value="aulas" className="mt-4"><AulasManager /></TabsContent>
         <TabsContent value="professores" className="mt-4"><ProfessoresManager /></TabsContent>
       </Tabs>
