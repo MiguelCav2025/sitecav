@@ -20,16 +20,30 @@ export default function LoginPage() {
     event.preventDefault();
     setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      setError(error.message);
-    } else {
-      router.push('/admin/dashboard');
+      setError('E-mail ou senha incorretos.');
+      return;
     }
+
+    // Se for professor, redireciona para a área deles
+    const { data: prof } = await supabase
+      .from('professores')
+      .select('id, senha_alterada')
+      .eq('id', data.user.id)
+      .single();
+
+    if (prof) {
+      if (!prof.senha_alterada) {
+        router.push('/professor/alterar-senha');
+      } else {
+        router.push('/professor/dashboard');
+      }
+      return;
+    }
+
+    router.push('/admin/dashboard');
   };
 
   return (

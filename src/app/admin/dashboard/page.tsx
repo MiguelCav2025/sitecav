@@ -94,11 +94,21 @@ function DashboardInner() {
   useEffect(() => {
     const getUser = async () => {
       const { data } = await supabase.auth.getUser();
-      if (data.user) {
-        setUser(data.user);
-      } else {
-        router.push('/admin/login');
+      if (!data.user) { router.push('/admin/login'); return; }
+
+      // Bloqueia professores de acessar o admin
+      const { data: prof } = await supabase
+        .from('professores')
+        .select('id, senha_alterada')
+        .eq('id', data.user.id)
+        .single();
+
+      if (prof) {
+        router.push(prof.senha_alterada ? '/professor/dashboard' : '/professor/alterar-senha');
+        return;
       }
+
+      setUser(data.user);
     };
     getUser();
   }, [router, supabase.auth]);
