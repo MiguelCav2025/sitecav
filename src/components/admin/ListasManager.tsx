@@ -5,16 +5,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TurmasManager from "./listas/TurmasManager";
 import ProfessoresManager from "./listas/ProfessoresManager";
 import DisciplinasManager from "./listas/DisciplinasManager";
-import { GraduationCap, BookOpen, UserCheck, ArrowRight } from "lucide-react";
+import CronogramaManager from "./listas/CronogramaManager";
+import { GraduationCap, BookOpen, UserCheck, CalendarDays, ArrowRight } from "lucide-react";
 
-const PASSOS: { num: number; label: string; sub: string; tab: "turmas" | "disciplinas" | "professores" }[] = [
-  { num: 1, label: "Crie as Turmas", sub: "clique no card para adicionar alunos", tab: "turmas" },
-  { num: 2, label: "Crie as Disciplinas", sub: "defina nome, semestre e nº de aulas", tab: "disciplinas" },
-  { num: 3, label: "Cadastre Professores", sub: "vinculando às turmas deles", tab: "professores" },
+const PASSOS: { num: number; label: string; sub: string; tab: "cronograma" | "turmas" | "disciplinas" | "professores" }[] = [
+  { num: 1, label: "Cronograma", sub: "datas do semestre e feriados", tab: "cronograma" },
+  { num: 2, label: "Crie as Turmas", sub: "clique no card para adicionar alunos", tab: "turmas" },
+  { num: 3, label: "Crie as Disciplinas", sub: "defina nome, semestre e nº de aulas", tab: "disciplinas" },
+  { num: 4, label: "Cadastre Professores", sub: "vincule às disciplinas deles", tab: "professores" },
 ];
 
 export default function ListasManager() {
-  const [subTab, setSubTab] = useState<"turmas" | "disciplinas" | "professores">("turmas");
+  const [subTab, setSubTab] = useState<"cronograma" | "turmas" | "disciplinas" | "professores">("turmas");
 
   return (
     <div className="space-y-5">
@@ -54,8 +56,14 @@ export default function ListasManager() {
       </div>
 
       {/* Sub-tabs */}
-      <Tabs value={subTab} onValueChange={v => setSubTab(v as "turmas" | "disciplinas" | "professores")}>
+      <Tabs value={subTab} onValueChange={v => setSubTab(v as "cronograma" | "turmas" | "disciplinas" | "professores")}>
         <TabsList className="flex flex-wrap gap-1 h-auto bg-white/10 border border-white/20 p-1 rounded-xl">
+          <TabsTrigger
+            value="cronograma"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-white/70 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm data-[state=active]:font-semibold"
+          >
+            <CalendarDays className="h-4 w-4" /> Cronograma
+          </TabsTrigger>
           <TabsTrigger
             value="turmas"
             className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-white/70 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm data-[state=active]:font-semibold"
@@ -76,6 +84,7 @@ export default function ListasManager() {
           </TabsTrigger>
         </TabsList>
 
+        <TabsContent value="cronograma" className="mt-4"><CronogramaManager /></TabsContent>
         <TabsContent value="turmas" className="mt-4"><TurmasManager /></TabsContent>
         <TabsContent value="disciplinas" className="mt-4"><DisciplinasManager /></TabsContent>
         <TabsContent value="professores" className="mt-4"><ProfessoresManager /></TabsContent>

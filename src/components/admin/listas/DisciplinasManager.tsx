@@ -38,6 +38,14 @@ interface Disciplina {
   created_at: string;
 }
 
+interface Cronograma {
+  id: string;
+  semestre: string;
+  data_inicio: string;
+  data_fim: string;
+  feriados: string[];
+}
+
 interface AulaDaDisciplina {
   id: string;
   numero: number;
@@ -74,6 +82,32 @@ function calcularSemestreDoCurso(semestreEntrada: string): number {
   const [anoEntrada, semEntrada] = semestreEntrada.split("/").map(Number);
   if (!anoEntrada || !semEntrada) return 0;
   return (anoAtual - anoEntrada) * 2 + (semestreAtual - semEntrada) + 1;
+}
+
+// Calcula qual semestre letivo (ex: "2026/1") a turma está cursando, dado o nº do semestre do curso
+function semestreLetivoParaTurma(semestreEntrada: string, semestreDoCurso: number): string {
+  const [ano, sem] = semestreEntrada.split("/").map(Number);
+  if (!ano || !sem) return "";
+  const total = ano * 2 + sem - 1 + (semestreDoCurso - 1); // half-years from year 0
+  const novoAno = Math.floor(total / 2);
+  const novoSem = (total % 2) + 1;
+  return `${novoAno}/${novoSem}`;
+}
+
+// Retorna as datas do dia_da_semana no período, excluindo feriados, até totalAulas datas
+function gerarDatasAulas(inicio: string, fim: string, diaSemana: number, feriados: string[], totalAulas: number): (string | null)[] {
+  const feriadosSet = new Set(feriados);
+  const datas: (string | null)[] = [];
+  const d = new Date(inicio + "T12:00:00");
+  const fimDate = new Date(fim + "T12:00:00");
+  while (d <= fimDate && datas.length < totalAulas) {
+    if (d.getDay() === diaSemana && !feriadosSet.has(d.toISOString().split("T")[0])) {
+      datas.push(d.toISOString().split("T")[0]);
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  while (datas.length < totalAulas) datas.push(null);
+  return datas;
 }
 
 // ── Modal de aulas por disciplina ─────────────────────────────────────────────
@@ -295,6 +329,7 @@ export default function DisciplinasManager() {
   const [disciplinas, setDisciplinas] = useState<Disciplina[]>([]);
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [professores, setProfessores] = useState<Professor[]>([]);
+  const [cronogramas, setCronogramas] = useState<Cronograma[]>([]);
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
@@ -317,14 +352,16 @@ export default function DisciplinasManager() {
 
   const fetchDados = useCallback(async () => {
     setLoading(true);
-    const [{ data: discs }, { data: ts }, { data: ps }] = await Promise.all([
+    const [{ data: discs }, { data: ts }, { data: ps }, { data: crons }] = await Promise.all([
       supabase.from("disciplinas").select("*").order("curso").order("semestre_do_curso").order("dia_da_semana", { ascending: true, nullsFirst: false }).order("nome"),
       supabase.from("turmas").select("id, nome, semestre, curso, turno").order("semestre", { ascending: false }),
       supabase.from("professores").select("id, nome").order("nome"),
+      supabase.from("cronogramas").select("*").order("data_inicio", { ascending: false }),
     ]);
     setDisciplinas(discs ?? []);
     setTurmas(ts ?? []);
     setProfessores(ps ?? []);
+    setCronogramas(crons ?? []);
     setLoading(false);
   }, []);
 
@@ -363,16 +400,31 @@ export default function DisciplinasManager() {
       return;
     }
 
+    const totalAulasNum = parseInt(form.total_aulas);
+    const diaSemanaNum = form.dia_da_semana ? parseInt(form.dia_da_semana) : null;
+
     const aulasParaInserir: object[] = [];
     turmasAfetadas.forEach(turma => {
       const professorId = form.professores_por_turma[turma.id] || null;
-      for (let i = 1; i <= parseInt(form.total_aulas); i++) {
+
+      // Tenta encontrar cronograma correspondente ao semestre letivo desta turma
+      let datas: (string | null)[] = Array(totalAulasNum).fill(null);
+      if (diaSemanaNum) {
+        const semLetivo = semestreLetivoParaTurma(turma.semestre, parseInt(form.semestre_do_curso));
+        const cron = cronogramas.find(c => c.semestre === semLetivo);
+        if (cron) {
+          datas = gerarDatasAulas(cron.data_inicio, cron.data_fim, diaSemanaNum, cron.feriados, totalAulasNum);
+        }
+      }
+
+      for (let i = 1; i <= totalAulasNum; i++) {
         aulasParaInserir.push({
           turma_id: turma.id,
           disciplina_id: novaDisc.id,
           numero: i,
           professor_id: professorId || null,
           semana: Math.ceil(i / 3),
+          data_aula: datas[i - 1] ?? null,
         });
       }
     });
@@ -381,8 +433,10 @@ export default function DisciplinasManager() {
     if (errAulas) {
       showMsg("erro", `Disciplina criada mas erro ao gerar aulas: ${errAulas.message}`);
     } else {
-      const total = turmasAfetadas.length * parseInt(form.total_aulas);
-      showMsg("ok", `"${form.nome}" criada! ${total} aulas geradas para ${turmasAfetadas.length} turma(s).`);
+      const total = turmasAfetadas.length * totalAulasNum;
+      const temDatas = diaSemanaNum && aulasParaInserir.some((a) => (a as { data_aula: string | null }).data_aula);
+      const sufixo = temDatas ? " com datas preenchidas pelo cronograma." : " (sem datas — defina o cronograma do semestre).";
+      showMsg("ok", `"${form.nome}" criada! ${total} aulas geradas para ${turmasAfetadas.length} turma(s)${sufixo}`);
       setForm({ nome: "", curso: "", semestre_do_curso: "", total_aulas: "16", dia_da_semana: "", professores_por_turma: {} });
     }
 
