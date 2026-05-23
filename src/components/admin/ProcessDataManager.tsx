@@ -246,32 +246,50 @@ export default function ProcessDataManager() {
 
       {/* Seção ativa */}
       {modoAtual === "processo_seletivo" ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Calendar className="h-5 w-5 text-blue-600" />
-              Dados do Processo Seletivo
-            </CardTitle>
-            <p className="text-gray-500 text-sm">
-              Edite as informações que aparecem na página pública quando no modo Processo Seletivo.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <ProcessDataForm
-              initialData={processData || undefined}
-              onSave={saveProcessData}
-              loading={saving}
-            />
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-              <p className="font-semibold mb-1">ℹ️ Informações Importantes</p>
-              <ul className="space-y-1 list-disc list-inside">
-                <li>As alterações são aplicadas imediatamente na página Área do Candidato</li>
-                <li>Certifique-se de que todas as datas estão corretas antes de salvar</li>
-                <li>O link de inscrição deve ser uma URL válida e acessível</li>
-              </ul>
-            </div>
-          </CardContent>
-        </Card>
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Calendar className="h-5 w-5 text-blue-600" />
+                Dados do Processo Seletivo
+              </CardTitle>
+              <p className="text-gray-500 text-sm">
+                Edite as informações que aparecem na página pública quando no modo Processo Seletivo.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <ProcessDataForm
+                initialData={processData || undefined}
+                onSave={saveProcessData}
+                loading={saving}
+              />
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+                <p className="font-semibold mb-1">ℹ️ Informações Importantes</p>
+                <ul className="space-y-1 list-disc list-inside">
+                  <li>As alterações são aplicadas imediatamente na página Área do Candidato</li>
+                  <li>Certifique-se de que todas as datas estão corretas antes de salvar</li>
+                  <li>O link de inscrição deve ser uma URL válida e acessível</li>
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Resultados sempre acessíveis no admin, sem afetar a página pública */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Trophy className="h-5 w-5 text-orange-500" />
+                Resultados do último Processo Seletivo
+              </CardTitle>
+              <p className="text-gray-500 text-sm">
+                Visualize e gerencie os aprovados salvos no banco. Isso <strong>não afeta</strong> o que está sendo exibido na página pública (controlado pelo toggle acima).
+              </p>
+            </CardHeader>
+            <CardContent>
+              <ResultadosManager />
+            </CardContent>
+          </Card>
+        </>
       ) : (
         <Card>
           <CardHeader>
