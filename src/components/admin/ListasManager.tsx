@@ -7,7 +7,7 @@ import ProfessoresManager from "./listas/ProfessoresManager";
 import DisciplinasManager from "./listas/DisciplinasManager";
 import { GraduationCap, BookOpen, UserCheck, ArrowRight } from "lucide-react";
 
-const PASSOS = [
+const PASSOS: { num: number; label: string; sub: string; tab: "turmas" | "disciplinas" | "professores" }[] = [
   { num: 1, label: "Crie as Turmas", sub: "clique no card para adicionar alunos", tab: "turmas" },
   { num: 2, label: "Crie as Disciplinas", sub: "defina nome, semestre e nº de aulas", tab: "disciplinas" },
   { num: 3, label: "Cadastre Professores", sub: "vinculando às turmas deles", tab: "professores" },
