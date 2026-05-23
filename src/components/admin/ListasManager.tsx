@@ -4,17 +4,17 @@ import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TurmasManager from "./listas/TurmasManager";
 import ProfessoresManager from "./listas/ProfessoresManager";
-import AulasManager from "./listas/AulasManager";
+import DisciplinasManager from "./listas/DisciplinasManager";
 import { GraduationCap, BookOpen, UserCheck, ArrowRight } from "lucide-react";
 
 const PASSOS = [
   { num: 1, label: "Crie as Turmas", sub: "clique no card para adicionar alunos", tab: "turmas" },
-  { num: 2, label: "Crie as Aulas", sub: "selecione a turma e gere as aulas", tab: "aulas" },
+  { num: 2, label: "Crie as Disciplinas", sub: "defina nome, semestre e nº de aulas", tab: "disciplinas" },
   { num: 3, label: "Cadastre Professores", sub: "vinculando às turmas deles", tab: "professores" },
 ];
 
 export default function ListasManager() {
-  const [subTab, setSubTab] = useState<"turmas" | "aulas" | "professores">("turmas");
+  const [subTab, setSubTab] = useState<"turmas" | "disciplinas" | "professores">("turmas");
 
   return (
     <div className="space-y-5">
@@ -63,10 +63,10 @@ export default function ListasManager() {
             <GraduationCap className="h-4 w-4" /> Turmas e Alunos
           </TabsTrigger>
           <TabsTrigger
-            value="aulas"
+            value="disciplinas"
             className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-white/70 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm data-[state=active]:font-semibold"
           >
-            <BookOpen className="h-4 w-4" /> Aulas
+            <BookOpen className="h-4 w-4" /> Disciplinas
           </TabsTrigger>
           <TabsTrigger
             value="professores"
@@ -77,7 +77,7 @@ export default function ListasManager() {
         </TabsList>
 
         <TabsContent value="turmas" className="mt-4"><TurmasManager /></TabsContent>
-        <TabsContent value="aulas" className="mt-4"><AulasManager /></TabsContent>
+        <TabsContent value="disciplinas" className="mt-4"><DisciplinasManager /></TabsContent>
         <TabsContent value="professores" className="mt-4"><ProfessoresManager /></TabsContent>
       </Tabs>
     </div>

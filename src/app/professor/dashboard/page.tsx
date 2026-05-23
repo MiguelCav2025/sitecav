@@ -9,7 +9,8 @@ import { BookOpen, LogOut, ChevronRight, CheckCircle, XCircle, Loader2, Users, G
 import Image from "next/image";
 
 interface Turma { id: string; nome: string; }
-interface Aula { id: string; numero: number; semana: number | null; descricao: string | null; chamada_aberta: boolean; turma: Turma; }
+interface Disciplina { nome: string; }
+interface Aula { id: string; numero: number; semana: number | null; descricao: string | null; chamada_aberta: boolean; turma: Turma; disciplina: Disciplina | null; }
 interface Aluno { id: string; nome: string; email: string | null; }
 interface Presenca { aluno_id: string; presente: boolean; }
 
@@ -46,7 +47,7 @@ export default function ProfessorDashboard() {
       // Busca aulas das turmas do professor (pendentes de chamada)
       const { data: aulasData } = await supabase
         .from("aulas")
-        .select("*, turma:turmas(id, nome)")
+        .select("*, turma:turmas(id, nome), disciplina:disciplinas(nome)")
         .in("turma_id", turmaIds)
         .order("numero", { ascending: true });
 
@@ -145,7 +146,9 @@ export default function ProfessorDashboard() {
 
           <div className="text-center text-white mb-2">
             <p className="text-orange-400 font-semibold">{aulaSelecionada.turma.nome}</p>
-            <h1 className="text-2xl font-bold">Aula {aulaSelecionada.numero}</h1>
+            <h1 className="text-2xl font-bold">
+              {aulaSelecionada.disciplina?.nome ?? "Aula"} — Aula {aulaSelecionada.numero}
+            </h1>
             {aulaSelecionada.descricao && <p className="text-white/60 text-sm mt-1">{aulaSelecionada.descricao}</p>}
           </div>
 
@@ -265,10 +268,11 @@ export default function ProfessorDashboard() {
                       <BookOpen className="h-5 w-5 text-white" />
                     </div>
                     <div>
-                      <p className="text-white font-semibold">Aula {aula.numero}</p>
+                      <p className="text-white font-semibold">
+                        {aula.disciplina?.nome ?? "Aula"} — Aula {aula.numero}
+                      </p>
                       <p className="text-white/50 text-xs">
                         {aula.semana ? `Semana ${aula.semana}` : ""}
-                        {aula.descricao ? ` · ${aula.descricao}` : ""}
                         {aula.chamada_aberta ? " · ✅ Chamada feita" : " · Chamada pendente"}
                       </p>
                     </div>
