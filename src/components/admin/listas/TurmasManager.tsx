@@ -504,12 +504,12 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
         </button>
 
         {formAberto && (
-          <div className="px-6 pb-6 space-y-4 border-t">
+          <div className="px-6 pb-6 space-y-4 border-t pt-4">
             <div className="space-y-4">
               <div className="space-y-1">
-                <Label>Semestre de entrada</Label>
+                <Label className="text-gray-700">Semestre de entrada</Label>
                 <Input
-                  className="w-full"
+                  className="w-full text-gray-800"
                   placeholder="ex: 2026/2"
                   value={form.semestre}
                   onChange={e => setForm(f => ({ ...f, semestre: e.target.value }))}
@@ -517,16 +517,16 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
                 <p className="text-xs text-gray-400">Quando este grupo começou o curso</p>
               </div>
               <div className="space-y-1">
-                <Label>Curso</Label>
+                <Label className="text-gray-700">Curso</Label>
                 <Select value={form.curso} onValueChange={v => setForm(f => ({ ...f, curso: v }))}>
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectTrigger className="w-full text-gray-800"><SelectValue placeholder="Selecione o curso" /></SelectTrigger>
                   <SelectContent>{CURSOS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label>Turno</Label>
+                <Label className="text-gray-700">Turno</Label>
                 <Select value={form.turno} onValueChange={v => setForm(f => ({ ...f, turno: v }))}>
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectTrigger className="w-full text-gray-800"><SelectValue placeholder="Selecione o turno" /></SelectTrigger>
                   <SelectContent>{TURNOS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                 </Select>
               </div>

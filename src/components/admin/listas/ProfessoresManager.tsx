@@ -98,18 +98,18 @@ export default function ProfessoresManager() {
         <CardContent className="space-y-4">
           <div className="space-y-4">
             <div className="space-y-1">
-              <Label>Nome *</Label>
+              <Label className="text-gray-700">Nome *</Label>
               <Input
-                className="w-full"
+                className="w-full text-gray-800"
                 placeholder="Nome completo"
                 value={form.nome}
                 onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
               />
             </div>
             <div className="space-y-1">
-              <Label>E-mail *</Label>
+              <Label className="text-gray-700">E-mail *</Label>
               <Input
-                className="w-full"
+                className="w-full text-gray-800"
                 type="email"
                 placeholder="professor@cav.com"
                 value={form.email}
@@ -117,9 +117,9 @@ export default function ProfessoresManager() {
               />
             </div>
             <div className="space-y-1">
-              <Label>Senha provisória *</Label>
+              <Label className="text-gray-700">Senha provisória *</Label>
               <Input
-                className="w-full"
+                className="w-full text-gray-800"
                 type="password"
                 placeholder="Mín. 6 caracteres"
                 value={form.senha}

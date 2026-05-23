@@ -483,30 +483,30 @@ export default function DisciplinasManager() {
 
         {formAberto && (
         <div className="px-6 pb-6 space-y-5 border-t">
-          <div className="space-y-4">
+          <div className="space-y-4 pt-4">
             <div className="space-y-1">
-              <Label>Nome da disciplina *</Label>
-              <Input className="w-full" placeholder="ex: Direção de Fotografia III" value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} />
+              <Label className="text-gray-700">Nome da disciplina *</Label>
+              <Input className="w-full text-gray-800" placeholder="ex: Direção de Fotografia III" value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} />
             </div>
             <div className="space-y-1">
-              <Label>Curso *</Label>
+              <Label className="text-gray-700">Curso *</Label>
               <Select value={form.curso} onValueChange={v => setForm(f => ({ ...f, curso: v, semestre_do_curso: "", professores_por_turma: {} }))}>
-                <SelectTrigger className="w-full"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectTrigger className="w-full text-gray-800"><SelectValue placeholder="Selecione o curso" /></SelectTrigger>
                 <SelectContent>{CURSOS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
-              <Label>Semestre do curso *</Label>
+              <Label className="text-gray-700">Semestre do curso *</Label>
               <Select value={form.semestre_do_curso} onValueChange={v => setForm(f => ({ ...f, semestre_do_curso: v, professores_por_turma: {} }))}>
-                <SelectTrigger className="w-full"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectTrigger className="w-full text-gray-800"><SelectValue placeholder="Selecione o semestre" /></SelectTrigger>
                 <SelectContent>{SEMESTRES_CURSO.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <Label>Dia da semana</Label>
+                <Label className="text-gray-700">Dia da semana</Label>
                 <Select value={form.dia_da_semana || "none"} onValueChange={v => setForm(f => ({ ...f, dia_da_semana: v === "none" ? "" : v }))}>
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Selecione (opcional)" /></SelectTrigger>
+                  <SelectTrigger className="w-full text-gray-800"><SelectValue placeholder="Não definido (opcional)" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Não definido</SelectItem>
                     {DIAS.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
@@ -514,8 +514,8 @@ export default function DisciplinasManager() {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label>Qtd. de aulas *</Label>
-                <Input className="w-full" type="number" min="1" max="200" value={form.total_aulas} onChange={e => setForm(f => ({ ...f, total_aulas: e.target.value }))} />
+                <Label className="text-gray-700">Qtd. de aulas *</Label>
+                <Input className="w-full text-gray-800" type="number" min="1" max="200" value={form.total_aulas} onChange={e => setForm(f => ({ ...f, total_aulas: e.target.value }))} />
                 <p className="text-xs text-gray-400">Geradas automaticamente por turma</p>
               </div>
             </div>
