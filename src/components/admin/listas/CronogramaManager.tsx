@@ -143,17 +143,17 @@ export default function CronogramaManager() {
         {formAberto && (
           <div className="px-6 pb-6 space-y-4 border-t pt-4">
             <div className="space-y-1">
-              <Label>Semestre *</Label>
-              <Input className="w-full" placeholder="ex: 2026/2" value={form.semestre} onChange={e => setForm(f => ({ ...f, semestre: e.target.value }))} />
+              <Label className="text-gray-700">Semestre *</Label>
+              <Input className="w-full text-gray-800" placeholder="ex: 2026/2" value={form.semestre} onChange={e => setForm(f => ({ ...f, semestre: e.target.value }))} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <Label>Início das aulas *</Label>
-                <Input type="date" className="w-full" value={form.data_inicio} onChange={e => setForm(f => ({ ...f, data_inicio: e.target.value }))} />
+                <Label className="text-gray-700">Início das aulas *</Label>
+                <Input type="date" className="w-full text-gray-800" value={form.data_inicio} onChange={e => setForm(f => ({ ...f, data_inicio: e.target.value }))} />
               </div>
               <div className="space-y-1">
-                <Label>Fim das aulas *</Label>
-                <Input type="date" className="w-full" value={form.data_fim} onChange={e => setForm(f => ({ ...f, data_fim: e.target.value }))} />
+                <Label className="text-gray-700">Fim das aulas *</Label>
+                <Input type="date" className="w-full text-gray-800" value={form.data_fim} onChange={e => setForm(f => ({ ...f, data_fim: e.target.value }))} />
               </div>
             </div>
 
