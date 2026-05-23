@@ -35,8 +35,15 @@ interface Disciplina {
   semestre_do_curso: number;
   total_aulas: number;
   dia_da_semana: number | null;
+  emoji: string | null;
   created_at: string;
 }
+
+const EMOJIS_DISCIPLINA = [
+  "📚","🎬","🎥","📽️","🎞️","🎭","🎨","🖼️","✏️","📝",
+  "🎵","🎶","🎸","🎹","🎤","🎙️","📸","🖥️","💡","🔬",
+  "📐","📏","🗂️","📊","🎯","🏆","🌟","💫","🔆","🎓",
+];
 
 interface Cronograma {
   id: string;
@@ -293,17 +300,47 @@ function DisciplinaCard({
   onVerAulas,
   onExcluir,
   onChangeDia,
+  onChangeEmoji,
 }: {
   disciplina: Disciplina;
   professores: Professor[];
   onVerAulas: () => void;
   onExcluir: () => void;
   onChangeDia: (dia: number | null) => void;
+  onChangeEmoji: (emoji: string) => void;
 }) {
+  const [emojiAberto, setEmojiAberto] = useState(false);
+
   return (
     <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-sm hover:shadow-md transition-shadow group">
       <div className="flex items-start justify-between gap-1 mb-2">
-        <p className="font-semibold text-gray-800 text-sm leading-tight flex-1">{disciplina.nome}</p>
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setEmojiAberto(v => !v)}
+              className="text-xl w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100"
+              title="Trocar emoji"
+            >
+              {disciplina.emoji ?? "📚"}
+            </button>
+            {emojiAberto && (
+              <div className="absolute left-0 top-8 z-20 bg-white border border-gray-200 rounded-xl p-2 shadow-lg flex flex-wrap gap-1 w-52">
+                {EMOJIS_DISCIPLINA.map(e => (
+                  <button
+                    key={e}
+                    type="button"
+                    onClick={() => { onChangeEmoji(e); setEmojiAberto(false); }}
+                    className={`w-8 h-8 text-lg rounded-lg flex items-center justify-center hover:bg-gray-100 ${disciplina.emoji === e ? "bg-blue-100" : ""}`}
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <p className="font-semibold text-gray-800 text-sm leading-tight truncate">{disciplina.nome}</p>
+        </div>
         <button
           onClick={onExcluir}
           className="text-red-300 hover:text-red-600 p-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -358,6 +395,7 @@ export default function DisciplinasManager() {
     semestre_do_curso: "",
     total_aulas: "16",
     dia_da_semana: "",
+    emoji: "📚",
     professores_por_turma: {} as Record<string, string>,
   });
 
@@ -417,6 +455,7 @@ export default function DisciplinasManager() {
         semestre_do_curso: parseInt(form.semestre_do_curso),
         total_aulas: parseInt(form.total_aulas),
         dia_da_semana: form.dia_da_semana ? parseInt(form.dia_da_semana) : null,
+        emoji: form.emoji || "📚",
       }])
       .select()
       .single();
@@ -464,7 +503,7 @@ export default function DisciplinasManager() {
       const temDatas = diaSemanaNum && aulasParaInserir.some((a) => (a as { data_aula: string | null }).data_aula);
       const sufixo = temDatas ? " com datas preenchidas pelo cronograma." : " (sem datas — defina o cronograma do semestre).";
       showMsg("ok", `"${form.nome}" criada! ${total} aulas geradas para ${turmasAfetadas.length} turma(s)${sufixo}`);
-      setForm({ nome: "", curso: "", semestre_do_curso: "", total_aulas: "16", dia_da_semana: "", professores_por_turma: {} });
+      setForm({ nome: "", curso: "", semestre_do_curso: "", total_aulas: "16", dia_da_semana: "", emoji: "📚", professores_por_turma: {} });
     }
 
     fetchDados();
@@ -481,6 +520,11 @@ export default function DisciplinasManager() {
   const handleChangeDia = async (id: string, dia: number | null) => {
     await supabase.from("disciplinas").update({ dia_da_semana: dia }).eq("id", id);
     setDisciplinas(prev => prev.map(d => d.id === id ? { ...d, dia_da_semana: dia } : d));
+  };
+
+  const handleChangeEmoji = async (id: string, emoji: string) => {
+    await supabase.from("disciplinas").update({ emoji }).eq("id", id);
+    setDisciplinas(prev => prev.map(d => d.id === id ? { ...d, emoji } : d));
   };
 
   // Agrupa disciplinas: curso → semestre → dia_da_semana
@@ -513,7 +557,32 @@ export default function DisciplinasManager() {
           <div className="space-y-4 pt-4">
             <div className="space-y-1">
               <Label className="text-gray-700">Nome da disciplina *</Label>
-              <Input className="w-full text-gray-800" placeholder="ex: Direção de Fotografia III" value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} />
+              <div className="flex gap-2">
+                <div className="relative">
+                  <button
+                    type="button"
+                    className="w-12 h-10 text-xl bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg flex items-center justify-center transition-colors"
+                    title="Escolher emoji"
+                    onClick={() => setForm(f => ({ ...f, _emojiAberto: !f._emojiAberto } as typeof f))}
+                  >
+                    {form.emoji}
+                  </button>
+                </div>
+                <Input className="flex-1 text-gray-800" placeholder="ex: Direção de Fotografia III" value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} />
+              </div>
+              {/* Grid de emojis */}
+              <div className="flex flex-wrap gap-1 bg-gray-50 border border-gray-200 rounded-xl p-2">
+                {EMOJIS_DISCIPLINA.map(e => (
+                  <button
+                    key={e}
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, emoji: e }))}
+                    className={`w-9 h-9 text-xl rounded-lg flex items-center justify-center transition-all hover:scale-110 ${form.emoji === e ? "bg-blue-100 ring-2 ring-blue-400" : "hover:bg-gray-200"}`}
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="space-y-1">
               <Label className="text-gray-700">Curso *</Label>
@@ -699,6 +768,7 @@ export default function DisciplinasManager() {
                                   onVerAulas={() => setDisciplinaSelecionada(d)}
                                   onExcluir={() => handleExcluir(d.id, d.nome)}
                                   onChangeDia={dia => handleChangeDia(d.id, dia)}
+                                  onChangeEmoji={emoji => handleChangeEmoji(d.id, emoji)}
                                 />
                               ))
                             )}
@@ -721,6 +791,7 @@ export default function DisciplinasManager() {
                                   onVerAulas={() => setDisciplinaSelecionada(d)}
                                   onExcluir={() => handleExcluir(d.id, d.nome)}
                                   onChangeDia={dia => handleChangeDia(d.id, dia)}
+                                  onChangeEmoji={emoji => handleChangeEmoji(d.id, emoji)}
                                 />
                               </div>
                             ))}

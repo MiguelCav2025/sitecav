@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 
 interface Turma { id: string; nome: string; turno: string; semestre: string; curso: string; }
-interface Disciplina { id: string; nome: string; }
+interface Disciplina { id: string; nome: string; emoji: string | null; }
 interface Aula {
   id: string;
   numero: number;
@@ -118,7 +118,7 @@ export default function ProfessorDashboard() {
 
       const { data: aulasData } = await supabase
         .from("aulas")
-        .select("id, numero, semana, chamada_aberta, data_aula, turma:turmas(id, nome, turno, semestre, curso), disciplina:disciplinas(id, nome)")
+        .select("id, numero, semana, chamada_aberta, data_aula, turma:turmas(id, nome, turno, semestre, curso), disciplina:disciplinas(id, nome, emoji)")
         .eq("professor_id", prof.id)
         .order("numero", { ascending: true });
 
@@ -401,8 +401,8 @@ export default function ProfessorDashboard() {
                 }
                 className="w-full bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl p-4 flex items-center gap-3 text-left transition-all active:scale-[0.98]"
               >
-                <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shrink-0">
-                  <BookOpen className="h-5 w-5 text-white" />
+                <div className="w-10 h-10 rounded-xl bg-blue-700/50 flex items-center justify-center shrink-0 text-2xl">
+                  {disc.emoji ?? "📚"}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-white font-semibold truncate">{disc.nome}</p>
