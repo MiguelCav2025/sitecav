@@ -85,12 +85,12 @@ export default function RelatoriosManager() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><BarChart3 className="h-5 w-5 text-blue-600" /> Relatórios de Presença</h2>
-        <p className="text-sm text-gray-500 mt-1">Visualize e exporte os dados de frequência.</p>
+        <h2 className="text-xl font-bold text-white flex items-center gap-2"><BarChart3 className="h-5 w-5 text-orange-400" /> Relatórios de Presença</h2>
+        <p className="text-sm text-blue-200 mt-1">Visualize e exporte os dados de frequência por aluno ou por aula.</p>
       </div>
 
       <div className="space-y-1 max-w-sm">
-        <Label>Turma</Label>
+        <Label className="text-white">Turma</Label>
         <Select value={turmaSel} onValueChange={setTurmaSel}>
           <SelectTrigger><SelectValue placeholder="Selecione uma turma..." /></SelectTrigger>
           <SelectContent>{turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent>
