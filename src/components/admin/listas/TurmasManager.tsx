@@ -523,7 +523,7 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
 
             return (
               <div key={curso} className="space-y-4">
-                <p className="text-white/70 text-xs font-semibold uppercase tracking-wider">{curso}</p>
+                <p className="text-white font-bold text-lg border-b border-white/20 pb-2">{curso}</p>
 
                 {ORDEM_SEM.filter(sem => grupos[sem]?.length).map(sem => (
                   <div key={sem} className="space-y-2">
