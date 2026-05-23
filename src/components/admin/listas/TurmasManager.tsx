@@ -53,6 +53,9 @@ function badgeSemestre(semCurso: string) {
 }
 
 // ── Modal de Alunos ───────────────────────────────────────────────────────────
+type Linha = { nome: string; email: string };
+const linhaVazia = (): Linha => ({ nome: "", email: "" });
+
 function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) {
   const supabase = createClient();
   const [alunos, setAlunos] = useState<Aluno[]>([]);
@@ -60,7 +63,7 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
   const [salvando, setSalvando] = useState(false);
   const [importando, setImportando] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
-  const [form, setForm] = useState({ nome: "", email: "" });
+  const [linhas, setLinhas] = useState<Linha[]>([linhaVazia()]);
 
   const fetchAlunos = async () => {
     setLoading(true);
@@ -78,16 +81,27 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
     setTimeout(() => setMsg(null), 4000);
   };
 
-  const handleAdicionar = async () => {
-    if (!form.nome.trim()) return showMsg("erro", "Nome é obrigatório.");
+  const updateLinha = (i: number, campo: keyof Linha, valor: string) =>
+    setLinhas(prev => prev.map((l, idx) => idx === i ? { ...l, [campo]: valor } : l));
+
+  const addLinha = () => setLinhas(prev => [...prev, linhaVazia()]);
+
+  const removeLinha = (i: number) =>
+    setLinhas(prev => prev.length === 1 ? [linhaVazia()] : prev.filter((_, idx) => idx !== i));
+
+  const handleSalvarTodos = async () => {
+    const validas = linhas.filter(l => l.nome.trim());
+    if (validas.length === 0) return showMsg("erro", "Preencha ao menos um nome.");
     setSalvando(true);
-    const { error } = await supabase.from("alunos").insert([{
-      nome: form.nome.trim(),
-      email: form.email.trim() || null,
-      turma_id: turma.id,
-    }]);
-    if (error) showMsg("erro", "Erro ao adicionar aluno.");
-    else { setForm({ nome: "", email: "" }); fetchAlunos(); }
+    const { error } = await supabase.from("alunos").insert(
+      validas.map(l => ({ nome: l.nome.trim(), email: l.email.trim() || null, turma_id: turma.id }))
+    );
+    if (error) showMsg("erro", "Erro ao salvar.");
+    else {
+      showMsg("ok", `${validas.length} aluno(s) adicionado(s)!`);
+      setLinhas([linhaVazia()]);
+      fetchAlunos();
+    }
     setSalvando(false);
   };
 
@@ -136,44 +150,68 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
       </DialogHeader>
 
       <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-        {/* Formulário de adição */}
+        {/* Formulário de múltiplas linhas */}
         <div className="space-y-3 bg-gray-50 rounded-xl p-4">
-          <p className="text-sm font-semibold text-gray-700">Adicionar aluno</p>
-          <div className="grid sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">Nome *</Label>
-              <Input
-                placeholder="Nome completo"
-                value={form.nome}
-                onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
-                onKeyDown={e => e.key === "Enter" && handleAdicionar()}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">E-mail (opcional)</Label>
-              <Input
-                placeholder="email@exemplo.com"
-                value={form.email}
-                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-              />
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button size="sm" onClick={handleAdicionar} disabled={salvando}>
-              {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
-              Adicionar
-            </Button>
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-gray-700">Adicionar alunos</p>
             <Button size="sm" variant="outline" onClick={handleImportar} disabled={importando}>
-              {importando ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Download className="h-4 w-4 mr-1" />}
-              Importar do Processo Seletivo
+              {importando ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Download className="h-3.5 w-3.5 mr-1" />}
+              Importar do PS
             </Button>
           </div>
+
+          {/* Cabeçalho das colunas */}
+          <div className="grid grid-cols-[1fr_1fr_32px] gap-2 px-1">
+            <p className="text-xs font-semibold text-gray-500">Nome *</p>
+            <p className="text-xs font-semibold text-gray-500">E-mail (opcional)</p>
+            <span />
+          </div>
+
+          {/* Linhas dinâmicas */}
+          <div className="space-y-2">
+            {linhas.map((l, i) => (
+              <div key={i} className="grid grid-cols-[1fr_1fr_32px] gap-2 items-center">
+                <Input
+                  placeholder="Nome completo"
+                  value={l.nome}
+                  onChange={e => updateLinha(i, "nome", e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addLinha(); } }}
+                />
+                <Input
+                  placeholder="email@exemplo.com"
+                  value={l.email}
+                  onChange={e => updateLinha(i, "email", e.target.value)}
+                />
+                <button
+                  onClick={() => removeLinha(i)}
+                  className="text-gray-300 hover:text-red-500 cursor-pointer transition-colors flex items-center justify-center"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              onClick={addLinha}
+              className="text-sm text-blue-600 hover:text-blue-800 cursor-pointer flex items-center gap-1 font-medium"
+            >
+              <Plus className="h-3.5 w-3.5" /> Adicionar linha
+            </button>
+          </div>
+
           {msg && (
             <div className={`flex items-center gap-2 p-2 rounded-lg text-xs ${msg.tipo === "ok" ? "bg-green-50 border border-green-200 text-green-800" : "bg-red-50 border border-red-200 text-red-800"}`}>
               {msg.tipo === "ok" ? <CheckCircle className="h-3.5 w-3.5 shrink-0" /> : <AlertCircle className="h-3.5 w-3.5 shrink-0" />}
               {msg.texto}
             </div>
           )}
+
+          <Button size="sm" onClick={handleSalvarTodos} disabled={salvando || linhas.every(l => !l.nome.trim())}>
+            {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <CheckCircle className="h-4 w-4 mr-1" />}
+            Salvar {linhas.filter(l => l.nome.trim()).length > 0 ? `${linhas.filter(l => l.nome.trim()).length} aluno(s)` : ""}
+          </Button>
         </div>
 
         {/* Lista */}
@@ -358,7 +396,7 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
                       <button
                         key={t.id}
                         onClick={() => setTurmaSelecionada(t)}
-                        className="bg-white rounded-xl p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all text-left w-full group"
+                        className="bg-white rounded-xl p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all text-left w-full group cursor-pointer"
                       >
                         <div className="flex items-start justify-between">
                           <div className="space-y-2 flex-1">
