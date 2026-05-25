@@ -490,6 +490,29 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
         </div>
       </div>
 
+      {/* Totalizador de alunos */}
+      {!loading && (() => {
+        const totalGeral = turmas.reduce((s, t) => s + (t._alunos_count ?? 0), 0);
+        const totalAnimacao = turmas.filter(t => t.curso === "Animação").reduce((s, t) => s + (t._alunos_count ?? 0), 0);
+        const totalCineTV = turmas.filter(t => t.curso === "Cine/TV").reduce((s, t) => s + (t._alunos_count ?? 0), 0);
+        return (
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-white rounded-xl border shadow-sm p-4 text-center">
+              <p className="text-2xl font-bold text-blue-700">{totalGeral}</p>
+              <p className="text-xs text-gray-500 mt-0.5">alunos no total</p>
+            </div>
+            <div className="bg-white rounded-xl border shadow-sm p-4 text-center">
+              <p className="text-2xl font-bold text-purple-600">{totalAnimacao}</p>
+              <p className="text-xs text-gray-500 mt-0.5">Animação</p>
+            </div>
+            <div className="bg-white rounded-xl border shadow-sm p-4 text-center">
+              <p className="text-2xl font-bold text-orange-600">{totalCineTV}</p>
+              <p className="text-xs text-gray-500 mt-0.5">Cine/TV</p>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Criar turma — accordion fechado por default */}
       <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
         <button
