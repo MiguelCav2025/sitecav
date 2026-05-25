@@ -6,10 +6,29 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Download, BarChart3, Users, BookOpen, AlertCircle } from "lucide-react";
 
-interface Turma { id: string; nome: string; }
+interface Turma { id: string; nome: string; semestre: string; curso: string; turno: string; }
 interface Aluno { id: string; nome: string; }
 interface Aula { id: string; numero: number; chamada_aberta: boolean; }
 interface LinhaRelatorio { aluno: string; total_aulas: number; presentes: number; ausentes: number; percentual: number; }
+
+const ROMANOS = ["I", "II", "III", "IV", "V", "VI"];
+
+function calcularSemestreDoCurso(semestreEntrada: string): number {
+  // "2025/1" → ano=2025, metade=1
+  const [ano, metade] = semestreEntrada.split("/").map(Number);
+  const hoje = new Date();
+  const anoAtual = hoje.getFullYear();
+  const metadeAtual = hoje.getMonth() < 6 ? 1 : 2;
+  const semEntrada = ano * 2 + metade;
+  const semAtual = anoAtual * 2 + metadeAtual;
+  return Math.max(1, semAtual - semEntrada + 1);
+}
+
+function labelTurma(t: Turma): string {
+  const sem = calcularSemestreDoCurso(t.semestre);
+  const romano = ROMANOS[sem - 1] ?? `${sem}°`;
+  return `${t.curso} ${romano} · ${t.turno}`;
+}
 
 export default function RelatoriosManager() {
   const supabase = createClient();
@@ -22,7 +41,7 @@ export default function RelatoriosManager() {
   const [relatorioAula, setRelatorioAula] = useState<{ nome: string; presente: boolean }[]>([]);
 
   useEffect(() => {
-    supabase.from("turmas").select("id, nome").order("nome").then(({ data }) => setTurmas(data ?? []));
+    supabase.from("turmas").select("id, nome, semestre, curso, turno").order("nome").then(({ data }) => setTurmas(data ?? []));
   }, []);
 
   useEffect(() => {
@@ -98,7 +117,7 @@ export default function RelatoriosManager() {
             <SelectValue placeholder="Selecione uma turma..." />
           </SelectTrigger>
           <SelectContent>
-            {turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
+            {turmas.map(t => <SelectItem key={t.id} value={t.id}>{labelTurma(t)}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
