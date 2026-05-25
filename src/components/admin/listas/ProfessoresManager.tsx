@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Trash2, Loader2, CheckCircle, AlertCircle, UserCheck, Pencil, X, Check } from "lucide-react";
+import { Plus, Trash2, Loader2, CheckCircle, AlertCircle, UserCheck, Pencil, X, Check, Info, KeyRound } from "lucide-react";
 
 interface Professor {
   id: string;
@@ -116,6 +116,25 @@ export default function ProfessoresManager() {
 
   return (
     <div className="space-y-6">
+      {/* Card informativo sobre senha provisória */}
+      <div className="bg-white rounded-xl border border-amber-200 shadow-sm p-4 flex gap-3">
+        <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+          <KeyRound className="h-4 w-4 text-amber-600" />
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-gray-800">Senha provisória dos professores</p>
+          <p className="text-sm text-gray-600">
+            Todos os professores foram cadastrados com a senha provisória{" "}
+            <code className="bg-amber-50 border border-amber-200 text-amber-800 px-2 py-0.5 rounded font-mono text-xs">Cav@2026</code>.
+            No primeiro acesso, o sistema obriga a troca da senha.
+          </p>
+          <p className="text-xs text-gray-400 flex items-center gap-1 mt-1">
+            <Info className="h-3 w-3 shrink-0" />
+            Para editar o e-mail de um professor, clique no ícone de lápis na tabela abaixo.
+          </p>
+        </div>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
