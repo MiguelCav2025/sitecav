@@ -23,6 +23,7 @@ const InstitutionalProjectManager = dynamic(() => import('@/components/admin/Ins
 const PhotoGalleryManager = dynamic(() => import('@/components/admin/PhotoGalleryManager'), { ssr: false });
 const DownloadManager = dynamic(() => import('@/components/admin/DownloadManager'), { ssr: false });
 const ProcessDataManager = dynamic(() => import('@/components/admin/ProcessDataManager'), { ssr: false });
+const GabaritoManager = dynamic(() => import('@/components/admin/GabaritoManager'), { ssr: false });
 const OficinaManager = dynamic(() => import('@/components/admin/OficinaManager'), { ssr: false });
 const ArteEducadorManager = dynamic(() => import('@/components/admin/ArteEducadorManager'), { ssr: false });
 const AdminManager = dynamic(() => import('@/components/admin/AdminManager'), { ssr: false });
@@ -100,8 +101,8 @@ function DashboardInner() {
       const { data: prof } = await supabase
         .from('professores')
         .select('id, senha_alterada')
-        .eq('id', data.user.id)
-        .single();
+        .eq('user_id', data.user.id)
+        .maybeSingle();
 
       if (prof) {
         router.push(prof.senha_alterada ? '/professor/dashboard' : '/professor/alterar-senha');
@@ -165,8 +166,14 @@ function DashboardInner() {
         <TabsContent value="downloads" className="mt-4">
           <DownloadManager />
         </TabsContent>
-        <TabsContent value="process_data" className="mt-4">
+        <TabsContent value="process_data" className="mt-4 space-y-8">
           <ProcessDataManager />
+          {/* O gabarito pertence ao processo seletivo: aparece na mesma página
+              pública, no modo Resultados. */}
+          <div className="border-t border-white/10 pt-8">
+            <h3 className="mb-4 text-lg font-semibold text-white">Gabarito da Prova</h3>
+            <GabaritoManager />
+          </div>
         </TabsContent>
         <TabsContent value="ref_videos" className="mt-4">
           <ReferenceVideoManager />

@@ -2,6 +2,7 @@ import { createSupabaseServerClient as createClient } from "@/lib/supabase/serve
 import { CheckCircle, Users, GraduationCap, Calendar, Mail, ExternalLink, MapPin, Clock, ClipboardList, BookOpen, Film, Link2 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
+import CardGabarito, { type GabaritoPublicado } from "@/components/candidato/CardGabarito";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -115,7 +116,13 @@ function TabelaAprovados({
 
 // ─── Subcomponente: Página de Resultados ──────────────────────────────────────
 
-function PaginaResultados({ resultados }: { resultados: Resultado[] }) {
+function PaginaResultados({
+  resultados,
+  gabaritos,
+}: {
+  resultados: Resultado[];
+  gabaritos: GabaritoPublicado[];
+}) {
   const semestre = resultados[0]?.semestre ?? "";
 
   const filtrar = (curso: string, periodo: string) =>
@@ -148,6 +155,9 @@ function PaginaResultados({ resultados }: { resultados: Resultado[] }) {
             </p>
           )}
         </div>
+
+        {/* Gabarito da prova — no topo, para o candidato conferir as respostas */}
+        <CardGabarito gabaritos={gabaritos} />
 
         {/* Aviso */}
         <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8 mb-12 max-w-4xl mx-auto">
@@ -505,15 +515,39 @@ export default async function AreaDoCandidatoPage() {
   const videos = (videosData ?? []) as ReferenceVideo[];
   const bibliografias = (biblioData ?? []) as Bibliography[];
 
-  // Se modo resultados, busca candidatos ativos
+  // Se modo resultados, busca candidatos aprovados e o gabarito publicado
   if (pageMode === "resultados") {
-    const { data } = await supabase
-      .from("resultados_processo")
-      .select("*")
-      .eq("is_active", true)
-      .order("ordem", { ascending: true });
+    const [{ data }, { data: gabaritosData }] = await Promise.all([
+      supabase
+        .from("resultados_processo")
+        .select("*")
+        .eq("is_active", true)
+        .order("ordem", { ascending: true }),
+      supabase
+        .from("gabaritos")
+        .select("id, semestre, curso, titulo, observacao, gabarito_itens(numero, resposta)")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false }),
+    ]);
+
     const resultados = (data ?? []) as Resultado[];
-    return <PaginaResultados resultados={resultados} />;
+
+    // O PostgREST não garante a ordem do relacionamento aninhado
+    const gabaritos: GabaritoPublicado[] = (gabaritosData ?? []).map((g) => {
+      const bruto = g as unknown as GabaritoPublicado & {
+        gabarito_itens: { numero: number; resposta: string }[] | null;
+      };
+      return {
+        id: bruto.id,
+        semestre: bruto.semestre,
+        curso: bruto.curso,
+        titulo: bruto.titulo,
+        observacao: bruto.observacao,
+        itens: [...(bruto.gabarito_itens ?? [])].sort((a, b) => a.numero - b.numero),
+      };
+    });
+
+    return <PaginaResultados resultados={resultados} gabaritos={gabaritos} />;
   }
 
   if (!processData) {
