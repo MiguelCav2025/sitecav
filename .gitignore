@@ -26,6 +26,10 @@ yarn-error.log*
 /build
 /dist
 
+# documentos de referencia do banco (dump de schema - NUNCA COMMITAR)
+REFERENCIA DB*.txt
+REFERENCIA DB*.sql
+
 # environment variables (NUNCA COMMITAR)
 .env
 .env.local
