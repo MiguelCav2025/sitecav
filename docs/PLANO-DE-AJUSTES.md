@@ -303,6 +303,7 @@ Não existe tabela ligando os dois. É derivado de `aulas.professor_id` + `aulas
 | **D36** | **Todo aluno está em algum grupo** — pode ser grupo de uma pessoa só. Aluno sem grupo é falha de cadastro, não estado legítimo |
 | **D37** | **O professor não vê a nota final.** Ele vê a que lançou; a banca e os grupos são do coordenador. Escolha por menor privilégio — nada impede abrir depois |
 | **D38** | **Frequência de 70% é exigida em CADA disciplina**, não na média do semestre. Faltar demais numa única matéria retém o aluno, ainda que a presença somada passe de 70% |
+| **D39** | **A aprovação tem dois níveis, e os dois aparecem:** o aluno é aprovado ou retido **em cada disciplina** (nota final e frequência daquela matéria), e passa de semestre só se foi aprovado em **todas** |
 
 ### PWA
 

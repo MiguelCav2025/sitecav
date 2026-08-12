@@ -296,8 +296,8 @@ export default function GruposEBancaManager() {
                   <tr>
                     <th className="px-4 py-3 text-left font-semibold text-gray-600">Aluno</th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-600">Grupo</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Situação</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Detalhe</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Semestre</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Por disciplina</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -305,17 +305,37 @@ export default function GruposEBancaManager() {
                     const doAluno = desempenho.filter(d => d.aluno_id === a.id);
                     const r = avaliarSemestre(doAluno);
                     const estilo = SITUACAO_ESTILO[r.situacao];
-                    const detalhe = r.motivos[0] ?? r.pendencias[0] ?? "—";
                     return (
-                      <tr key={a.id} className="hover:bg-gray-50">
+                      <tr key={a.id} className="align-top hover:bg-gray-50">
                         <td className="px-4 py-3 font-medium text-gray-800">{a.nome}</td>
                         <td className="px-4 py-3 text-gray-500">{grupoDoAluno.get(a.id)?.nome ?? "—"}</td>
                         <td className="px-4 py-3">
                           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${estilo.classe}`}>
                             {estilo.rotulo}
                           </span>
+                          <p className="mt-1 max-w-52 text-xs text-gray-400">
+                            {r.motivos[0] ?? r.pendencias[0] ?? "—"}
+                          </p>
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-500">{detalhe}</td>
+                        <td className="px-4 py-3">
+                          {r.disciplinas.length === 0 ? (
+                            <span className="text-xs italic text-gray-400">Nenhuma nota lançada</span>
+                          ) : (
+                            <div className="flex flex-wrap gap-1.5">
+                              {r.disciplinas.map(d => (
+                                <span
+                                  key={d.disciplinaId}
+                                  title={d.motivos.join(" ")}
+                                  className={`rounded-lg px-2 py-1 text-xs ${SITUACAO_ESTILO[d.situacao].classe}`}
+                                >
+                                  <strong className="font-semibold">{d.disciplina}</strong>
+                                  {d.notaFinal !== null && ` · ${String(d.notaFinal).replace(".", ",")}`}
+                                  {d.percentual !== null && ` · ${d.percentual}%`}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
