@@ -1,4 +1,4 @@
-# Plano de Ajustes — Site CAV
+﻿# Plano de Ajustes — Site CAV
 
 > Documento de trabalho. Última atualização: 12/08/2026 — rodada 3.
 
@@ -107,7 +107,7 @@ IDs: `F` feito · `P` problema · `D` decisão · `N` dúvida aberta · `I` impl
 |---|---|
 | `lib/admin-navegacao.ts` | A estrutura do painel vira dado: áreas, seções, ícones, textos de ajuda e a ordem dos passos |
 | `NavegacaoAdmin` | Navegação em dois níveis — área (Site / Escola / Sistema) e depois seção. No celular a lista de seções vira dropdown |
-| Escola numerada | Cronograma (1) → Turmas (2) → Disciplinas (3) → Professores (4) → Relatórios (5) |
+| Escola numerada | Cronograma (1) → Turmas (2) → Disciplinas (3) → Professores (4) → Notas e Banca (5) → Relatórios (6) |
 | `admin/dashboard` | Reescrito: some o dropdown único de 13 opções e o código morto de breakpoint; cada seção mapeia direto para o seu manager |
 | Arquivos removidos | `ListasManager` (absorvido pela navegação), `AulasManager` e `AlunosManager` |
 
@@ -163,7 +163,7 @@ Tudo unificado em `lib/calendario-escolar.ts`, com a data "hoje" **injetável** 
 
 Isso encerra o `P14`: antes, mudar o dia da semana gravava só na disciplina e as aulas ficavam nas datas antigas — a tela dizia "quarta" enquanto as aulas seguiam na terça.
 
-### Fase 8 — Grupos, notas e banca 🔧 em andamento
+### Fase 8 — Grupos, notas e banca ✅
 
 **Banco ✅ aplicado e verificado.** `grupos`, `grupo_alunos`, `notas_disciplina` e a view `vw_desempenho_aluno`. RLS conferido: a chave anon não enxerga nada disso.
 
@@ -183,7 +183,13 @@ Isso encerra o `P14`: antes, mudar o dia da semana gravava só na disciplina e a
 - `indefinido` é situação de primeira classe: falta lançar nota ou banca. Tratar isso como reprovação transformaria esquecimento administrativo em retenção de aluno;
 - quem **já** ficou abaixo da nota ou da frequência é retido mesmo com outra disciplina pendente — não há o que esperar.
 
-**Falta:** as telas de lançamento (professor) e de grupos/banca (coordenador).
+**Telas ✅ prontas:**
+
+| Tela | O que faz |
+|---|---|
+| `LancarNotas` (PWA) | Dentro da turma, ao lado das chamadas. Lista os alunos, aceita vírgula como separador decimal, marca em âmbar quem está abaixo de 6 e em vermelho o que está fora de 0–10. Campo esvaziado remove a nota |
+| `GruposEBancaManager` (admin) | Passo 5 da área Escola. Cria grupos, monta as equipes, lança a nota da banca — que vale para todos os integrantes — e avisa quem ficou sem grupo |
+| Situação no semestre | Tabela somente leitura, aplicando a regra a cada aluno. Registrar a decisão é a fase 9, que precisa das matrículas |
 
 > Nada commitado. Tudo no working tree. Produção intocada.
 
@@ -296,6 +302,7 @@ Não existe tabela ligando os dois. É derivado de `aulas.professor_id` + `aulas
 | **D35** | **A aprovação é do semestre, não da disciplina.** Ficar abaixo da nota em **uma única** matéria retém o aluno no semestre |
 | **D36** | **Todo aluno está em algum grupo** — pode ser grupo de uma pessoa só. Aluno sem grupo é falha de cadastro, não estado legítimo |
 | **D37** | **O professor não vê a nota final.** Ele vê a que lançou; a banca e os grupos são do coordenador. Escolha por menor privilégio — nada impede abrir depois |
+| **D38** | **Frequência de 70% é exigida em CADA disciplina**, não na média do semestre. Faltar demais numa única matéria retém o aluno, ainda que a presença somada passe de 70% |
 
 ### PWA
 

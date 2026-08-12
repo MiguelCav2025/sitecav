@@ -6,9 +6,10 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   BookOpen, LogOut, ChevronRight, CheckCircle, XCircle,
-  Loader2, GraduationCap, Users, ArrowLeft
+  Loader2, GraduationCap, Users, ArrowLeft, ClipboardList
 } from "lucide-react";
 import { semestreDoCurso, rotuloSemestreDoCurso } from "@/lib/calendario-escolar";
+import LancarNotas from "@/components/professor/LancarNotas";
 
 interface Turma { id: string; nome: string; turno: string; semestre: string; curso: string; }
 interface Disciplina { id: string; nome: string; emoji: string | null; }
@@ -48,6 +49,7 @@ type Tela =
   | { tipo: "disciplinas" }
   | { tipo: "turmas"; disciplinaId: string; disciplinaNome: string }
   | { tipo: "aulas"; disciplinaId: string; disciplinaNome: string; turma: Turma }
+  | { tipo: "notas"; disciplinaId: string; disciplinaNome: string; turma: Turma }
   | { tipo: "chamada"; aula: Aula };
 
 // ── Header PWA ─────────────────────────────────────────────────────────────────
@@ -94,6 +96,7 @@ export default function ProfessorDashboard() {
   const router = useRouter();
 
   const [nomeProfessor, setNomeProfessor] = useState("");
+  const [professorId, setProfessorId] = useState("");
   const [loading, setLoading] = useState(true);
   const [todasAulas, setTodasAulas] = useState<Aula[]>([]);
   const [tela, setTela] = useState<Tela>({ tipo: "disciplinas" });
@@ -124,6 +127,7 @@ export default function ProfessorDashboard() {
       if (!prof.senha_alterada) { router.push("/professor/alterar-senha"); return; }
 
       setNomeProfessor(prof.nome);
+      setProfessorId(prof.id);
 
       const { data: aulasData } = await supabase
         .from("aulas")
@@ -393,6 +397,24 @@ export default function ProfessorDashboard() {
     );
   }
 
+  // ── Tela: Notas ───────────────────────────────────────────────────────────────
+  if (tela.tipo === "notas") {
+    const { disciplinaId, disciplinaNome, turma } = tela;
+    return (
+      <div className="min-h-screen bg-blue-900 flex flex-col">
+        <AppHeader
+          titulo={`Notas — ${disciplinaNome}`}
+          subtitulo={labelTurma(turma)}
+          onVoltar={() => setTela({ tipo: "aulas", disciplinaId, disciplinaNome, turma })}
+          onSair={handleSair}
+        />
+        <div className="flex-1 px-4 py-4 max-w-lg mx-auto w-full">
+          <LancarNotas disciplinaId={disciplinaId} turmaId={turma.id} professorId={professorId} />
+        </div>
+      </div>
+    );
+  }
+
   // ── Tela: Aulas ───────────────────────────────────────────────────────────────
   if (tela.tipo === "aulas") {
     const { disciplinaId, disciplinaNome, turma } = tela;
@@ -422,7 +444,21 @@ export default function ProfessorDashboard() {
             </div>
           </div>
 
-          <p className="text-xs text-gray-400 font-medium px-1 mb-1">Selecione a aula para abrir a chamada</p>
+          <button
+            onClick={() => setTela({ tipo: "notas", disciplinaId, disciplinaNome, turma })}
+            className="w-full rounded-2xl bg-blue-950 p-4 flex items-center gap-3 text-left transition-all active:scale-[0.98] shadow-sm hover:bg-blue-900"
+          >
+            <div className="w-11 h-11 rounded-xl bg-orange-500 flex items-center justify-center shrink-0">
+              <ClipboardList className="h-5 w-5 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-white">Lançar notas</p>
+              <p className="text-xs text-white/60 mt-0.5">Nota desta disciplina para cada aluno</p>
+            </div>
+            <ChevronRight className="h-5 w-5 shrink-0 text-white/40" />
+          </button>
+
+          <p className="text-xs text-gray-400 font-medium px-1 mb-1 pt-2">Selecione a aula para abrir a chamada</p>
           {aulas.map(aula => {
             // D22 — chamada fechada é definitiva: o card vira registro, não botão.
             const fechada = aula.chamada_aberta;

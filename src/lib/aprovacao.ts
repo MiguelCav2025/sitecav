@@ -27,12 +27,19 @@ export interface DesempenhoDisciplina {
 
 export type Situacao = "aprovado" | "retido" | "indefinido";
 
+export interface FrequenciaDaDisciplina {
+  disciplina: string;
+  percentual: number;
+}
+
 export interface AvaliacaoDoSemestre {
   situacao: Situacao;
-  /** Percentual sobre todas as aulas dadas do semestre. Null se não houve aula. */
+  /** Percentual somado do semestre. Informativo — a regra é por disciplina. */
   presencaGeral: number | null;
-  /** Nomes das disciplinas em que o aluno ficou abaixo da nota mínima. */
+  /** Disciplinas em que o aluno ficou abaixo da nota mínima. */
   reprovadasPorNota: string[];
+  /** Disciplinas em que ficou abaixo da frequência mínima. */
+  reprovadasPorFrequencia: FrequenciaDaDisciplina[];
   /** O que impede decidir agora — nota ou banca ainda não lançada. */
   pendencias: string[];
   /** Explicação pronta para a tela. */
@@ -49,20 +56,36 @@ const plural = (n: number, um: string, varios: string) => (n === 1 ? um : varios
 /**
  * Decide a situação do aluno no semestre.
  *
+ * A frequência mínima é exigida **em cada disciplina**, não na média do
+ * semestre (N22): faltar demais numa única matéria retém o aluno, ainda que a
+ * presença somada passe de 70%.
+ *
  * `indefinido` não é um detalhe: significa que falta lançar alguma nota ou a
  * banca. Tratar isso como reprovação transformaria esquecimento administrativo
  * em retenção de aluno.
  */
 export function avaliarSemestre(disciplinas: DesempenhoDisciplina[]): AvaliacaoDoSemestre {
   const reprovadasPorNota: string[] = [];
+  const reprovadasPorFrequencia: FrequenciaDaDisciplina[] = [];
   const pendencias: string[] = [];
   const motivos: string[] = [];
 
+  if (disciplinas.length === 0) {
+    return {
+      situacao: "indefinido",
+      presencaGeral: null,
+      reprovadasPorNota: [],
+      reprovadasPorFrequencia: [],
+      pendencias: ["Nenhuma disciplina cursada neste semestre."],
+      motivos: [],
+    };
+  }
+
   let totalAulas = 0;
   let totalPresencas = 0;
-  let houveAula = false;
 
   for (const d of disciplinas) {
+    // ── Nota ────────────────────────────────────────────────────────────────
     if (d.nota_professor === null) {
       pendencias.push(`${d.disciplina}: o professor ainda não lançou a nota.`);
     } else if (d.nota_banca === null) {
@@ -73,30 +96,22 @@ export function avaliarSemestre(disciplinas: DesempenhoDisciplina[]): AvaliacaoD
       reprovadasPorNota.push(d.disciplina);
     }
 
-    if (d.aulas_dadas !== null && d.aulas_dadas > 0) {
-      houveAula = true;
-      totalAulas += d.aulas_dadas;
-      totalPresencas += d.presencas ?? 0;
+    // ── Frequência, exigida disciplina a disciplina ─────────────────────────
+    if (d.aulas_dadas === null || d.aulas_dadas === 0) {
+      pendencias.push(`${d.disciplina}: nenhuma chamada fechada — não há como medir a frequência.`);
+      continue;
+    }
+
+    totalAulas += d.aulas_dadas;
+    totalPresencas += d.presencas ?? 0;
+
+    const percentual = arredondar(((d.presencas ?? 0) * 100) / d.aulas_dadas);
+    if (percentual < PRESENCA_MINIMA) {
+      reprovadasPorFrequencia.push({ disciplina: d.disciplina, percentual });
     }
   }
 
-  const presencaGeral = houveAula
-    ? arredondar((totalPresencas * 100) / totalAulas)
-    : null;
-
-  if (disciplinas.length === 0) {
-    return {
-      situacao: "indefinido",
-      presencaGeral: null,
-      reprovadasPorNota: [],
-      pendencias: ["Nenhuma disciplina cursada neste semestre."],
-      motivos: [],
-    };
-  }
-
-  if (presencaGeral === null) {
-    pendencias.push("Nenhuma chamada foi fechada ainda — não há como medir a frequência.");
-  }
+  const presencaGeral = totalAulas > 0 ? arredondar((totalPresencas * 100) / totalAulas) : null;
 
   if (reprovadasPorNota.length > 0) {
     motivos.push(
@@ -105,24 +120,24 @@ export function avaliarSemestre(disciplinas: DesempenhoDisciplina[]): AvaliacaoD
     );
   }
 
-  const presencaInsuficiente = presencaGeral !== null && presencaGeral < PRESENCA_MINIMA;
-  if (presencaInsuficiente) {
-    motivos.push(`Frequência de ${presencaGeral}%, abaixo do mínimo de ${PRESENCA_MINIMA}%.`);
+  if (reprovadasPorFrequencia.length > 0) {
+    const detalhe = reprovadasPorFrequencia.map(f => `${f.disciplina} (${f.percentual}%)`).join(", ");
+    motivos.push(`Frequência abaixo de ${PRESENCA_MINIMA}% em ${detalhe}.`);
   }
 
   // Reprovar não depende de estar tudo lançado: quem já ficou abaixo da nota
   // ou da frequência está retido, mesmo com outra disciplina pendente.
-  if (reprovadasPorNota.length > 0 || presencaInsuficiente) {
-    return { situacao: "retido", presencaGeral, reprovadasPorNota, pendencias, motivos };
+  if (reprovadasPorNota.length > 0 || reprovadasPorFrequencia.length > 0) {
+    return { situacao: "retido", presencaGeral, reprovadasPorNota, reprovadasPorFrequencia, pendencias, motivos };
   }
 
   if (pendencias.length > 0) {
-    return { situacao: "indefinido", presencaGeral, reprovadasPorNota, pendencias, motivos };
+    return { situacao: "indefinido", presencaGeral, reprovadasPorNota, reprovadasPorFrequencia, pendencias, motivos };
   }
 
   motivos.push(
-    `Nota mínima atingida em todas as ${disciplinas.length} ` +
-    `${plural(disciplinas.length, "disciplina", "disciplinas")} e frequência de ${presencaGeral}%.`,
+    `Nota e frequência mínimas atingidas nas ${disciplinas.length} ` +
+    `${plural(disciplinas.length, "disciplina", "disciplinas")} do semestre.`,
   );
-  return { situacao: "aprovado", presencaGeral, reprovadasPorNota, pendencias, motivos };
+  return { situacao: "aprovado", presencaGeral, reprovadasPorNota, reprovadasPorFrequencia, pendencias, motivos };
 }

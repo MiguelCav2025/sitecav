@@ -72,24 +72,44 @@ describe("retido", () => {
     assert.ok(r.motivos[0].includes("Direção"));
   });
 
-  test("frequencia geral abaixo de 70% retem, mesmo com notas boas", () => {
+  test("frequencia abaixo de 70% retem, mesmo com notas boas", () => {
     const r = avaliarSemestre([
       disciplina("Roteiro", { aulas: 10, presencas: 6 }),
       disciplina("Direção", { aulas: 10, presencas: 7 }),
     ]);
     assert.equal(r.situacao, "retido");
-    assert.equal(r.presencaGeral, 65);
+    assert.deepEqual(r.reprovadasPorFrequencia, [{ disciplina: "Roteiro", percentual: 60 }]);
     assert.ok(r.motivos.some(m => m.includes("Frequência")));
   });
 
-  test("a frequencia e somada no semestre, nao exigida disciplina a disciplina", () => {
-    // 4/10 numa e 10/10 na outra = 14/20 = 70%, que passa
+  test("a frequencia e exigida EM CADA disciplina, nao na media (N22)", () => {
+    // 4/10 numa e 10/10 na outra da 70% somados — mas a regra e por
+    // disciplina, entao Roteiro reprova o aluno com 40%.
     const r = avaliarSemestre([
       disciplina("Roteiro", { aulas: 10, presencas: 4 }),
       disciplina("Direção", { aulas: 10, presencas: 10 }),
     ]);
-    assert.equal(r.presencaGeral, 70);
+    assert.equal(r.presencaGeral, 70, "a soma continua sendo informada");
+    assert.equal(r.situacao, "retido");
+    assert.deepEqual(r.reprovadasPorFrequencia, [{ disciplina: "Roteiro", percentual: 40 }]);
+  });
+
+  test("uma disciplina no limite exato de 70% nao reprova", () => {
+    const r = avaliarSemestre([
+      disciplina("Roteiro", { aulas: 10, presencas: 7 }),
+      disciplina("Direção", { aulas: 10, presencas: 10 }),
+    ]);
     assert.equal(r.situacao, "aprovado");
+    assert.deepEqual(r.reprovadasPorFrequencia, []);
+  });
+
+  test("lista todas as disciplinas com frequencia insuficiente", () => {
+    const r = avaliarSemestre([
+      disciplina("Roteiro", { aulas: 10, presencas: 3 }),
+      disciplina("Direção", { aulas: 10, presencas: 5 }),
+      disciplina("Montagem", { aulas: 10, presencas: 9 }),
+    ]);
+    assert.deepEqual(r.reprovadasPorFrequencia.map(f => f.disciplina), ["Roteiro", "Direção"]);
   });
 
   test("reprova mesmo com outra disciplina pendente", () => {
@@ -135,6 +155,17 @@ describe("indefinido", () => {
     assert.equal(r.situacao, "indefinido");
     assert.equal(r.presencaGeral, null);
     assert.ok(r.pendencias.some(p => p.includes("chamada")));
+  });
+
+  test("disciplina sem chamada nao conta na frequencia das outras", () => {
+    // A disciplina sem aula dada vira pendencia; a outra e avaliada normalmente
+    const r = avaliarSemestre([
+      disciplina("Roteiro", { aulas: 10, presencas: 10 }),
+      disciplina("Direção", { aulas: 0, presencas: 0 }),
+    ]);
+    assert.equal(r.situacao, "indefinido");
+    assert.equal(r.presencaGeral, 100, "so as aulas efetivamente dadas entram na conta");
+    assert.deepEqual(r.reprovadasPorFrequencia, []);
   });
 
   test("semestre sem disciplina alguma", () => {

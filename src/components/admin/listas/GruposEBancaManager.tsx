@@ -1,0 +1,330 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AlertCircle, AlertTriangle, CheckCircle, Loader2, Plus, Trash2, UserPlus, Users, X,
+} from "lucide-react";
+import { semestreDoCurso, SEMESTRES_DO_CURSO } from "@/lib/calendario-escolar";
+import { avaliarSemestre, type DesempenhoDisciplina, type Situacao } from "@/lib/aprovacao";
+
+interface Turma { id: string; nome: string; semestre: string; curso: string; turno: string; }
+interface Aluno { id: string; nome: string; }
+interface Grupo {
+  id: string;
+  nome: string;
+  nota_banca: number | null;
+  integrantes: string[]; // aluno_id
+}
+
+const SITUACAO_ESTILO: Record<Situacao, { rotulo: string; classe: string }> = {
+  aprovado:   { rotulo: "Aprovado",   classe: "bg-green-100 text-green-700" },
+  retido:     { rotulo: "Retido",     classe: "bg-red-100 text-red-700" },
+  indefinido: { rotulo: "Pendente",   classe: "bg-gray-100 text-gray-600" },
+};
+
+/**
+ * Grupos da banca e a nota que ela atribui.
+ *
+ * A banca avalia o **grupo**, e todos os integrantes recebem a mesma nota
+ * (D21). Por isso a nota fica no grupo, não no aluno.
+ *
+ * A tabela de situação abaixo é só leitura: registrar a aprovação ou retenção
+ * do aluno é a fase seguinte, que precisa da tabela de matrículas.
+ */
+export default function GruposEBancaManager() {
+  const supabase = createClient();
+
+  const [turmas, setTurmas] = useState<Turma[]>([]);
+  const [turmaId, setTurmaId] = useState("");
+  const [semestre, setSemestre] = useState("1");
+
+  const [alunos, setAlunos] = useState<Aluno[]>([]);
+  const [grupos, setGrupos] = useState<Grupo[]>([]);
+  const [desempenho, setDesempenho] = useState<(DesempenhoDisciplina & { aluno_id: string })[]>([]);
+
+  const [carregando, setCarregando] = useState(false);
+  const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
+  const [novoGrupo, setNovoGrupo] = useState("");
+
+  const aviso = (tipo: "ok" | "erro", texto: string) => {
+    setMsg({ tipo, texto });
+    setTimeout(() => setMsg(null), 6000);
+  };
+
+  useEffect(() => {
+    supabase.from("turmas").select("id, nome, semestre, curso, turno").order("nome")
+      .then(({ data }) => setTurmas((data ?? []) as Turma[]));
+  }, [supabase]);
+
+  // Ao escolher a turma, sugere o semestre em que ela está agora
+  const escolherTurma = (id: string) => {
+    setTurmaId(id);
+    const t = turmas.find(x => x.id === id);
+    const atual = t ? semestreDoCurso(t.semestre) : null;
+    if (atual !== null && atual >= 1 && atual <= SEMESTRES_DO_CURSO) setSemestre(String(atual));
+  };
+
+  const carregar = useCallback(async () => {
+    if (!turmaId) return;
+    setCarregando(true);
+
+    const [{ data: alunosData }, { data: gruposData }, { data: vwData }] = await Promise.all([
+      supabase.from("alunos").select("id, nome").eq("turma_id", turmaId).eq("ativo", true).order("nome"),
+      supabase.from("grupos").select("id, nome, nota_banca, grupo_alunos(aluno_id)")
+        .eq("turma_id", turmaId).eq("semestre_do_curso", Number(semestre)).order("nome"),
+      supabase.from("vw_desempenho_aluno")
+        .select("aluno_id, disciplina_id, disciplina, nota_professor, nota_banca, nota_final, aulas_dadas, presencas")
+        .eq("turma_id", turmaId).eq("semestre_do_curso", Number(semestre)),
+    ]);
+
+    setAlunos((alunosData ?? []) as Aluno[]);
+    setGrupos(((gruposData ?? []) as unknown as (Omit<Grupo, "integrantes"> & { grupo_alunos: { aluno_id: string }[] })[])
+      .map(g => ({ id: g.id, nome: g.nome, nota_banca: g.nota_banca, integrantes: (g.grupo_alunos ?? []).map(i => i.aluno_id) })));
+    setDesempenho((vwData ?? []) as (DesempenhoDisciplina & { aluno_id: string })[]);
+    setCarregando(false);
+  }, [turmaId, semestre, supabase]);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const grupoDoAluno = useMemo(() => {
+    const mapa = new Map<string, Grupo>();
+    for (const g of grupos) for (const id of g.integrantes) mapa.set(id, g);
+    return mapa;
+  }, [grupos]);
+
+  const semGrupo = alunos.filter(a => !grupoDoAluno.has(a.id));
+
+  const criarGrupo = async () => {
+    if (!novoGrupo.trim()) return aviso("erro", "Dê um nome ao grupo.");
+    const { error } = await supabase.from("grupos").insert([{
+      turma_id: turmaId, semestre_do_curso: Number(semestre), nome: novoGrupo.trim(),
+    }]);
+    if (error) return aviso("erro", `Erro ao criar: ${error.message}`);
+    setNovoGrupo("");
+    carregar();
+  };
+
+  const excluirGrupo = async (g: Grupo) => {
+    if (!confirm(`Excluir o grupo "${g.nome}"? Os integrantes ficam sem grupo.`)) return;
+    const { error } = await supabase.from("grupos").delete().eq("id", g.id);
+    if (error) return aviso("erro", `Erro ao excluir: ${error.message}`);
+    carregar();
+  };
+
+  const adicionarAoGrupo = async (grupoId: string, alunoId: string) => {
+    const { error } = await supabase.from("grupo_alunos").insert([{ grupo_id: grupoId, aluno_id: alunoId }]);
+    // A trava do banco impede o aluno de estar em dois grupos do mesmo semestre
+    if (error) return aviso("erro", error.message);
+    carregar();
+  };
+
+  const removerDoGrupo = async (grupoId: string, alunoId: string) => {
+    const { error } = await supabase.from("grupo_alunos").delete()
+      .eq("grupo_id", grupoId).eq("aluno_id", alunoId);
+    if (error) return aviso("erro", `Erro ao remover: ${error.message}`);
+    carregar();
+  };
+
+  const salvarNota = async (grupoId: string, valor: string) => {
+    const limpo = valor.trim().replace(",", ".");
+    const nota = limpo === "" ? null : Number(limpo);
+    if (nota !== null && (!Number.isFinite(nota) || nota < 0 || nota > 10)) {
+      return aviso("erro", "A nota da banca precisa estar entre 0 e 10.");
+    }
+    const { error } = await supabase.from("grupos")
+      .update({ nota_banca: nota, updated_at: new Date().toISOString() }).eq("id", grupoId);
+    if (error) return aviso("erro", `Erro ao salvar a nota: ${error.message}`);
+    aviso("ok", nota === null ? "Nota da banca removida." : `Nota ${nota} salva — vale para todo o grupo.`);
+    carregar();
+  };
+
+  const nomePorId = useMemo(() => new Map(alunos.map(a => [a.id, a.nome])), [alunos]);
+
+  return (
+    <div className="space-y-6">
+      {msg && (
+        <div className={`flex items-center gap-2 rounded-lg p-3 text-sm ${
+          msg.tipo === "ok"
+            ? "border border-green-200 bg-green-50 text-green-800"
+            : "border border-red-200 bg-red-50 text-red-800"}`}>
+          {msg.tipo === "ok" ? <CheckCircle className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
+          {msg.texto}
+        </div>
+      )}
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Turma e semestre</CardTitle></CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1">
+            <Label className="text-gray-700">Turma</Label>
+            <Select value={turmaId} onValueChange={escolherTurma}>
+              <SelectTrigger className="text-gray-800"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+              <SelectContent>
+                {turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-gray-700">Semestre do curso</Label>
+            <Select value={semestre} onValueChange={setSemestre}>
+              <SelectTrigger className="text-gray-800"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: SEMESTRES_DO_CURSO }, (_, i) => String(i + 1)).map(s => (
+                  <SelectItem key={s} value={s}>{s}º semestre</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {!turmaId ? (
+        <p className="text-sm italic text-white/50">Selecione uma turma para montar os grupos.</p>
+      ) : carregando ? (
+        <div className="flex items-center gap-2 py-4 text-white/60">
+          <Loader2 className="h-4 w-4 animate-spin" /> Carregando...
+        </div>
+      ) : (
+        <>
+          {/* Grupos */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Users className="h-4 w-4" /> Grupos da banca
+              </CardTitle>
+              <p className="text-sm text-gray-500">
+                A banca avalia o grupo: a nota vale para todos os integrantes. Um grupo pode ter uma pessoa só.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Input
+                  className="text-gray-800"
+                  placeholder="Nome do grupo (ex.: Curta A)"
+                  value={novoGrupo}
+                  onChange={e => setNovoGrupo(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") criarGrupo(); }}
+                />
+                <Button onClick={criarGrupo}><Plus className="mr-2 h-4 w-4" /> Criar</Button>
+              </div>
+
+              {grupos.length === 0 ? (
+                <p className="text-sm italic text-gray-400">Nenhum grupo neste semestre.</p>
+              ) : (
+                grupos.map(g => (
+                  <div key={g.id} className="rounded-xl border border-gray-200 p-4">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                      <p className="font-semibold text-gray-800">{g.nome}</p>
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs text-gray-500">Nota da banca</Label>
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          defaultValue={g.nota_banca ?? ""}
+                          placeholder="—"
+                          onBlur={e => {
+                            const atual = g.nota_banca === null ? "" : String(g.nota_banca);
+                            if (e.target.value.trim() !== atual) salvarNota(g.id, e.target.value);
+                          }}
+                          className="h-9 w-20 text-center font-semibold text-gray-800"
+                        />
+                        <button onClick={() => excluirGrupo(g)} className="p-1 text-red-400 hover:text-red-600" title="Excluir grupo">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {g.integrantes.length === 0 && (
+                        <span className="text-xs italic text-gray-400">Sem integrantes</span>
+                      )}
+                      {g.integrantes.map(id => (
+                        <span key={id} className="flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-800">
+                          {nomePorId.get(id) ?? "—"}
+                          <button onClick={() => removerDoGrupo(g.id, id)} className="text-blue-400 hover:text-blue-700">
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+
+                    {semGrupo.length > 0 && (
+                      <Select value="" onValueChange={alunoId => adicionarAoGrupo(g.id, alunoId)}>
+                        <SelectTrigger className="h-9 text-sm text-gray-700">
+                          <span className="flex items-center gap-1.5 text-gray-500">
+                            <UserPlus className="h-3.5 w-3.5" /> Adicionar aluno
+                          </span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {semGrupo.map(a => <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                ))
+              )}
+
+              {semGrupo.length > 0 && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>
+                    <strong>{semGrupo.length}</strong> aluno(s) sem grupo: {semGrupo.map(a => a.nome).join(", ")}.
+                    Sem grupo não há nota de banca, e a situação deles fica pendente.
+                  </span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Situação por aluno */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Situação no semestre</CardTitle>
+              <p className="text-sm text-gray-500">
+                Somente leitura. Registrar a aprovação ou retenção vem na próxima etapa.
+              </p>
+            </CardHeader>
+            <CardContent className="p-0">
+              <table className="w-full text-sm">
+                <thead className="border-b bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Aluno</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Grupo</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Situação</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Detalhe</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {alunos.map(a => {
+                    const doAluno = desempenho.filter(d => d.aluno_id === a.id);
+                    const r = avaliarSemestre(doAluno);
+                    const estilo = SITUACAO_ESTILO[r.situacao];
+                    const detalhe = r.motivos[0] ?? r.pendencias[0] ?? "—";
+                    return (
+                      <tr key={a.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium text-gray-800">{a.nome}</td>
+                        <td className="px-4 py-3 text-gray-500">{grupoDoAluno.get(a.id)?.nome ?? "—"}</td>
+                        <td className="px-4 py-3">
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${estilo.classe}`}>
+                            {estilo.rotulo}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-500">{detalhe}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}

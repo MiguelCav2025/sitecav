@@ -1,7 +1,7 @@
 import {
   Images, Film, Building2, Camera, Palette, Users, Download, ClipboardList,
   Video, BookOpen, CalendarDays, GraduationCap, BookMarked, UserCheck,
-  BarChart3, Settings, type LucideIcon,
+  BarChart3, Settings, Award, type LucideIcon,
 } from "lucide-react";
 
 export interface SecaoAdmin {
@@ -58,7 +58,8 @@ export const AREAS: AreaAdmin[] = [
       { passo: 2, value: "turmas",      label: "Turmas",      ajuda: "Turmas e os alunos de cada uma",       icone: GraduationCap },
       { passo: 3, value: "disciplinas", label: "Disciplinas", ajuda: "Matérias, aulas e professor de cada",  icone: BookMarked },
       { passo: 4, value: "professores", label: "Professores", ajuda: "Contas de acesso ao app",              icone: UserCheck },
-      { passo: 5, value: "relatorios",  label: "Relatórios",  ajuda: "Presença e conteúdo das aulas",        icone: BarChart3 },
+      { passo: 5, value: "grupos",      label: "Notas e Banca", ajuda: "Grupos da banca e situação do aluno", icone: Award },
+      { passo: 6, value: "relatorios",  label: "Relatórios",  ajuda: "Presença e conteúdo das aulas",        icone: BarChart3 },
     ],
   },
   {
