@@ -9,11 +9,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertCircle, CheckCircle, KeyRound } from "lucide-react";
 import Image from "next/image";
+import InstalarApp from "@/components/pwa/InstalarApp";
 
 export default function AlterarSenhaPage() {
   const supabase = createClient();
   const router = useRouter();
   const [nome, setNome] = useState("");
+  // id do registro em `professores` — desde a fase 2 ele não é mais o id do login
+  const [professorId, setProfessorId] = useState<string | null>(null);
   const [novaSenha, setNovaSenha] = useState("");
   const [confirmar, setConfirmar] = useState("");
   const [erro, setErro] = useState<string | null>(null);
@@ -25,12 +28,17 @@ export default function AlterarSenhaPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push("/professor/login"); return; }
 
-      const { data: prof } = await supabase.from("professores").select("nome, senha_alterada").eq("id", user.id).single();
+      const { data: prof } = await supabase
+        .from("professores")
+        .select("id, nome, senha_alterada")
+        .eq("user_id", user.id)
+        .maybeSingle();
       if (!prof) { router.push("/professor/login"); return; }
 
       // Se já alterou, não precisa estar aqui
       if (prof.senha_alterada) { router.push("/professor/dashboard"); return; }
 
+      setProfessorId(prof.id);
       setNome(prof.nome.split(" ")[0]);
       setVerificando(false);
     };
@@ -49,8 +57,18 @@ export default function AlterarSenhaPage() {
     const { error: errSenha } = await supabase.auth.updateUser({ password: novaSenha });
     if (errSenha) { setErro("Erro ao atualizar senha. Tente novamente."); setLoading(false); return; }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from("professores").update({ senha_alterada: true }).eq("id", user!.id);
+    const { error: errFlag } = await supabase
+      .from("professores")
+      .update({ senha_alterada: true })
+      .eq("id", professorId);
+
+    // Se a marcação falhar, a senha já mudou mas o professor cairia de volta
+    // aqui no próximo acesso. Melhor avisar do que deixar em loop silencioso.
+    if (errFlag) {
+      setErro("Senha alterada, mas houve falha ao concluir o cadastro. Avise a coordenação.");
+      setLoading(false);
+      return;
+    }
 
     router.push("/professor/dashboard");
   };
@@ -115,6 +133,11 @@ export default function AlterarSenhaPage() {
               {loading ? "Salvando..." : "Definir senha e entrar"}
             </Button>
           </form>
+
+          {/* D28 — o primeiro acesso também ensina a instalar o app */}
+          <div className="mt-6 border-t border-gray-100 pt-5">
+            <InstalarApp />
+          </div>
         </CardContent>
       </Card>
     </div>
