@@ -17,9 +17,14 @@ interface Aula {
   semana: number | null;
   chamada_aberta: boolean;
   data_aula: string | null;
+  conteudo_ministrado: string | null;
   turma: Turma;
   disciplina: Disciplina | null;
 }
+
+// Mínimo exigido no diário de sala para fechar a chamada (D4).
+// O banco também garante isso, via constraint.
+const MIN_CONTEUDO = 30;
 interface Aluno { id: string; nome: string; }
 interface Presenca { aluno_id: string; presente: boolean; }
 
@@ -109,14 +114,22 @@ export default function ProfessorDashboard() {
   const [salvandoPresenca, setSalvandoPresenca] = useState<string | null>(null);
   const [chamadaFinalizada, setChamadaFinalizada] = useState(false);
   const [carregandoChamada, setCarregandoChamada] = useState(false);
+  const [conteudo, setConteudo] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
+  const [finalizando, setFinalizando] = useState(false);
 
   useEffect(() => {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push("/professor/login"); return; }
 
+      // O professor é identificado pelo login (user_id), não pelo id do
+      // registro — os dois deixaram de ser a mesma coisa na fase 2.
       const { data: prof } = await supabase
-        .from("professores").select("nome, id, senha_alterada").eq("id", user.id).single();
+        .from("professores")
+        .select("id, nome, senha_alterada, ativo")
+        .eq("user_id", user.id)
+        .maybeSingle();
       if (!prof) { router.push("/professor/login"); return; }
       if (!prof.senha_alterada) { router.push("/professor/alterar-senha"); return; }
 
@@ -124,7 +137,7 @@ export default function ProfessorDashboard() {
 
       const { data: aulasData } = await supabase
         .from("aulas")
-        .select("id, numero, semana, chamada_aberta, data_aula, turma:turmas(id, nome, turno, semestre, curso), disciplina:disciplinas(id, nome, emoji)")
+        .select("id, numero, semana, chamada_aberta, data_aula, conteudo_ministrado, turma:turmas(id, nome, turno, semestre, curso), disciplina:disciplinas(id, nome, emoji)")
         .eq("professor_id", prof.id)
         .order("numero", { ascending: true });
 
@@ -162,9 +175,14 @@ export default function ProfessorDashboard() {
 
   // ── Abrir chamada ─────────────────────────────────────────────────────────────
   const abrirChamada = async (aula: Aula) => {
+    // D22 — aula fechada é definitiva e não se abre mais.
+    if (aula.chamada_aberta) return;
+
     setCarregandoChamada(true);
     setTela({ tipo: "chamada", aula });
-    setChamadaFinalizada(aula.chamada_aberta);
+    setChamadaFinalizada(false);
+    setErro(null);
+    setConteudo("");
 
     const { data: alunosData } = await supabase
       .from("alunos").select("id, nome")
@@ -181,30 +199,82 @@ export default function ProfessorDashboard() {
 
   const togglePresenca = async (alunoId: string) => {
     if (chamadaFinalizada || tela.tipo !== "chamada") return;
-    const novoValor = !presencas[alunoId];
+    const aulaId = tela.aula.id;
+    const valorAnterior = presencas[alunoId];
+    const novoValor = !valorAnterior;
+
+    setErro(null);
     setSalvandoPresenca(alunoId);
     setPresencas(prev => ({ ...prev, [alunoId]: novoValor }));
-    await supabase.from("presencas").upsert(
-      { aula_id: tela.aula.id, aluno_id: alunoId, presente: novoValor },
+
+    const { error } = await supabase.from("presencas").upsert(
+      { aula_id: aulaId, aluno_id: alunoId, presente: novoValor },
       { onConflict: "aula_id,aluno_id" }
     );
+
+    // Sem isto o botão ficava verde mesmo quando o banco recusava a gravação,
+    // e o professor saía achando que tinha registrado a presença.
+    if (error) {
+      setPresencas(prev => {
+        const copia = { ...prev };
+        if (valorAnterior === undefined) delete copia[alunoId];
+        else copia[alunoId] = valorAnterior;
+        return copia;
+      });
+      setErro("Não foi possível salvar a presença. Verifique a conexão e tente de novo.");
+    }
     setSalvandoPresenca(null);
   };
 
   const finalizarChamada = async () => {
     if (tela.tipo !== "chamada") return;
+    const aula = tela.aula;
+    const texto = conteudo.trim();
+
+    if (texto.length < MIN_CONTEUDO) {
+      setErro(`Descreva o conteúdo da aula com pelo menos ${MIN_CONTEUDO} caracteres.`);
+      return;
+    }
+    if (!confirm("Fechar a chamada? Depois de fechada não é possível reabrir nem corrigir.")) return;
+
+    setErro(null);
+    setFinalizando(true);
+
+    // Quem não foi marcado entra como ausente
     const semPresenca = alunos.filter(a => presencas[a.id] === undefined);
     if (semPresenca.length > 0) {
-      await supabase.from("presencas").upsert(
-        semPresenca.map(a => ({ aula_id: tela.aula.id, aluno_id: a.id, presente: false })),
+      const { error } = await supabase.from("presencas").upsert(
+        semPresenca.map(a => ({ aula_id: aula.id, aluno_id: a.id, presente: false })),
         { onConflict: "aula_id,aluno_id" }
       );
+      if (error) {
+        setErro("Não foi possível registrar as faltas. Tente de novo.");
+        setFinalizando(false);
+        return;
+      }
     }
-    await supabase.from("aulas")
-      .update({ chamada_aberta: true, data_aula: new Date().toISOString().split("T")[0] })
-      .eq("id", tela.aula.id);
+
+    // `data_aula` é a data PLANEJADA pelo cronograma e não pode ser
+    // sobrescrita. O momento real do fechamento vai em `chamada_fechada_em`.
+    const { error } = await supabase.from("aulas")
+      .update({
+        chamada_aberta: true,
+        chamada_fechada_em: new Date().toISOString(),
+        conteudo_ministrado: texto,
+      })
+      .eq("id", aula.id);
+
+    if (error) {
+      setErro("Não foi possível fechar a chamada. Tente de novo.");
+      setFinalizando(false);
+      return;
+    }
+
     setChamadaFinalizada(true);
-    setTodasAulas(prev => prev.map(a => a.id === tela.aula.id ? { ...a, chamada_aberta: true } : a));
+    setFinalizando(false);
+    setTodasAulas(prev => prev.map(a =>
+      a.id === aula.id ? { ...a, chamada_aberta: true, conteudo_ministrado: texto } : a
+    ));
   };
 
   // ── Loading ───────────────────────────────────────────────────────────────────
@@ -251,6 +321,12 @@ export default function ProfessorDashboard() {
             </div>
           )}
 
+          {erro && (
+            <div className="bg-red-500/20 border border-red-400/40 text-red-100 rounded-xl p-3 text-sm">
+              {erro}
+            </div>
+          )}
+
           {carregandoChamada ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-white/50" />
@@ -286,12 +362,40 @@ export default function ProfessorDashboard() {
             </div>
           )}
 
+          {/* Diário de sala — só o professor preenche (D5) */}
+          {!carregandoChamada && (
+            chamadaFinalizada ? (
+              <div className="bg-white/10 border border-white/20 rounded-xl p-4">
+                <p className="text-white/50 text-xs mb-1">Conteúdo registrado</p>
+                <p className="text-white text-sm whitespace-pre-wrap">{conteudo.trim()}</p>
+              </div>
+            ) : (
+              <div className="bg-white/10 border border-white/20 rounded-xl p-4 space-y-2">
+                <label htmlFor="conteudo" className="block text-white text-sm font-semibold">
+                  Conteúdo da aula
+                </label>
+                <textarea
+                  id="conteudo"
+                  value={conteudo}
+                  onChange={e => setConteudo(e.target.value)}
+                  rows={4}
+                  placeholder="Descreva o que foi trabalhado nesta aula."
+                  className="w-full rounded-lg bg-white/95 text-gray-900 text-sm p-3 resize-y focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+                <p className={`text-xs ${conteudo.trim().length >= MIN_CONTEUDO ? "text-green-300" : "text-white/50"}`}>
+                  {conteudo.trim().length} / {MIN_CONTEUDO} caracteres mínimos
+                </p>
+              </div>
+            )
+          )}
+
           {!chamadaFinalizada && alunos.length > 0 && (
             <Button
               onClick={finalizarChamada}
+              disabled={finalizando}
               className="w-full py-6 text-base font-bold bg-orange-500 hover:bg-orange-600 text-white"
             >
-              Finalizar e Registrar Chamada
+              {finalizando ? "Salvando..." : "Fechar Chamada"}
             </Button>
           )}
         </div>
@@ -329,32 +433,46 @@ export default function ProfessorDashboard() {
           </div>
 
           <p className="text-xs text-gray-400 font-medium px-1 mb-1">Selecione a aula para abrir a chamada</p>
-          {aulas.map(aula => (
-            <button
-              key={aula.id}
-              onClick={() => abrirChamada(aula)}
-              className={`w-full rounded-2xl p-4 flex items-center gap-3 text-left transition-all active:scale-[0.98] shadow-sm
-                ${aula.chamada_aberta
-                  ? "bg-green-500 hover:bg-green-600"
-                  : "bg-white hover:bg-gray-50"
-                }`}
-            >
-              <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 font-bold text-base
-                ${aula.chamada_aberta ? "bg-white/20 text-white" : "bg-blue-950 text-white"}`}>
-                {aula.numero}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className={`font-semibold ${aula.chamada_aberta ? "text-white" : "text-gray-900"}`}>
-                  Aula {aula.numero}
-                </p>
-                <p className={`text-xs mt-0.5 ${aula.chamada_aberta ? "text-white/70" : "text-gray-400"}`}>
-                  {formatarData(aula.data_aula)}
-                  {aula.chamada_aberta ? " · ✅ Chamada feita" : " · Pendente"}
-                </p>
-              </div>
-              <ChevronRight className={`h-5 w-5 shrink-0 ${aula.chamada_aberta ? "text-white/50" : "text-gray-300"}`} />
-            </button>
-          ))}
+          {aulas.map(aula => {
+            // D22 — chamada fechada é definitiva: o card vira registro, não botão.
+            const fechada = aula.chamada_aberta;
+            return (
+              <button
+                key={aula.id}
+                onClick={() => abrirChamada(aula)}
+                disabled={fechada}
+                title={fechada ? "Chamada fechada — não pode mais ser alterada" : undefined}
+                className={`w-full rounded-2xl p-4 flex items-center gap-3 text-left transition-all shadow-sm
+                  ${fechada
+                    ? "bg-green-500 cursor-default"
+                    : "bg-white hover:bg-gray-50 active:scale-[0.98]"
+                  }`}
+              >
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 font-bold text-base
+                  ${fechada ? "bg-white/20 text-white" : "bg-blue-950 text-white"}`}>
+                  {aula.numero}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`font-semibold ${fechada ? "text-white" : "text-gray-900"}`}>
+                    Aula {aula.numero}
+                  </p>
+                  <p className={`text-xs mt-0.5 ${fechada ? "text-white/70" : "text-gray-400"}`}>
+                    {formatarData(aula.data_aula)}
+                    {fechada ? " · Chamada fechada" : " · Pendente"}
+                  </p>
+                  {fechada && aula.conteudo_ministrado && (
+                    <p className="text-xs text-white/80 mt-1.5 line-clamp-2">
+                      {aula.conteudo_ministrado}
+                    </p>
+                  )}
+                </div>
+                {fechada
+                  ? <CheckCircle className="h-5 w-5 shrink-0 text-white" />
+                  : <ChevronRight className="h-5 w-5 shrink-0 text-gray-300" />
+                }
+              </button>
+            );
+          })}
         </div>
       </div>
     );
