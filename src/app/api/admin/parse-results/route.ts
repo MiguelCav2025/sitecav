@@ -28,14 +28,22 @@ export async function POST(req: NextRequest) {
       const resultado = await mammoth.extractRawText({ buffer });
       textoExtraido = resultado.value;
     } else if (file.name.toLowerCase().endsWith(".pdf")) {
-      // Usa o arquivo interno da lib para evitar o problema de carregamento
-      // de arquivos de teste que o entry point principal do pdf-parse faz
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (
-        buffer: Buffer
-      ) => Promise<{ text: string }>;
-      const resultado = await pdfParse(buffer);
-      textoExtraido = resultado.text;
+      // O codigo antigo importava "pdf-parse/lib/pdf-parse.js" — um caminho
+      // interno da versao 1 da lib, criado para contornar um bug em que o
+      // entry point carregava arquivos de teste. A versao 2 instalada aqui
+      // nao expoe mais esse subcaminho no campo `exports`, entao o import
+      // falhava no build e falharia tambem em execucao.
+      const { PDFParse } = await import("pdf-parse");
+      const parser = new PDFParse({ data: new Uint8Array(buffer) });
+      try {
+        const resultado = await parser.getText();
+        // A v2 insere um marcador "-- 1 of 3 --" entre as paginas. O extrator
+        // de nomes o aceita como se fosse um candidato, entao cada quebra de
+        // pagina viraria um aprovado fantasma na lista.
+        textoExtraido = resultado.text.replace(/^[ \t]*--[ \t]*\d+[ \t]+of[ \t]+\d+[ \t]*--[ \t]*$/gm, "");
+      } finally {
+        await parser.destroy();
+      }
     } else {
       return NextResponse.json(
         { error: "Formato não suportado. Use .docx ou .pdf" },
