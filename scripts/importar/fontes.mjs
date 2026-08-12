@@ -36,11 +36,34 @@ export function normalizar(texto) {
     .toUpperCase();
 }
 
-/** Título em caixa mista, para gravar bonito no banco. */
+/** Palavras que ficam em minúscula no meio de um título. */
+const PREPOSICOES = new Set(["de", "da", "do", "das", "dos", "e", "para", "a", "à", "em", "com"]);
+
+/** Siglas que não podem virar caixa mista. */
+const SIGLAS = new Set(["TV", "2D", "3D", "CAV"]);
+
+const ROMANO = /^[IVX]+$/;
+
+/**
+ * Título em caixa mista, preservando o que não é palavra comum.
+ *
+ * Capitalizar ingenuamente estraga justamente o que distingue as disciplinas:
+ * "ANIMAÇÃO DIGITAL 2D II" viraria "Animação Digital 2d Ii", e o algarismo
+ * romano é o número do módulo.
+ */
 export function capitalizar(texto) {
-  const minusculas = new Set(["de", "da", "do", "das", "dos", "e", "para", "a", "à", "em", "com"]);
-  return String(texto ?? "").trim().toLowerCase().split(/\s+/)
-    .map((p, i) => (i > 0 && minusculas.has(p) ? p : p.charAt(0).toUpperCase() + p.slice(1)))
+  const parte = (p, primeira) => {
+    const alto = p.toUpperCase();
+    if (SIGLAS.has(alto) || ROMANO.test(alto)) return alto;
+    // Hífen: cada lado é uma palavra ("Pós-Produção")
+    if (p.includes("-")) return p.split("-").map(s => parte(s, true)).join("-");
+    const min = p.toLowerCase();
+    if (!primeira && PREPOSICOES.has(min)) return min;
+    return min.charAt(0).toUpperCase() + min.slice(1);
+  };
+
+  return String(texto ?? "").trim().split(/\s+/)
+    .map((p, i) => parte(p, i === 0))
     .join(" ");
 }
 
