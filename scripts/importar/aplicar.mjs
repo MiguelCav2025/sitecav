@@ -56,8 +56,11 @@ const inserir = (tabela, linhas) =>
   linhas.length === 0 ? [] :
   rest(tabela, { method: "POST", body: JSON.stringify(linhas), headers: { Prefer: "return=representation" } });
 
+/** Nem toda tabela tem `id`: grupo_alunos usa chave composta. */
+const COLUNA_CHAVE = { grupo_alunos: "aluno_id" };
+
 const apagarTudo = (tabela) =>
-  rest(`${tabela}?id=not.is.null`, { method: "DELETE" });
+  rest(`${tabela}?${COLUNA_CHAVE[tabela] ?? "id"}=not.is.null`, { method: "DELETE" });
 
 const titulo = (t) => console.log(`\n${"=".repeat(72)}\n${t}\n${"=".repeat(72)}`);
 const item = (t) => console.log(`  ${t}`);
@@ -185,9 +188,33 @@ if (!CONFIRMAR) {
 // ── Execução ─────────────────────────────────────────────────────────────────
 async function executar() {
 titulo("1. REMOVENDO AS CONTAS DE LOGIN DOS PROFESSORES");
+const naoRemovidas = [];
 for (const p of comLogin) {
   const r = await fetch(`${BASE}/auth/v1/admin/users/${p.user_id}`, { method: "DELETE", headers: cabecalhos });
+  if (!r.ok) naoRemovidas.push(p);
   console.log(`  ${r.ok ? "ok  " : "erro"} ${p.nome}`);
+}
+
+// Sem conseguir remover as contas, apagar a tabela `professores` promoveria
+// todas elas a administradoras. Melhor parar antes de tocar em qualquer dado
+// do que terminar num meio-termo perigoso.
+if (naoRemovidas.length > 0) {
+  titulo("INTERROMPIDO — NENHUM DADO FOI ALTERADO");
+  item(`Não consegui remover ${naoRemovidas.length} conta(s) pela API do Supabase.`);
+  console.log("");
+  item("A API de administração do Auth está retornando 500 neste projeto");
+  item('("Database error finding users"), o mesmo erro que quebra a aba Admin.');
+  console.log("");
+  item("Seguir apagando `professores` deixaria essas contas órfãs — e a regra");
+  item("«admin = autenticado e não é professor» as tornaria ADMINISTRADORAS.");
+  console.log("");
+  item("Rode isto no editor SQL do Supabase e execute o script de novo:");
+  console.log("");
+  console.log("    delete from auth.users where id in (");
+  console.log(naoRemovidas.map(p => `      '${p.user_id}'`).join(",\n"));
+  console.log("    );");
+  console.log("");
+  return;
 }
 
 titulo("2. APAGANDO OS DADOS ACADÊMICOS");
