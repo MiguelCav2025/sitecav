@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from '@/lib/auth/require-admin';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
 export async function GET() {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  // Somente administradores autenticados podem listar usuários
+  const { errorResponse } = await requireAdmin();
+  if (errorResponse) return errorResponse;
+
+  const supabase = createSupabaseAdminClient();
 
   try {
     const { data, error } = await supabase.auth.admin.listUsers();
@@ -24,7 +26,8 @@ export async function GET() {
       is_confirmed: u.email_confirmed_at !== null,
     }));
     return NextResponse.json({ users });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Erro desconhecido.' }, { status: 500 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Erro desconhecido.';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-} 
+}

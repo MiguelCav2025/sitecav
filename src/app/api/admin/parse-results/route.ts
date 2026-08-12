@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import mammoth from "mammoth";
 import { extrairNomes } from "./extractor";
+import { requireAdmin } from "@/lib/auth/require-admin";
 
 export type { CandidatoExtraido } from "./extractor";
 
@@ -8,6 +9,10 @@ export type { CandidatoExtraido } from "./extractor";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
+  // Somente administradores autenticados podem enviar arquivos para processamento
+  const { errorResponse } = await requireAdmin();
+  if (errorResponse) return errorResponse;
+
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;

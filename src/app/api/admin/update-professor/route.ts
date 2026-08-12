@@ -1,27 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/auth/require-admin";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(req: NextRequest) {
-  const supabaseServer = await createSupabaseServerClient();
-  const { data: { user } } = await supabaseServer.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
+  // Somente administradores autenticados podem editar professores
+  const { errorResponse } = await requireAdmin();
+  if (errorResponse) return errorResponse;
 
   const { professorId, email, nome } = await req.json();
   if (!professorId) return NextResponse.json({ error: "professorId obrigatório." }, { status: 400 });
 
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
+  const supabaseAdmin = createSupabaseAdminClient();
 
-  const updates: Record<string, string> = {};
-  if (email) updates.email = email;
-  if (nome) updates.user_metadata = JSON.stringify({ nome, role: "professor" });
+  // `professorId` é o id do registro em `professores`, que desde a fase 2 não é
+  // mais o id do login. O Auth precisa do `user_id`.
+  const { data: professor, error: errBusca } = await supabaseAdmin
+    .from("professores")
+    .select("user_id")
+    .eq("id", professorId)
+    .maybeSingle();
 
-  if (email || nome) {
-    const { error } = await supabaseAdmin.auth.admin.updateUserById(professorId, {
+  if (errBusca) return NextResponse.json({ error: errBusca.message }, { status: 400 });
+  if (!professor) return NextResponse.json({ error: "Professor não encontrado." }, { status: 404 });
+
+  // Professor sem login (saiu do edital) só tem os dados da tabela atualizados.
+  if (professor.user_id && (email || nome)) {
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(professor.user_id, {
       ...(email ? { email } : {}),
       ...(nome ? { user_metadata: { nome, role: "professor" } } : {}),
     });
