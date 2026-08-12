@@ -21,9 +21,11 @@
 --   Fase 9 .... [x] aplicada em 12/08/2026
 --   Fase 9-B .. [x] aplicada e verificada em 12/08/2026 (alunos.turma_id removida)
 --   Fase 10 ... [x] aplicada em 12/08/2026 (notas parciais, banca por modulo, salas)
---   Fase 11 ... [ ] nao aplicada — admin por concessao explicita.
---                   Rodar 11.1 a 11.5 DE UMA VEZ: a funcao so pode mudar
---                   depois de a tabela estar populada, senao o painel tranca.
+--   Fase 11 ... [x] aplicada em 12/08/2026 (admin por concessao explicita)
+--   Fase 11-B . [x] aplicada em 12/08/2026 (triggers liberam auth.uid() nulo)
+--   Fase 12 ... [ ] NAO APLICADA — acesso do professor por e-mail.
+--                   Precisa entrar ANTES de usar o botao "Enviar acesso":
+--                   sem ela a tela nao carrega e o convite nao registra.
 --
 -- COMO RODAR: um bloco de cada vez (FASE 1, depois FASE 2), conferindo o
 -- resultado entre eles. O editor do Supabase executa a selecao inteira como
@@ -1644,6 +1646,50 @@ begin
   return new;
 end;
 $$;
+
+
+-- ============================================================================
+-- FASE 12 — acesso do professor por e-mail  (P17)
+-- ----------------------------------------------------------------------------
+-- Some a senha provisoria fixa. O professor passa a receber um link de uso
+-- unico e definir a propria senha; ninguem mais chega a conhece-la.
+--
+-- Rodar o bloco inteiro de uma vez. Precisa estar aplicado ANTES de usar o
+-- botao "Enviar acesso" — sem a coluna nova a aba Professores nao carrega.
+-- ============================================================================
+
+-- 12.1 — o cadastro nasce sem e-mail.
+-- Hoje a coluna e obrigatoria, o que forcava inventar enderecos @cav.temp para
+-- dar login a quem ninguem sabia o e-mail. Agora o coordenador cadastra o nome,
+-- e o e-mail entra quando for conhecido.
+alter table public.professores alter column email drop not null;
+
+-- 12.2 — quando o ultimo convite saiu.
+-- Sem isto a tela nao sabe distinguir "ainda nao mandei" de "mandei e ele nao
+-- entrou", que sao situacoes com providencias diferentes.
+alter table public.professores
+  add column if not exists acesso_enviado_em timestamptz;
+
+comment on column public.professores.acesso_enviado_em is
+  'Ultimo envio do link de acesso. NULL = nunca enviado. Gravado so apos o e-mail sair.';
+
+-- 12.3 — os enderecos inventados na importacao nao recebem nada.
+-- Deixa-los apenas atrapalha: parecem e-mail valido na tela e o convite falha
+-- na entrega, sem ninguem ficar sabendo. Virando NULL, a aba os marca em ambar
+-- como "falta preencher" e o botao de envio fica desabilitado.
+update public.professores
+   set email = null
+ where email ilike '%@cav.temp';
+
+-- 12.4 — conferencia
+-- select nome, email, user_id is not null as tem_conta, senha_alterada
+--   from public.professores where ativo order by email nulls first, nome;
+
+-- ROLLBACK (a ordem importa: a coluna sai antes de voltar a ser obrigatoria)
+--   alter table public.professores drop column if exists acesso_enviado_em;
+--   -- so volte o not null depois de preencher os e-mails vazios, senao falha:
+--   -- update public.professores set email = id || '@cav.temp' where email is null;
+--   alter table public.professores alter column email set not null;
 
 
 -- ============================================================================

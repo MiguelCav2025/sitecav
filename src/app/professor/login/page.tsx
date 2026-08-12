@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,18 @@ export default function ProfessorLoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
+
+  // Quem chega aqui vindo de um link de acesso que não valeu mais. Lido do
+  // próprio endereço em vez de `useSearchParams` para não obrigar a página
+  // inteira a virar dinâmica só por causa de uma mensagem.
+  useEffect(() => {
+    const motivo = new URLSearchParams(window.location.search).get("erro");
+    if (motivo === "link_expirado") {
+      setErro("Este link de acesso já foi usado ou expirou. Peça um novo à coordenação.");
+    } else if (motivo === "link_invalido") {
+      setErro("Link de acesso inválido. Peça um novo à coordenação.");
+    }
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

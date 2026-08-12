@@ -465,10 +465,12 @@ Cada fase só começa quando a anterior estiver revisada. O documento é atualiz
 | ~~**5**~~ | ~~Gabarito do processo seletivo~~ | ✅ **CONCLUÍDA** |
 | ~~**6**~~ | ~~Reorganização do admin~~ — resolveu `P13` e `P1`, e de quebra o `P20` | ✅ **CONCLUÍDA** |
 | ~~**7**~~ | ~~Cronograma editável + recálculo seguro~~ | ✅ **CONCLUÍDA** |
-| **8** | Grupos, notas e banca (`D18`–`D21`) | ← próxima |
-| **9** | Fechamento de semestre e progressão por aluno (`P15`,`D24`–`D26`,`D29`) | — |
-| **10** | Relatórios (`D27`) | fases 8 e 9 |
-| **11** | Limpezas (`P6`,`P10`,`P11`,`P12`,`P16`) e investigar `P9` | — |
+| ~~**8**~~ | ~~Grupos, notas e banca (`D18`–`D21`)~~ | ✅ **CONCLUÍDA** |
+| **9** | Fechamento de semestre e progressão por aluno (`P15`,`D24`–`D26`,`D29`) | ⚠️ **modelo e regras prontos** (`src/lib/aprovacao.ts`, 124 testes); **falta a tela** |
+| **10** | Relatórios (`D27`) | fase 9 |
+| **11** | Limpezas (`P6`,`P10`,`P11`,`P12`,`P16`) | — |
+| ~~**11-B**~~ | ~~Admin por concessão explícita + `P9` investigado~~ | ✅ **CONCLUÍDA** |
+| ~~**12**~~ | ~~Acesso do professor por e-mail (`P17`)~~ | ✅ **código pronto** — falta aplicar a migração |
 
 > A fase 2 subiu de posição porque a função `is_admin()` e todo o RLS consultam a tabela `professores`. Reestruturar depois obrigaria a refazer as policies.
 
@@ -489,5 +491,51 @@ Montada em [`docs/MIGRACOES.sql`](MIGRACOES.sql), por fase, revisada antes de ap
 | 7 | `grupos`, `grupo_alunos`, `notas_disciplina` |
 | 8 | `matriculas` + migrar o vínculo atual `alunos.turma_id` |
 | 10 | Remover `professor_turmas` e o bucket `project-images`; FK de professor (`P19`) |
+| 12 | `professores.email` deixa de ser obrigatório; `acesso_enviado_em`; limpar os `@cav.temp` |
 
 > `D30`: como os dados acadêmicos são de teste, as migrações podem ser destrutivas sem cerimônia. O cuidado fica com as tabelas do **site**, que estão no ar.
+
+---
+
+## 11. Fase 12 — como o professor entra (`P17`)
+
+O sistema tinha uma senha provisória **fixa e escrita na própria tela do admin**
+(`Cav@2026`). Quem abrisse o painel — ou o código-fonte no navegador — sabia a
+senha de todo professor que ainda não tivesse trocado a dele. E os e-mails
+`@cav.temp`, inventados na importação para dar login a quem ninguém sabia o
+endereço, não recebem mensagem nenhuma: não havia como avisar o professor.
+
+**D40 — ninguém define a senha de ninguém.** O coordenador cadastra o professor
+e clica em *Enviar acesso*. O professor recebe um link de uso único, cria a
+própria senha e passa a entrar com e-mail e senha, no computador ou no app.
+A senha nunca passa pela coordenação, por e-mail ou por esta base de código.
+
+**D41 — um botão só, o sistema decide o tipo.** Quem ainda não tem conta recebe
+um *convite* (que cria a conta); quem já tem recebe uma *recuperação*. O
+coordenador não precisa saber a diferença. Se o palpite errar — vínculo perdido,
+ou professor que trocou de e-mail depois do cadastro — a rota tenta o outro tipo
+e reata o `user_id`. O histórico de aulas não depende disso: está preso ao `id`
+do professor, não ao login.
+
+**D42 — o mesmo botão serve para reenviar.** Esqueceu a senha, perdeu o e-mail,
+mudou de endereço: envia de novo. Pede confirmação, porque o link anterior deixa
+de valer.
+
+**D43 — o e-mail sai pelo Resend**, não pelo mailer do Supabase, que tem limite
+baixo e cai em spam. Exige um **domínio verificado** no Resend; sem isso o envio
+falha. O remetente é configurável por `RESEND_FROM`.
+
+**D44 — cadastro sem e-mail é permitido.** O coordenador monta a lista de
+professores agora e preenche os endereços quando souber. A aba marca em âmbar
+quem está sem e-mail, e o botão de envio fica desabilitado até preencher.
+
+**Por que não a API de administração do Auth:** a listagem (`listUsers`) responde
+**500** neste projeto — é falha do lado do Supabase, não do código (`P9`
+encerrado). `generate_link`, que é o que este fluxo usa, funciona. Por isso o
+sistema nunca pergunta "esta conta existe?": deduz pelo `user_id` guardado e
+trata a colisão quando ela aparece.
+
+**Onde está:** `src/lib/acesso.ts` (regras puras, 11 testes) ·
+`src/lib/email/acesso-professor.ts` (o e-mail) ·
+`src/app/api/admin/enviar-acesso/route.ts` (gera e envia) ·
+`src/app/auth/confirmar/route.ts` (onde o link cai).

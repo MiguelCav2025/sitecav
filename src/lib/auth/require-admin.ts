@@ -10,10 +10,14 @@ type RequireAdminResult =
 /**
  * Garante que quem chamou a rota está autenticado E é administrador.
  *
- * Regra de admin do projeto: usuario autenticado que NAO consta na tabela
- * `professores`. A consulta usa a service_role key de proposito — checar o
- * papel com a chave anon dependeria das policies de RLS da tabela
- * `professores`, e uma policy restritiva faria um professor passar por admin.
+ * Administrador é quem consta em `administradores` com `ativo = true` — a mesma
+ * fonte que o `is_admin()` usa no banco. Antes a regra era por eliminação
+ * ("autenticado e não é professor"), o que promovia a administrador qualquer
+ * conta criada por engano, importada ou órfã.
+ *
+ * A consulta usa a service_role key de propósito: checar o papel com a chave
+ * anon dependeria das policies de RLS de `administradores`, e uma policy
+ * restritiva esconderia a linha do próprio admin, derrubando o acesso dele.
  *
  * Uso:
  *   const { user, errorResponse } = await requireAdmin();
@@ -32,12 +36,14 @@ export async function requireAdmin(): Promise<RequireAdminResult> {
     };
   }
 
-  const { data: professor, error } = await createSupabaseAdminClient()
-    .from("professores")
+  const { data: admin, error } = await createSupabaseAdminClient()
+    .from("administradores")
     .select("id")
     .eq("user_id", user.id)
+    .eq("ativo", true)
     .maybeSingle();
 
+  // Na dúvida, negar. Um erro de consulta não pode virar permissão concedida.
   if (error) {
     return {
       user: null,
@@ -48,7 +54,7 @@ export async function requireAdmin(): Promise<RequireAdminResult> {
     };
   }
 
-  if (professor) {
+  if (!admin) {
     return {
       user: null,
       errorResponse: NextResponse.json(
