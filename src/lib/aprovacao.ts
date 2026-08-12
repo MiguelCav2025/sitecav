@@ -21,11 +21,21 @@ export const CASAS_DECIMAIS = 1;
 export interface DesempenhoDisciplina {
   disciplina_id: string;
   disciplina: string;
+  /** 1, 2 ou 3. O 1º módulo não tem banca. */
+  semestre_do_curso: number;
   nota_professor: number | null;
   nota_banca: number | null;
   nota_final: number | null;
   aulas_dadas: number | null;
   presencas: number | null;
+}
+
+/**
+ * A banca só existe a partir do 2º módulo. No 1º, a nota final da disciplina
+ * é a do professor — não há com o que fazer média.
+ */
+export function moduloTemBanca(semestreDoCurso: number): boolean {
+  return semestreDoCurso >= 2;
 }
 
 export type Situacao = "aprovado" | "retido" | "indefinido";
@@ -86,7 +96,9 @@ export function avaliarDisciplina(d: DesempenhoDisciplina): AvaliacaoDaDisciplin
   if (d.nota_professor === null) {
     motivos.push("O professor ainda não lançou a nota.");
     indefinido = true;
-  } else if (d.nota_banca === null) {
+  } else if (moduloTemBanca(d.semestre_do_curso) && d.nota_banca === null) {
+    // No 1º módulo não há banca, então a ausência dela não é pendência —
+    // tratá-la como tal travaria a decisão de toda a turma de entrada.
     motivos.push("A nota da banca ainda não foi lançada.");
     indefinido = true;
   } else if (notaFinal === null) {

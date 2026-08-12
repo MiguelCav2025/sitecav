@@ -1,7 +1,7 @@
 import {
   Images, Film, Building2, Camera, Palette, Users, Download, ClipboardList,
   Video, BookOpen, CalendarDays, GraduationCap, BookMarked, UserCheck,
-  BarChart3, Settings, Award, type LucideIcon,
+  BarChart3, Settings, Award, DoorOpen, type LucideIcon,
 } from "lucide-react";
 
 export interface SecaoAdmin {
@@ -69,6 +69,9 @@ export const AREAS: AreaAdmin[] = [
     icone: Settings,
     secoes: [
       { value: "admin", label: "Administradores", ajuda: "Quem tem acesso ao painel", icone: Settings },
+      // Sala é configuração de infraestrutura, não tarefa recorrente de
+      // semestre — por isso fica aqui e não entre os passos da Escola.
+      { value: "salas", label: "Salas",           ajuda: "Espaços onde as aulas acontecem", icone: DoorOpen },
     ],
   },
 ];

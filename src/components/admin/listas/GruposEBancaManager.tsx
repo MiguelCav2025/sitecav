@@ -106,7 +106,7 @@ export default function GruposEBancaManager() {
       supabase.from("grupos").select("id, nome, nota_banca, grupo_alunos(aluno_id)")
         .eq("turma_id", turmaId).eq("semestre_do_curso", Number(semestre)).order("nome"),
       supabase.from("vw_desempenho_aluno")
-        .select("aluno_id, disciplina_id, disciplina, nota_professor, nota_banca, nota_final, aulas_dadas, presencas")
+        .select("aluno_id, disciplina_id, disciplina, semestre_do_curso, nota_professor, nota_banca, nota_final, aulas_dadas, presencas")
         .eq("turma_id", turmaId).eq("semestre_do_curso", Number(semestre)),
     ]);
 

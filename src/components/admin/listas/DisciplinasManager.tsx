@@ -52,6 +52,11 @@ const EMOJIS_DISCIPLINA = [
   "📐","📏","🗂️","📊","🎯","🏆","🌟","💫","🔆","🎓",
 ];
 
+interface Sala {
+  id: string;
+  nome: string;
+}
+
 interface Cronograma {
   id: string;
   semestre: string;
@@ -410,6 +415,7 @@ export default function DisciplinasManager() {
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [professores, setProfessores] = useState<Professor[]>([]);
   const [cronogramas, setCronogramas] = useState<Cronograma[]>([]);
+  const [salas, setSalas] = useState<Sala[]>([]);
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
@@ -423,6 +429,7 @@ export default function DisciplinasManager() {
     total_aulas: "16",
     dia_da_semana: "",
     emoji: "📚",
+    sala_id: "",
     professores_por_turma: {} as Record<string, string>,
   });
 
@@ -444,17 +451,19 @@ export default function DisciplinasManager() {
 
   const fetchDados = useCallback(async () => {
     setLoading(true);
-    const [{ data: discs }, { data: ts }, { data: ps }, { data: crons }] = await Promise.all([
+    const [{ data: discs }, { data: ts }, { data: ps }, { data: crons }, { data: sls }] = await Promise.all([
       supabase.from("disciplinas").select("*").order("curso").order("semestre_do_curso").order("dia_da_semana", { ascending: true, nullsFirst: false }).order("nome"),
       supabase.from("turmas").select("id, nome, semestre, curso, turno").order("semestre", { ascending: false }),
       // Só professores ativos podem receber novas atribuições
       supabase.from("professores").select("id, nome").eq("ativo", true).order("nome"),
       supabase.from("cronogramas").select("*").order("data_inicio", { ascending: false }),
+      supabase.from("salas").select("id, nome").eq("ativa", true).order("nome"),
     ]);
     setDisciplinas(discs ?? []);
     setTurmas(ts ?? []);
     setProfessores(ps ?? []);
     setCronogramas(crons ?? []);
+    setSalas((sls ?? []) as Sala[]);
     setLoading(false);
   }, []);
 
@@ -484,6 +493,7 @@ export default function DisciplinasManager() {
         total_aulas: parseInt(form.total_aulas),
         dia_da_semana: form.dia_da_semana ? parseInt(form.dia_da_semana) : null,
         emoji: form.emoji || "📚",
+        sala_id: form.sala_id || null,
       }])
       .select()
       .single();
@@ -531,7 +541,7 @@ export default function DisciplinasManager() {
       const temDatas = diaSemanaNum && aulasParaInserir.some((a) => (a as { data_aula: string | null }).data_aula);
       const sufixo = temDatas ? " com datas preenchidas pelo cronograma." : " (sem datas — defina o cronograma do semestre).";
       showMsg("ok", `"${form.nome}" criada! ${total} aulas geradas para ${turmasAfetadas.length} turma(s)${sufixo}`);
-      setForm({ nome: "", curso: "", semestre_do_curso: "", total_aulas: "16", dia_da_semana: "", emoji: "📚", professores_por_turma: {} });
+      setForm({ nome: "", curso: "", semestre_do_curso: "", total_aulas: "16", dia_da_semana: "", emoji: "📚", sala_id: "", professores_por_turma: {} });
     }
 
     fetchDados();
@@ -622,6 +632,21 @@ export default function DisciplinasManager() {
               <Select value={form.semestre_do_curso} onValueChange={v => setForm(f => ({ ...f, semestre_do_curso: v, professores_por_turma: {} }))}>
                 <SelectTrigger className="w-full text-gray-800"><SelectValue placeholder="Selecione o semestre" /></SelectTrigger>
                 <SelectContent>{SEMESTRES_CURSO.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-gray-700">Sala</Label>
+              <Select
+                value={form.sala_id || "none"}
+                onValueChange={v => setForm(f => ({ ...f, sala_id: v === "none" ? "" : v }))}
+              >
+                <SelectTrigger className="w-full text-gray-800">
+                  <SelectValue placeholder="Onde a aula acontece" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">A definir</SelectItem>
+                  {salas.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">

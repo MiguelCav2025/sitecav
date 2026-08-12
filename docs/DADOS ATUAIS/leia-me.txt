@@ -1,0 +1,10 @@
+Nessa listas de presença vc tem:
+
+NO TOPO:
+Nome da disciplina; nome do professor e dia da semana
+
+NO CORPO DA TABELA:
+nome do aluno; email do aluno, dias em que ele terá aula dessa disciplina
+
+NAS ABAS:
+Todos os módulos em que essa disciplina é dada.

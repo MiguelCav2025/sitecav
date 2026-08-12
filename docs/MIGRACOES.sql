@@ -19,9 +19,8 @@
 --   Fase 5 .... [x] aplicada e verificada em 12/08/2026
 --   Fase 8 .... [x] aplicada e verificada em 12/08/2026
 --   Fase 9 .... [x] aplicada em 12/08/2026
---   Fase 9-B .. [ ] CORRECAO — o aluno pode cursar duas turmas ao mesmo tempo.
---                   Blocos 9B.1 a 9B.3 podem ir agora (aditivos).
---                   O bloco 9B.4 SO depois do deploy do codigo novo.
+--   Fase 9-B .. [x] aplicada e verificada em 12/08/2026 (alunos.turma_id removida)
+--   Fase 10 ... [ ] nao aplicada — notas parciais, banca por modulo, salas
 --
 -- COMO RODAR: um bloco de cada vez (FASE 1, depois FASE 2), conferindo o
 -- resultado entre eles. O editor do Supabase executa a selecao inteira como
@@ -1286,6 +1285,152 @@ comment on table public.alunos is
 -- create policy alunos_professor_leitura on public.alunos
 --   for select to authenticated
 --   using (turma_id is not null and public.professor_leciona_turma(turma_id));
+
+
+-- ============================================================================
+-- FASE 10 — Modelo alinhado aos dados reais do coordenador
+-- Cobre: notas parciais, banca so a partir do 2o modulo, e salas.
+-- Depende das fases 8 e 9.
+-- ============================================================================
+--
+-- O QUE OS DADOS REAIS MOSTRARAM
+--
+-- 1. As listas de presenca tem quatro notas parciais por disciplina, alem da
+--    nota final. No 3o modulo elas aparecem rotuladas (PT, FQ, HB, PROF), mas
+--    continuam sendo quatro. O que o coordenador precisa e a FINAL.
+--
+-- 2. As abas do 1o modulo nao tem coluna BANCA — ela so existe do 2o em
+--    diante. Logo a nota final do 1o modulo e a do professor, sem media.
+--
+-- 3. A grade curricular indica a SALA de cada disciplina, informacao que o
+--    professor precisa e que nao existia no banco.
+
+
+-- ----------------------------------------------------------------------------
+-- 10.1 Notas parciais
+-- ----------------------------------------------------------------------------
+-- `nota` continua sendo a final e obrigatoria: e ela que decide. As parciais
+-- sao opcionais e servem de apoio — se preenchidas, a tela sugere a media,
+-- mas quem manda e o que o professor gravar como final.
+alter table public.notas_disciplina
+  add column if not exists nota1 numeric(4,2) check (nota1 >= 0 and nota1 <= 10),
+  add column if not exists nota2 numeric(4,2) check (nota2 >= 0 and nota2 <= 10),
+  add column if not exists nota3 numeric(4,2) check (nota3 >= 0 and nota3 <= 10),
+  add column if not exists nota4 numeric(4,2) check (nota4 >= 0 and nota4 <= 10);
+
+comment on column public.notas_disciplina.nota is
+  'Nota FINAL da disciplina. E a que decide a aprovacao.';
+comment on column public.notas_disciplina.nota1 is
+  'Parcial, opcional. Nao entra no calculo: serve de apoio para o professor chegar na final.';
+
+
+-- ----------------------------------------------------------------------------
+-- 10.2 Salas
+-- ----------------------------------------------------------------------------
+create table if not exists public.salas (
+  id         uuid primary key default gen_random_uuid(),
+  nome       text not null unique,
+  observacao text,
+  ativa      boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+alter table public.disciplinas
+  add column if not exists sala_id uuid references public.salas(id) on delete set null;
+
+comment on column public.disciplinas.sala_id is
+  'Onde a aula acontece. Vem da grade curricular.';
+
+-- As salas que aparecem na grade 2026/2. Os casos combinados do documento
+-- ("AUDITORIO / TEORICA 1" e "ESTUDIO DE SOM / DIGITAL 1") NAO sao criados
+-- aqui: dois espacos num campo so seria inventar uma sala que nao existe.
+-- O importador vai apontar esses casos para o coordenador decidir.
+insert into public.salas (nome)
+values ('Digital 1'), ('Digital 2'), ('Digital 3'),
+       ('Teórica 1'), ('Teórica 2'),
+       ('Auditório'), ('Estúdio de Imagem'), ('Estúdio de Som')
+on conflict (nome) do nothing;
+
+alter table public.salas enable row level security;
+
+-- Sala nao e dado sensivel, e o professor precisa saber para onde ir.
+drop policy if exists salas_leitura on public.salas;
+create policy salas_leitura on public.salas
+  for select to authenticated using (true);
+
+drop policy if exists salas_admin on public.salas;
+create policy salas_admin on public.salas
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+
+-- ----------------------------------------------------------------------------
+-- 10.3 A nota final passa a depender do modulo
+-- ----------------------------------------------------------------------------
+-- No 1o modulo nao ha banca, entao a nota final e a do professor. Do 2o em
+-- diante, e a media com a banca. A view tambem passa a expor a sala e as
+-- parciais, para o relatorio nao precisar de outra consulta.
+drop view if exists public.vw_desempenho_aluno;
+create view public.vw_desempenho_aluno
+with (security_invoker = true) as
+select
+  n.aluno_id,
+  al.nome                       as aluno,
+  n.turma_id,
+  n.disciplina_id,
+  d.nome                        as disciplina,
+  d.semestre_do_curso,
+  s.nome                        as sala,
+  n.nota                        as nota_professor,
+  n.nota1, n.nota2, n.nota3, n.nota4,
+  case when d.semestre_do_curso = 1 then null else g.nota_banca end as nota_banca,
+  case
+    -- 1o modulo nao tem banca: vale a nota do professor
+    when d.semestre_do_curso = 1 then n.nota
+    when g.nota_banca is null    then null
+    else round((n.nota + g.nota_banca) / 2, 2)
+  end                           as nota_final,
+  pres.aulas_dadas,
+  pres.presencas,
+  case
+    when pres.aulas_dadas is null or pres.aulas_dadas = 0 then null
+    else round(pres.presencas * 100.0 / pres.aulas_dadas, 1)
+  end                           as percentual_presenca
+from public.notas_disciplina n
+join public.alunos      al on al.id = n.aluno_id
+join public.disciplinas d  on d.id  = n.disciplina_id
+left join public.salas  s  on s.id  = d.sala_id
+left join public.grupos g
+  on  g.turma_id          = n.turma_id
+  and g.semestre_do_curso = d.semestre_do_curso
+  and exists (
+    select 1 from public.grupo_alunos ga
+     where ga.grupo_id = g.id and ga.aluno_id = n.aluno_id
+  )
+left join lateral (
+  select
+    count(*)                           as aulas_dadas,
+    count(*) filter (where p.presente) as presencas
+  from public.aulas a
+  left join public.presencas p
+    on p.aula_id = a.id and p.aluno_id = n.aluno_id
+  where a.turma_id      = n.turma_id
+    and a.disciplina_id = n.disciplina_id
+    and a.chamada_aberta
+) pres on true;
+
+comment on view public.vw_desempenho_aluno is
+  'Nota final e frequencia por aluno/disciplina. No 1o modulo nao ha banca e a final e a nota do professor. NULL significa indeterminado, nunca zero.';
+
+
+-- ----------------------------------------------------------------------------
+-- ROLLBACK DA FASE 10 (deixar comentado)
+-- ----------------------------------------------------------------------------
+-- alter table public.disciplinas drop column if exists sala_id;
+-- drop table if exists public.salas;
+-- alter table public.notas_disciplina
+--   drop column if exists nota1, drop column if exists nota2,
+--   drop column if exists nota3, drop column if exists nota4;
+-- (a view volta ao texto da fase 8)
 
 
 -- ============================================================================

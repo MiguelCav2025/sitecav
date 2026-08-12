@@ -12,18 +12,27 @@ import {
 /** Monta uma disciplina já com nota final coerente, como a view devolve. */
 function disciplina(
   nome: string,
-  { professor = 8, banca = 8, aulas = 10, presencas = 10 }: Partial<{
-    professor: number | null; banca: number | null; aulas: number | null; presencas: number | null;
+  { professor = 8, banca = 8, aulas = 10, presencas = 10, modulo = 2 }: Partial<{
+    professor: number | null; banca: number | null;
+    aulas: number | null; presencas: number | null; modulo: number;
   }> = {},
 ): DesempenhoDisciplina {
-  const final = professor !== null && banca !== null
-    ? Math.round(((professor + banca) / 2) * 100) / 100
-    : null;
+  // Reproduz o que a view faz: no 1º módulo não há banca, e a final é a do
+  // professor; do 2º em diante, é a média com a banca.
+  const semBanca = modulo === 1;
+  const bancaEfetiva = semBanca ? null : banca;
+  const final = semBanca
+    ? professor
+    : professor !== null && banca !== null
+      ? Math.round(((professor + banca) / 2) * 100) / 100
+      : null;
+
   return {
     disciplina_id: nome,
     disciplina: nome,
+    semestre_do_curso: modulo,
     nota_professor: professor,
-    nota_banca: banca,
+    nota_banca: bancaEfetiva,
     nota_final: final,
     aulas_dadas: aulas,
     presencas,
@@ -237,6 +246,43 @@ describe("os dois niveis se encaixam", () => {
     assert.equal(r.disciplinas[0].situacao, "aprovado");
     assert.equal(r.disciplinas[1].situacao, "indefinido");
     assert.equal(r.situacao, "indefinido");
+  });
+});
+
+describe("1o modulo nao tem banca", () => {
+  test("a nota final e a do professor, sem media", () => {
+    const r = avaliarDisciplina(disciplina("Fundamentos de Desenho", { professor: 7, modulo: 1 }));
+    assert.equal(r.notaFinal, 7);
+    assert.equal(r.notaBanca, null);
+    assert.equal(r.situacao, "aprovado");
+  });
+
+  test("banca ausente NAO e pendencia no 1o modulo", () => {
+    // Se fosse, a turma de entrada inteira ficaria travada
+    const r = avaliarDisciplina(disciplina("Roteiro", { professor: 8, banca: null, modulo: 1 }));
+    assert.equal(r.situacao, "aprovado");
+    assert.ok(!r.motivos.some(m => m.includes("banca")));
+  });
+
+  test("no 1o modulo a nota do professor sozinha pode reprovar", () => {
+    const r = avaliarDisciplina(disciplina("Roteiro", { professor: 4, modulo: 1 }));
+    assert.equal(r.situacao, "retido");
+    assert.equal(r.notaFinal, 4);
+  });
+
+  test("do 2o modulo em diante a banca continua obrigatoria", () => {
+    const r = avaliarDisciplina(disciplina("Roteiro", { professor: 8, banca: null, modulo: 2 }));
+    assert.equal(r.situacao, "indefinido");
+    assert.ok(r.motivos.some(m => m.includes("banca")));
+  });
+
+  test("semestre inteiro de 1o modulo fecha sem banca", () => {
+    const r = avaliarSemestre([
+      disciplina("Fundamentos de Desenho", { professor: 7, modulo: 1 }),
+      disciplina("Animação Tradicional", { professor: 8, modulo: 1 }),
+    ]);
+    assert.equal(r.situacao, "aprovado");
+    assert.deepEqual(r.pendencias, []);
   });
 });
 

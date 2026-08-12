@@ -31,6 +31,7 @@ const RelatoriosManager = dynamic(() => import('@/components/admin/RelatoriosMan
 
 // ── Sistema ───────────────────────────────────────────────────────────────────
 const AdminManager = dynamic(() => import('@/components/admin/AdminManager'), { ssr: false });
+const SalasManager = dynamic(() => import('@/components/admin/SalasManager'), { ssr: false });
 
 function ConteudoSecao({ secao }: { secao: string }) {
   switch (secao) {
@@ -63,6 +64,7 @@ function ConteudoSecao({ secao }: { secao: string }) {
     case "relatorios": return <RelatoriosManager />;
 
     case "admin": return <AdminManager />;
+    case "salas": return <SalasManager />;
     default: return null;
   }
 }
