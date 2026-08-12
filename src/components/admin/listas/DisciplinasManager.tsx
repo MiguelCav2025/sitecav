@@ -8,6 +8,7 @@ import {
   contarDiasLetivos,
   gerarDatasAulas,
 } from "@/lib/calendario-escolar";
+import RecalcularGrade from "./RecalcularGrade";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,7 +66,9 @@ interface AulaDaDisciplina {
   chamada_aberta: boolean;
   data_aula: string | null;
   turma: { id: string; turno: string; semestre: string };
-  professor: { nome: string } | null;
+  // A consulta pede professores(id, nome); o tipo declarava so o nome, o que
+  // obrigava a contornar com `as any` na hora de ler o id.
+  professor: { id: string; nome: string } | null;
 }
 
 const CURSOS = ["Animação", "Cine/TV"];
@@ -103,11 +106,13 @@ const contarOcorrencias = (inicio: string, fim: string, feriados: string[]) =>
 function AulasDaDisciplinaModal({
   disciplina,
   professores,
+  cronogramas,
   onClose,
   onChangeEmoji,
 }: {
   disciplina: Disciplina;
   professores: Professor[];
+  cronogramas: Cronograma[];
   onClose: () => void;
   onChangeEmoji: (emoji: string) => void;
 }) {
@@ -139,8 +144,8 @@ function AulasDaDisciplinaModal({
         // inicializa o professor por turma pegando o da primeira aula de cada turma
         const mapa: Record<string, string> = {};
         rows.forEach(a => {
-          if (!mapa[a.turma.id] && (a.professor as any)?.id) {
-            mapa[a.turma.id] = (a.professor as any).id;
+          if (!mapa[a.turma.id] && a.professor?.id) {
+            mapa[a.turma.id] = a.professor.id;
           }
         });
         setProfPorTurma(mapa);
@@ -233,6 +238,15 @@ function AulasDaDisciplinaModal({
           <span className="bg-green-50 text-green-700 px-3 py-1 rounded-full font-medium">{totalFeitas} chamadas feitas</span>
           <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full font-medium">{aulas.length - totalFeitas} pendentes</span>
         </div>
+
+        {!loading && aulas.length > 0 && (
+          <RecalcularGrade
+            disciplina={disciplina}
+            aulas={aulas}
+            cronogramas={cronogramas}
+            onAplicado={carregarAulas}
+          />
+        )}
 
         {loading ? (
           <div className="flex items-center gap-2 text-gray-400 py-6"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
@@ -825,6 +839,7 @@ export default function DisciplinasManager() {
           <AulasDaDisciplinaModal
             disciplina={disciplinaSelecionada}
             professores={professores}
+            cronogramas={cronogramas}
             onClose={() => setDisciplinaSelecionada(null)}
             onChangeEmoji={emoji => {
               setDisciplinas(prev => prev.map(d => d.id === disciplinaSelecionada.id ? { ...d, emoji } : d));

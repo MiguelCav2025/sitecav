@@ -150,6 +150,19 @@ Tudo unificado em `lib/calendario-escolar.ts`, com a data "hoje" **injetável** 
 
 **Um bug real encontrado pelos testes.** `interpretarGabarito("1-")` devolvia `{ numero: 1, resposta: "-" }`: como o separador é opcional no regex, o motor voltava atrás e usava o próprio hífen como resposta. Agora a resposta precisa conter ao menos uma letra ou dígito.
 
+### Fase 7 — Cronograma editável e recálculo seguro ✅
+
+| Item | O que foi feito |
+|---|---|
+| `lib/recalculo-grade.ts` | Função pura que **descreve** o que muda antes de qualquer gravação: o que atualiza, cria, remove e o que fica intocado |
+| `D23` garantido | Aula com chamada fechada **nunca** entra em `atualizar` nem em `remover` — mantém id, número e data, mesmo que a data deixe de bater com o cronograma novo |
+| Reduzir o total | Remove só as aulas abertas que sobram. Se uma aula fechada passa do novo total, ela é mantida e o coordenador é avisado |
+| Aulas que não cabem | Ficam sem data e geram aviso explícito, em vez de sumirem em silêncio |
+| `RecalcularGrade` | Dentro do modal da disciplina: escolhe dia da semana e total de aulas, mostra a prévia **turma por turma**, e só grava depois do "Aplicar" |
+| Testes | **12 casos** cobrindo feriado novo, troca de dia, aumento e redução do total, aula fechada no caminho, buraco na numeração e entradas inválidas |
+
+Isso encerra o `P14`: antes, mudar o dia da semana gravava só na disciplina e as aulas ficavam nas datas antigas — a tela dizia "quarta" enquanto as aulas seguiam na terça.
+
 > Nada commitado. Tudo no working tree. Produção intocada.
 
 ---
@@ -411,8 +424,8 @@ Cada fase só começa quando a anterior estiver revisada. O documento é atualiz
 | ~~**4**~~ | ~~PWA instalável + primeiro acesso~~ | ✅ **CONCLUÍDA** |
 | ~~**5**~~ | ~~Gabarito do processo seletivo~~ | ✅ **CONCLUÍDA** |
 | ~~**6**~~ | ~~Reorganização do admin~~ — resolveu `P13` e `P1`, e de quebra o `P20` | ✅ **CONCLUÍDA** |
-| **7** | Cronograma editável + recálculo seguro (`P14`,`D8`,`D9`,`D23`) | ← próxima |
-| **8** | Grupos, notas e banca (`D18`–`D21`) | — |
+| ~~**7**~~ | ~~Cronograma editável + recálculo seguro~~ | ✅ **CONCLUÍDA** |
+| **8** | Grupos, notas e banca (`D18`–`D21`) | ← próxima |
 | **9** | Fechamento de semestre e progressão por aluno (`P15`,`D24`–`D26`,`D29`) | — |
 | **10** | Relatórios (`D27`) | fases 8 e 9 |
 | **11** | Limpezas (`P6`,`P10`,`P11`,`P12`,`P16`) e investigar `P9` | — |
