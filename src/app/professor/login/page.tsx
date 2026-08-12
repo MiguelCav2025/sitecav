@@ -27,11 +27,23 @@ export default function ProfessorLoginPage() {
 
     if (error) { setErro("E-mail ou senha incorretos."); setLoading(false); return; }
 
-    // Verifica se é professor
-    const { data: prof } = await supabase.from("professores").select("id, senha_alterada").eq("id", data.user.id).single();
+    // Verifica se é professor (o vínculo com o login agora é via user_id)
+    const { data: prof } = await supabase
+      .from("professores")
+      .select("id, senha_alterada, ativo")
+      .eq("user_id", data.user.id)
+      .maybeSingle();
     if (!prof) {
       await supabase.auth.signOut();
       setErro("Acesso negado. Esta área é exclusiva para professores.");
+      setLoading(false);
+      return;
+    }
+
+    // Professor desativado (saiu do edital) mantém o histórico, mas não entra.
+    if (!prof.ativo) {
+      await supabase.auth.signOut();
+      setErro("Seu acesso está inativo. Procure a coordenação.");
       setLoading(false);
       return;
     }

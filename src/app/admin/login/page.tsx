@@ -31,8 +31,8 @@ export default function LoginPage() {
     const { data: prof } = await supabase
       .from('professores')
       .select('id, senha_alterada')
-      .eq('id', data.user.id)
-      .single();
+      .eq('user_id', data.user.id)
+      .maybeSingle();
 
     if (prof) {
       if (!prof.senha_alterada) {

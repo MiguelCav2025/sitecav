@@ -6,13 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Trash2, Loader2, CheckCircle, AlertCircle, UserCheck, Pencil, X, Check, Info, KeyRound } from "lucide-react";
+import { Plus, Trash2, Loader2, CheckCircle, AlertCircle, UserCheck, Pencil, X, Check, Info, KeyRound, Power } from "lucide-react";
 
 interface Professor {
   id: string;
   nome: string;
   email: string;
   senha_alterada: boolean;
+  ativo: boolean;
+  /** Login do professor. NULL = acesso revogado, histórico preservado. */
+  user_id: string | null;
 }
 
 export default function ProfessoresManager() {
@@ -32,7 +35,8 @@ export default function ProfessoresManager() {
     setLoading(true);
     const { data } = await supabase
       .from("professores")
-      .select("id, nome, email, senha_alterada")
+      .select("id, nome, email, senha_alterada, ativo, user_id")
+      .order("ativo", { ascending: false })
       .order("nome");
     setProfessores(data ?? []);
     setLoading(false);
@@ -61,12 +65,20 @@ export default function ProfessoresManager() {
       const json = await res.json();
       if (!res.ok) { showMsg("erro", json.error ?? "Erro ao criar professor."); setSalvando(false); return; }
 
-      await supabase.from("professores").insert([{
-        id: json.userId,
+      // O registro tem id próprio; o login entra como `user_id`. Assim revogar
+      // o acesso depois não apaga o professor nem o histórico de aulas dele.
+      const { error: errInsert } = await supabase.from("professores").insert([{
+        user_id: json.userId,
         nome: form.nome.trim(),
         email: form.email.trim(),
         senha_alterada: false,
       }]);
+
+      if (errInsert) {
+        showMsg("erro", `Login criado, mas houve falha ao cadastrar o professor: ${errInsert.message}`);
+        setSalvando(false);
+        return;
+      }
 
       showMsg("ok", `Professor ${form.nome} criado!`);
       setForm({ nome: "", email: "", senha: "" });
@@ -77,14 +89,54 @@ export default function ProfessoresManager() {
     setSalvando(false);
   };
 
-  const handleExcluir = async (id: string) => {
-    if (!confirm("Excluir professor? O acesso dele será removido.")) return;
-    await supabase.from("professores").delete().eq("id", id);
-    await fetch("/api/admin/delete-user", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: id }),
-    });
+  /**
+   * Desativar é a operação normal: o professor sai da grade e perde o acesso,
+   * mas o registro e todo o histórico de aulas continuam intactos.
+   */
+  const handleAlternarAtivo = async (p: Professor) => {
+    const desativando = p.ativo;
+    if (desativando && !confirm(
+      `Desativar ${p.nome}? Ele deixa de aparecer para novas atribuições e perde o acesso ao app, ` +
+      `mas o histórico de aulas dele é preservado.`
+    )) return;
+
+    const { error } = await supabase
+      .from("professores")
+      .update({ ativo: !p.ativo })
+      .eq("id", p.id);
+
+    if (error) return showMsg("erro", `Erro ao alterar situação: ${error.message}`);
+    showMsg("ok", desativando ? `${p.nome} foi desativado.` : `${p.nome} foi reativado.`);
+    fetchDados();
+  };
+
+  /**
+   * Exclusão de verdade. Só funciona para professor que nunca foi vinculado a
+   * uma aula — a FK está como RESTRICT justamente para proteger o histórico.
+   */
+  const handleExcluir = async (p: Professor) => {
+    if (!confirm(
+      `Excluir ${p.nome} definitivamente? Isto só é possível se ele nunca teve aula atribuída. ` +
+      `Se já lecionou, use Desativar.`
+    )) return;
+
+    const { error } = await supabase.from("professores").delete().eq("id", p.id);
+
+    if (error) {
+      return showMsg("erro",
+        `Não é possível excluir: ${p.nome} já tem aulas atribuídas. Use Desativar para preservar o histórico.`
+      );
+    }
+
+    // Só remove o login depois que o registro saiu sem erro
+    if (p.user_id) {
+      await fetch("/api/admin/delete-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: p.user_id }),
+      });
+    }
+    showMsg("ok", `${p.nome} foi excluído.`);
     fetchDados();
   };
 
@@ -255,12 +307,15 @@ export default function ProfessoresManager() {
                     ) : (
                       <>
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-2 font-medium text-gray-800">
-                            <UserCheck className="h-4 w-4 text-blue-500 shrink-0" />
+                          <div className={`flex items-center gap-2 font-medium ${p.ativo ? "text-gray-800" : "text-gray-400"}`}>
+                            <UserCheck className={`h-4 w-4 shrink-0 ${p.ativo ? "text-blue-500" : "text-gray-300"}`} />
                             {p.nome}
+                            {!p.ativo && (
+                              <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Inativo</span>
+                            )}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-gray-500">{p.email}</td>
+                        <td className={`px-4 py-3 ${p.ativo ? "text-gray-500" : "text-gray-300"}`}>{p.email}</td>
                         <td className="px-4 py-3">
                           {p.senha_alterada
                             ? <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">Alterada</span>
@@ -272,7 +327,18 @@ export default function ProfessoresManager() {
                             <button onClick={() => iniciarEdicao(p)} className="text-blue-400 hover:text-blue-600 p-1" title="Editar">
                               <Pencil className="h-4 w-4" />
                             </button>
-                            <button onClick={() => handleExcluir(p.id)} className="text-red-400 hover:text-red-600 p-1" title="Excluir">
+                            <button
+                              onClick={() => handleAlternarAtivo(p)}
+                              className={`p-1 ${p.ativo ? "text-amber-500 hover:text-amber-700" : "text-green-500 hover:text-green-700"}`}
+                              title={p.ativo ? "Desativar (preserva o histórico)" : "Reativar"}
+                            >
+                              <Power className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleExcluir(p)}
+                              className="text-red-400 hover:text-red-600 p-1"
+                              title="Excluir (só se nunca teve aula atribuída)"
+                            >
                               <Trash2 className="h-4 w-4" />
                             </button>
                           </div>

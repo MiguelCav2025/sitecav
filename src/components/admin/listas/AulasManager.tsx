@@ -34,7 +34,7 @@ export default function AulasManager() {
   useEffect(() => {
     Promise.all([
       supabase.from("turmas").select("id, nome").order("nome"),
-      supabase.from("professores").select("id, nome").order("nome"),
+      supabase.from("professores").select("id, nome").eq("ativo", true).order("nome"),
     ]).then(([{ data: ts }, { data: ps }]) => {
       setTurmas(ts ?? []);
       setProfessores(ps ?? []);

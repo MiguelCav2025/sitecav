@@ -185,17 +185,29 @@ function AulasDaDisciplinaModal({
 
   useEffect(() => { carregarAulas(); }, [disciplina.id]);
 
-  // Atualiza todas as aulas da disciplina para uma turma com o novo professor
+  // Reatribui o regente apenas das aulas AINDA NÃO DADAS.
+  // Aula fechada guarda quem de fato lecionou e escreveu o diário de sala —
+  // reescrevê-la trocaria a autoria do que já aconteceu. O banco também barra.
   const handleChangeProfTurma = async (turmaId: string, professorId: string) => {
     setSalvandoProf(prev => ({ ...prev, [turmaId]: true }));
     const pid = professorId === "none" ? null : professorId;
-    await supabase
+
+    const { error } = await supabase
       .from("aulas")
       .update({ professor_id: pid })
       .eq("disciplina_id", disciplina.id)
-      .eq("turma_id", turmaId);
+      .eq("turma_id", turmaId)
+      .eq("chamada_aberta", false);
+
+    if (error) {
+      setSalvandoProf(prev => ({ ...prev, [turmaId]: false }));
+      alert(`Não foi possível trocar o professor: ${error.message}`);
+      return;
+    }
+
     setProfPorTurma(prev => ({ ...prev, [turmaId]: professorId }));
     setSalvandoProf(prev => ({ ...prev, [turmaId]: false }));
+    carregarAulas();
   };
 
   // Agrupa por turma (chave = turma_id para poder atualizar)
@@ -456,7 +468,8 @@ export default function DisciplinasManager() {
     const [{ data: discs }, { data: ts }, { data: ps }, { data: crons }] = await Promise.all([
       supabase.from("disciplinas").select("*").order("curso").order("semestre_do_curso").order("dia_da_semana", { ascending: true, nullsFirst: false }).order("nome"),
       supabase.from("turmas").select("id, nome, semestre, curso, turno").order("semestre", { ascending: false }),
-      supabase.from("professores").select("id, nome").order("nome"),
+      // Só professores ativos podem receber novas atribuições
+      supabase.from("professores").select("id, nome").eq("ativo", true).order("nome"),
       supabase.from("cronogramas").select("*").order("data_inicio", { ascending: false }),
     ]);
     setDisciplinas(discs ?? []);
