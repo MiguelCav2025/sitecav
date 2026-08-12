@@ -294,6 +294,27 @@ export async function lerPlanilhas(pasta = PASTA_PADRAO) {
 }
 
 /**
+ * Datas de uma disciplina geradas pelo cronograma, pulando feriados.
+ *
+ * Usado quando a planilha não traz datas confiáveis — há aba que ficou com o
+ * calendário do semestre anterior. Mesma regra do app: dia fixo na semana, e
+ * feriado significa uma aula a menos, não a grade deslizando.
+ */
+export function gerarDatasDoCronograma(cronograma, diaDaSemana) {
+  const feriados = new Set(cronograma.feriados ?? []);
+  const datas = [];
+  const d = new Date(`${cronograma.data_inicio}T12:00:00`);
+  const fim = new Date(`${cronograma.data_fim}T12:00:00`);
+
+  while (d <= fim) {
+    const iso = d.toISOString().split("T")[0];
+    if (d.getDay() === diaDaSemana && !feriados.has(iso)) datas.push(iso);
+    d.setDate(d.getDate() + 1);
+  }
+  return datas;
+}
+
+/**
  * Semestre de entrada de uma turma que hoje está no módulo informado.
  * Turma no 3º módulo em 2026/2 entrou em 2025/2.
  */
