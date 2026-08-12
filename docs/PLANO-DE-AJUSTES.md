@@ -163,6 +163,28 @@ Tudo unificado em `lib/calendario-escolar.ts`, com a data "hoje" **injetável** 
 
 Isso encerra o `P14`: antes, mudar o dia da semana gravava só na disciplina e as aulas ficavam nas datas antigas — a tela dizia "quarta" enquanto as aulas seguiam na terça.
 
+### Fase 8 — Grupos, notas e banca 🔧 em andamento
+
+**Banco ✅ aplicado e verificado.** `grupos`, `grupo_alunos`, `notas_disciplina` e a view `vw_desempenho_aluno`. RLS conferido: a chave anon não enxerga nada disso.
+
+| Decisão de modelagem | Por quê |
+|---|---|
+| Nota final **não é armazenada** | Guardar o resultado criaria um valor que envelhece sozinho assim que a nota da banca fosse corrigida |
+| View com `security_invoker = true` | Sem isso a view rodaria com os privilégios do dono e **ignoraria o RLS** — qualquer professor leria as notas da escola inteira |
+| Ausência vira `NULL`, nunca `0` | Aluno sem banca, disciplina sem aula dada. Zero afirmaria "tirou zero" quando o correto é "ainda não se sabe" |
+| Grupo chaveado por `semestre_do_curso` | A turma atravessa três semestres e forma grupos novos em cada um |
+| Trava de grupo único | Um aluno em dois grupos do mesmo semestre tornaria a nota da banca dele ambígua |
+| Regra de aprovação **fora do banco** | Em `lib/aprovacao.ts`, para o critério mudar sem migração |
+
+**Regra de aprovação ✅ implementada e testada** — `lib/aprovacao.ts`, 15 testes:
+
+- decisão do **semestre inteiro** (`D35`): uma matéria abaixo da nota retém o aluno;
+- frequência **somada no semestre**, não exigida disciplina a disciplina (ver `N22`);
+- `indefinido` é situação de primeira classe: falta lançar nota ou banca. Tratar isso como reprovação transformaria esquecimento administrativo em retenção de aluno;
+- quem **já** ficou abaixo da nota ou da frequência é retido mesmo com outra disciplina pendente — não há o que esperar.
+
+**Falta:** as telas de lançamento (professor) e de grupos/banca (coordenador).
+
 > Nada commitado. Tudo no working tree. Produção intocada.
 
 ---
@@ -269,6 +291,11 @@ Não existe tabela ligando os dois. É derivado de `aulas.professor_id` + `aulas
 | **D30** | ⭐ **Os dados acadêmicos ainda são de teste** — turmas, alunos, aulas e presenças não estão em uso real. Podemos migrar e reestruturar à vontade. **O site institucional, esse sim, está no ar** e exige cuidado |
 | **D31** | **Gabarito:** lista de itens `número → resposta`, com a resposta em **texto livre** — a maioria é `12-C`, mas alguns podem ser por extenso |
 | **D32** | **Apagar `aulas.descricao`.** O diário de sala é responsabilidade exclusiva do professor; o coordenador só acompanha |
+| **D33** | **A nota do professor pode ser corrigida** depois de lançada. Diferente da chamada, que é definitiva (`D6`) |
+| **D34** | **A nota final é arredondada** para 1 casa antes de comparar com o mínimo. `(6,5 + 5,4) ÷ 2 = 5,95` → **6,0** → aprovado |
+| **D35** | **A aprovação é do semestre, não da disciplina.** Ficar abaixo da nota em **uma única** matéria retém o aluno no semestre |
+| **D36** | **Todo aluno está em algum grupo** — pode ser grupo de uma pessoa só. Aluno sem grupo é falha de cadastro, não estado legítimo |
+| **D37** | **O professor não vê a nota final.** Ele vê a que lançou; a banca e os grupos são do coordenador. Escolha por menor privilégio — nada impede abrir depois |
 
 ### PWA
 
@@ -392,6 +419,11 @@ A aula deixa de ser aba solta e passa a viver **dentro da disciplina** — onde 
 
 - **N15 🔍** — Testar num **celular real** (um Android e um iPhone): o app instala e abre em tela cheia? Se o Android não oferecer instalação, a solução é um service worker mínimo, **sem cache** — não é offline, é só o que alguns navegadores exigem para liberar a instalação.
 - **N16 🔍** — Entrar com uma **conta de professor** e confirmar: vê só as disciplinas dele, consegue fechar uma chamada, e a tela de primeiro acesso mostra o convite de instalação.
+
+- **N22 ❓ (afeta quem passa)** — "70% de presença em **todas as aulas** da turma dele" tem duas leituras:
+  **(a)** somar tudo do semestre — 40% numa disciplina e 100% na outra dá 70% no total e **aprova**;
+  **(b)** exigir 70% em **cada** disciplina — a mesma situação **reprova**.
+  Implementei a **(a)**, que é como eu li sua frase, e deixei a diferença coberta por teste. Trocar para (b) é mudar poucas linhas.
 
 Dois pontos menores, com default assumido — só me avise se discordar:
 

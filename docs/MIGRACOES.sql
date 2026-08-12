@@ -16,6 +16,8 @@
 --   Limpeza ... [x] `drop column descricao` aplicado em 12/08/2026
 --   Fase 1.5 .. [x] constraint dos 30 caracteres validada em 12/08/2026
 --   Fase 3 .... [x] aplicada e verificada em 12/08/2026 (blocos 3.1-3.8 e 3.9)
+--   Fase 5 .... [x] aplicada e verificada em 12/08/2026
+--   Fase 8 .... [ ] nao aplicada — aguardando revisao
 --
 -- COMO RODAR: um bloco de cada vez (FASE 1, depois FASE 2), conferindo o
 -- resultado entre eles. O editor do Supabase executa a selecao inteira como
@@ -774,6 +776,261 @@ create policy gabarito_itens_admin on public.gabarito_itens
 -- ----------------------------------------------------------------------------
 -- drop table if exists public.gabarito_itens;
 -- drop table if exists public.gabaritos;
+
+
+-- ============================================================================
+-- FASE 8 — Grupos, notas e banca
+-- Cobre: D15, D16, D18, D19, D20, D21. Depende das fases 2 e 3.
+-- ============================================================================
+--
+-- MODELO
+--
+--   nota do professor .... por (aluno, disciplina, turma). Mesma chave que as
+--                          aulas ja usam. Cada professor lanca a da SUA
+--                          disciplina, entao o aluno tem varias por semestre.
+--
+--   nota da banca ........ do GRUPO, nao do aluno. Grupo e uma equipe dentro
+--                          da turma (ex.: 5 alunos que fazem um filme juntos)
+--                          e todos os integrantes recebem a mesma nota.
+--
+--   nota final ........... NAO e armazenada. E (professor + banca) / 2,
+--                          calculada na view. Guardar o resultado criaria um
+--                          valor que envelhece sozinho quando qualquer uma das
+--                          duas partes mudar.
+--
+-- Por que o grupo e chaveado por `semestre_do_curso` (1..3) e nao pelo
+-- semestre do calendario: a turma atravessa tres semestres e forma grupos
+-- novos em cada um. `semestre_do_curso` e a mesma chave que `disciplinas` usa,
+-- entao juntar nota do professor com nota da banca fica direto.
+
+
+-- ----------------------------------------------------------------------------
+-- 8.1 Grupos da banca
+-- ----------------------------------------------------------------------------
+create table if not exists public.grupos (
+  id                uuid primary key default gen_random_uuid(),
+  turma_id          uuid not null references public.turmas(id) on delete cascade,
+  semestre_do_curso integer not null check (semestre_do_curso between 1 and 3),
+  nome              text not null,
+  nota_banca        numeric(4,2) check (nota_banca >= 0 and nota_banca <= 10),
+  observacao        text,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now(),
+  constraint grupos_nome_unico_na_turma unique (turma_id, semestre_do_curso, nome)
+);
+
+comment on table  public.grupos is
+  'Equipe de alunos dentro de uma turma, num semestre do curso. A banca avalia o grupo.';
+comment on column public.grupos.nota_banca is
+  'Lancada pelo coordenador. NULL = banca ainda nao avaliou. Vale para todos os integrantes (D19/D21).';
+
+create index if not exists idx_grupos_turma on public.grupos(turma_id, semestre_do_curso);
+
+
+-- ----------------------------------------------------------------------------
+-- 8.2 Integrantes do grupo
+-- ----------------------------------------------------------------------------
+create table if not exists public.grupo_alunos (
+  grupo_id uuid not null references public.grupos(id) on delete cascade,
+  aluno_id uuid not null references public.alunos(id) on delete cascade,
+  primary key (grupo_id, aluno_id)
+);
+
+create index if not exists idx_grupo_alunos_aluno on public.grupo_alunos(aluno_id);
+
+-- Um aluno so pode estar em UM grupo por turma/semestre. A chave primaria
+-- acima impede repetir no mesmo grupo, mas nao impede entrar em dois grupos
+-- diferentes do mesmo semestre — o que tornaria a nota da banca ambigua.
+create or replace function public.impede_aluno_em_dois_grupos()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_turma    uuid;
+  v_semestre integer;
+  v_conflito text;
+begin
+  select g.turma_id, g.semestre_do_curso
+    into v_turma, v_semestre
+    from public.grupos g
+   where g.id = new.grupo_id;
+
+  select g.nome into v_conflito
+    from public.grupo_alunos ga
+    join public.grupos g on g.id = ga.grupo_id
+   where ga.aluno_id = new.aluno_id
+     and ga.grupo_id <> new.grupo_id
+     and g.turma_id = v_turma
+     and g.semestre_do_curso = v_semestre
+   limit 1;
+
+  if v_conflito is not null then
+    raise exception
+      'Este aluno ja esta no grupo "%" nesta turma e semestre. Remova-o de la antes.', v_conflito
+      using errcode = 'unique_violation';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_aluno_em_um_grupo on public.grupo_alunos;
+create trigger trg_aluno_em_um_grupo
+  before insert or update on public.grupo_alunos
+  for each row execute function public.impede_aluno_em_dois_grupos();
+
+
+-- ----------------------------------------------------------------------------
+-- 8.3 Nota do professor, por disciplina
+-- ----------------------------------------------------------------------------
+create table if not exists public.notas_disciplina (
+  id            uuid primary key default gen_random_uuid(),
+  aluno_id      uuid not null references public.alunos(id)      on delete cascade,
+  disciplina_id uuid not null references public.disciplinas(id) on delete cascade,
+  turma_id      uuid not null references public.turmas(id)      on delete cascade,
+  nota          numeric(4,2) not null check (nota >= 0 and nota <= 10),
+  observacao    text,
+  -- Quem lancou. Fica NULL se o professor for removido, sem apagar a nota.
+  lancada_por   uuid references public.professores(id) on delete set null,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now(),
+  constraint notas_disciplina_unica unique (aluno_id, disciplina_id, turma_id)
+);
+
+comment on table public.notas_disciplina is
+  'Nota que o professor da disciplina atribui ao aluno. Um aluno tem uma por disciplina cursada (D18).';
+
+create index if not exists idx_notas_aluno      on public.notas_disciplina(aluno_id);
+create index if not exists idx_notas_disciplina on public.notas_disciplina(disciplina_id, turma_id);
+
+
+-- ----------------------------------------------------------------------------
+-- 8.4 Quem leciona o que — para o RLS das notas
+-- ----------------------------------------------------------------------------
+-- As funcoes da fase 3 respondem "esta aula e minha?". Aqui a pergunta e
+-- "eu leciono esta disciplina NESTA turma?", que e o escopo da nota.
+create or replace function public.professor_leciona_disciplina_na_turma(
+  p_disciplina uuid,
+  p_turma uuid
+)
+returns boolean language sql security definer stable
+set search_path = public as $$
+  select exists (
+    select 1 from public.aulas a
+     where a.disciplina_id = p_disciplina
+       and a.turma_id      = p_turma
+       and a.professor_id  = public.professor_atual()
+  );
+$$;
+
+
+-- ----------------------------------------------------------------------------
+-- 8.5 RLS
+-- ----------------------------------------------------------------------------
+alter table public.grupos           enable row level security;
+alter table public.grupo_alunos     enable row level security;
+alter table public.notas_disciplina enable row level security;
+
+-- Grupos e nota da banca: so o coordenador.
+drop policy if exists grupos_admin on public.grupos;
+create policy grupos_admin on public.grupos
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists grupo_alunos_admin on public.grupo_alunos;
+create policy grupo_alunos_admin on public.grupo_alunos
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+-- Notas: coordenador ve tudo; professor so a disciplina que ele leciona
+-- naquela turma.
+drop policy if exists notas_admin on public.notas_disciplina;
+create policy notas_admin on public.notas_disciplina
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists notas_professor_leitura on public.notas_disciplina;
+create policy notas_professor_leitura on public.notas_disciplina
+  for select to authenticated
+  using (public.professor_leciona_disciplina_na_turma(disciplina_id, turma_id));
+
+drop policy if exists notas_professor_lanca on public.notas_disciplina;
+create policy notas_professor_lanca on public.notas_disciplina
+  for insert to authenticated
+  with check (public.professor_leciona_disciplina_na_turma(disciplina_id, turma_id));
+
+drop policy if exists notas_professor_corrige on public.notas_disciplina;
+create policy notas_professor_corrige on public.notas_disciplina
+  for update to authenticated
+  using (public.professor_leciona_disciplina_na_turma(disciplina_id, turma_id))
+  with check (public.professor_leciona_disciplina_na_turma(disciplina_id, turma_id));
+
+
+-- ----------------------------------------------------------------------------
+-- 8.6 View de desempenho — nota final e presenca calculadas
+-- ----------------------------------------------------------------------------
+-- `security_invoker = true` faz o RLS das tabelas de baixo valer para quem
+-- consulta. Sem isso a view rodaria com os privilegios do dono e vazaria os
+-- dados de todos os alunos para qualquer professor.
+--
+-- Tudo que pode faltar vira NULL em vez de zero: aluno sem banca, disciplina
+-- sem aula dada. Zero seria uma afirmacao errada — "tirou zero", "faltou a
+-- tudo" — quando o correto e "ainda nao se sabe".
+drop view if exists public.vw_desempenho_aluno;
+create view public.vw_desempenho_aluno
+with (security_invoker = true) as
+select
+  n.aluno_id,
+  al.nome                       as aluno,
+  n.turma_id,
+  n.disciplina_id,
+  d.nome                        as disciplina,
+  d.semestre_do_curso,
+  n.nota                        as nota_professor,
+  g.nota_banca,
+  case
+    when g.nota_banca is null then null
+    else round((n.nota + g.nota_banca) / 2, 2)
+  end                           as nota_final,
+  pres.aulas_dadas,
+  pres.presencas,
+  case
+    when pres.aulas_dadas is null or pres.aulas_dadas = 0 then null
+    else round(pres.presencas * 100.0 / pres.aulas_dadas, 1)
+  end                           as percentual_presenca
+from public.notas_disciplina n
+join public.alunos      al on al.id = n.aluno_id
+join public.disciplinas d  on d.id  = n.disciplina_id
+left join public.grupos g
+  on  g.turma_id          = n.turma_id
+  and g.semestre_do_curso = d.semestre_do_curso
+  and exists (
+    select 1 from public.grupo_alunos ga
+     where ga.grupo_id = g.id and ga.aluno_id = n.aluno_id
+  )
+left join lateral (
+  select
+    count(*)                                          as aulas_dadas,
+    count(*) filter (where p.presente)                as presencas
+  from public.aulas a
+  left join public.presencas p
+    on p.aula_id = a.id and p.aluno_id = n.aluno_id
+  where a.turma_id      = n.turma_id
+    and a.disciplina_id = n.disciplina_id
+    and a.chamada_aberta          -- so aula efetivamente dada (D16)
+) pres on true;
+
+comment on view public.vw_desempenho_aluno is
+  'Nota final e frequencia por aluno/disciplina. NULL significa indeterminado, nunca zero. A regra de aprovacao (>=6 e >=70%) fica na aplicacao, nao aqui, para poder mudar sem migracao.';
+
+
+-- ----------------------------------------------------------------------------
+-- ROLLBACK DA FASE 8 (deixar comentado)
+-- ----------------------------------------------------------------------------
+-- drop view  if exists public.vw_desempenho_aluno;
+-- drop table if exists public.notas_disciplina;
+-- drop trigger if exists trg_aluno_em_um_grupo on public.grupo_alunos;
+-- drop function if exists public.impede_aluno_em_dois_grupos();
+-- drop table if exists public.grupo_alunos;
+-- drop table if exists public.grupos;
+-- drop function if exists public.professor_leciona_disciplina_na_turma(uuid, uuid);
 
 
 -- ============================================================================
