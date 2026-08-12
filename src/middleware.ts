@@ -37,13 +37,33 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const ehAreaDoProfessor = request.nextUrl.pathname.startsWith("/professor");
+
   if (!user) {
     const url = request.nextUrl.clone();
-    url.pathname = request.nextUrl.pathname.startsWith("/professor")
-      ? "/professor/login"
-      : "/admin/login";
+    url.pathname = ehAreaDoProfessor ? "/professor/login" : "/admin/login";
     url.search = "";
     return NextResponse.redirect(url);
+  }
+
+  // O painel exige ser administrador, não apenas estar autenticado. Sem esta
+  // checagem, um professor logado recebia o HTML do painel e só era mandado
+  // embora depois que o JavaScript rodasse — os dados ficavam protegidos pelo
+  // RLS, mas a casca aparecia.
+  if (!ehAreaDoProfessor) {
+    const { data: admin } = await supabase
+      .from("administradores")
+      .select("user_id")
+      .eq("user_id", user.id)
+      .eq("ativo", true)
+      .maybeSingle();
+
+    if (!admin) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/professor/dashboard";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;

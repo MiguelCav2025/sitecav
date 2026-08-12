@@ -20,7 +20,10 @@
 --   Fase 8 .... [x] aplicada e verificada em 12/08/2026
 --   Fase 9 .... [x] aplicada em 12/08/2026
 --   Fase 9-B .. [x] aplicada e verificada em 12/08/2026 (alunos.turma_id removida)
---   Fase 10 ... [ ] nao aplicada — notas parciais, banca por modulo, salas
+--   Fase 10 ... [x] aplicada em 12/08/2026 (notas parciais, banca por modulo, salas)
+--   Fase 11 ... [ ] nao aplicada — admin por concessao explicita.
+--                   Rodar 11.1 a 11.5 DE UMA VEZ: a funcao so pode mudar
+--                   depois de a tabela estar populada, senao o painel tranca.
 --
 -- COMO RODAR: um bloco de cada vez (FASE 1, depois FASE 2), conferindo o
 -- resultado entre eles. O editor do Supabase executa a selecao inteira como
@@ -1431,6 +1434,216 @@ comment on view public.vw_desempenho_aluno is
 --   drop column if exists nota1, drop column if exists nota2,
 --   drop column if exists nota3, drop column if exists nota4;
 -- (a view volta ao texto da fase 8)
+
+
+-- ============================================================================
+-- FASE 11 — Administrador passa a ser concessao explicita
+-- Corrige a falha de fundo: hoje admin e o que sobra, nao o que se concede.
+-- ============================================================================
+--
+-- A REGRA ERRADA
+--
+--   is_admin() = autenticado E nao consta em `professores`
+--
+-- Ou seja: e administrador todo mundo que nao for professor. Qualquer conta
+-- criada por engano, importada ou orfa nasce com poder total sobre o painel.
+-- Foi exatamente o risco que apareceu ao tentar apagar os professores: as 17
+-- contas viravam administradoras.
+--
+-- A REGRA CERTA
+--
+--   is_admin() = consta em `administradores` e esta ativo
+--
+-- Quem nao foi concedido, nao e. Conta orfa deixa de ser perigosa.
+--
+-- ORDEM OBRIGATORIA: criar e POPULAR a tabela antes de trocar a funcao. Se a
+-- funcao mudar com a tabela vazia, ninguem e administrador — nem voce — e o
+-- painel tranca para todos.
+
+
+-- ----------------------------------------------------------------------------
+-- 11.1 A tabela
+-- ----------------------------------------------------------------------------
+create table if not exists public.administradores (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null unique references auth.users(id) on delete cascade,
+  nome       text not null,
+  email      text,
+  ativo      boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+comment on table public.administradores is
+  'Quem pode administrar o painel. Acesso e concedido aqui, nunca presumido.';
+
+
+-- ----------------------------------------------------------------------------
+-- 11.2 Popular com quem JA e administrador hoje
+-- ----------------------------------------------------------------------------
+-- Preserva exatamente o acesso atual no momento da troca. Sem este passo, o
+-- proximo bloco tranca o painel para todo mundo.
+insert into public.administradores (user_id, nome, email)
+select u.id,
+       initcap(replace(split_part(u.email, '@', 1), '.', ' ')),
+       u.email
+  from auth.users u
+ where not exists (
+   select 1 from public.professores p where p.user_id = u.id
+ )
+on conflict (user_id) do nothing;
+
+
+-- ----------------------------------------------------------------------------
+-- 11.3 So agora a regra muda
+-- ----------------------------------------------------------------------------
+create or replace function public.is_admin()
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.administradores a
+     where a.user_id = auth.uid()
+       and a.ativo
+  );
+$$;
+
+
+-- ----------------------------------------------------------------------------
+-- 11.4 Ninguem consegue ficar sem administrador
+-- ----------------------------------------------------------------------------
+-- Sem esta trava, remover ou desativar o ultimo administrador deixaria o
+-- painel inacessivel, sem caminho de volta pela interface.
+create or replace function public.impede_ficar_sem_admin()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_restantes integer;
+begin
+  select count(*) into v_restantes
+    from public.administradores
+   where ativo and id <> old.id;
+
+  if v_restantes = 0 then
+    raise exception 'Este e o ultimo administrador ativo. Conceda acesso a outra pessoa antes de remover este.'
+      using errcode = 'check_violation';
+  end if;
+
+  return coalesce(new, old);
+end;
+$$;
+
+drop trigger if exists trg_ultimo_admin on public.administradores;
+create trigger trg_ultimo_admin
+  before delete on public.administradores
+  for each row execute function public.impede_ficar_sem_admin();
+
+drop trigger if exists trg_ultimo_admin_desativado on public.administradores;
+create trigger trg_ultimo_admin_desativado
+  before update on public.administradores
+  for each row
+  when (old.ativo and not new.ativo)
+  execute function public.impede_ficar_sem_admin();
+
+
+-- ----------------------------------------------------------------------------
+-- 11.5 RLS
+-- ----------------------------------------------------------------------------
+-- is_admin() e SECURITY DEFINER, entao le esta tabela sem esbarrar na propria
+-- policy — nao ha circularidade.
+alter table public.administradores enable row level security;
+
+drop policy if exists administradores_admin on public.administradores;
+create policy administradores_admin on public.administradores
+  for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+
+
+-- ----------------------------------------------------------------------------
+-- ROLLBACK DA FASE 11 (deixar comentado)
+-- ----------------------------------------------------------------------------
+-- create or replace function public.is_admin()
+-- returns boolean language sql security definer stable set search_path = public as $$
+--   select auth.uid() is not null
+--      and not exists (select 1 from public.professores p where p.user_id = auth.uid());
+-- $$;
+-- drop trigger if exists trg_ultimo_admin on public.administradores;
+-- drop trigger if exists trg_ultimo_admin_desativado on public.administradores;
+-- drop function if exists public.impede_ficar_sem_admin();
+-- drop table if exists public.administradores;
+
+
+-- ============================================================================
+-- FASE 11-B — CORRECAO: gatilhos de coluna barravam o servidor
+-- ============================================================================
+--
+-- O QUE ESTAVA ERRADO
+--
+-- Os gatilhos da fase 3 liberam a operacao quando `is_admin()` e verdadeiro e
+-- bloqueiam no resto. Mas `is_admin()` depende de `auth.uid()`, e no editor
+-- SQL, numa rotina com service_role ou numa cascata de chave estrangeira NAO
+-- HA usuario autenticado: auth.uid() e nulo, is_admin() e falso, e o gatilho
+-- barra uma operacao legitima.
+--
+-- Apareceu ao tentar `delete from auth.users`: a cascata faz
+-- `UPDATE professores SET user_id = NULL`, e o gatilho recusava.
+--
+-- Estes gatilhos existem para conter o PROFESSOR autenticado. Sem sessao, quem
+-- controla o acesso e a RLS e a chave usada — nao eles.
+
+
+create or replace function public.professor_so_altera_senha_alterada()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  -- Sem sessao: editor SQL, rotina administrativa ou cascata de FK.
+  if auth.uid() is null then return new; end if;
+  if public.is_admin() then return new; end if;
+
+  if new.id      is distinct from old.id
+  or new.user_id is distinct from old.user_id
+  or new.nome    is distinct from old.nome
+  or new.email   is distinct from old.email
+  or new.ativo   is distinct from old.ativo then
+    raise exception 'Professor so pode registrar a propria troca de senha.'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  return new;
+end;
+$$;
+
+
+create or replace function public.professor_so_fecha_chamada()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then return new; end if;
+  if public.is_admin() then return new; end if;
+
+  if new.id            is distinct from old.id
+  or new.turma_id      is distinct from old.turma_id
+  or new.disciplina_id is distinct from old.disciplina_id
+  or new.professor_id  is distinct from old.professor_id
+  or new.numero        is distinct from old.numero
+  or new.semana        is distinct from old.semana
+  or new.data_aula     is distinct from old.data_aula then
+    raise exception 'Professor so pode fechar a chamada e registrar o conteudo da aula.'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  return new;
+end;
+$$;
 
 
 -- ============================================================================
