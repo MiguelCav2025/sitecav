@@ -19,15 +19,41 @@ const DIAS = { 1: "segunda", 2: "terça", 3: "quarta", 4: "quinta", 5: "sexta" }
 const titulo = (t) => console.log(`\n${"=".repeat(74)}\n${t}\n${"=".repeat(74)}`);
 const item = (t) => console.log(`  ${t}`);
 
+const grade = await lerGrade(PASTA_PADRAO);
+const todasAsPlanilhas = await lerPlanilhas(PASTA_PADRAO);
+const pendencias = [];
+
+// Só as planilhas do semestre que estamos importando. Havia um arquivo do
+// 1º semestre na pasta, e ele arrastava o calendário para março.
+const deOutroSemestre = todasAsPlanilhas.turmasDeAula.filter(
+  t => t.semestreDoArquivo && t.semestreDoArquivo !== SEMESTRE_ATUAL,
+);
+const planilhas = {
+  ...todasAsPlanilhas,
+  turmasDeAula: todasAsPlanilhas.turmasDeAula.filter(
+    t => t.semestreDoArquivo === SEMESTRE_ATUAL,
+  ),
+};
+
 /**
- * Disciplinas que existem nos dois cursos ganham sufixo, a pedido do
- * coordenador: são matérias diferentes, com professores diferentes.
+ * Disciplina cujo nome existe nos dois cursos ganha sufixo do curso.
+ *
+ * São matérias diferentes, com professores diferentes — o coordenador pediu
+ * isso para a Edição de Som, e o mesmo vale para as demais no mesmo caso.
  */
-const RENOMEAR_POR_CURSO = new Set(["EDICAO DE SOM"]);
+const NOMES_EM_DOIS_CURSOS = (() => {
+  const porNome = new Map();
+  for (const i of grade.itens) {
+    const k = normalizar(i.disciplina);
+    if (!porNome.has(k)) porNome.set(k, new Set());
+    porNome.get(k).add(i.curso);
+  }
+  return new Set([...porNome].filter(([, c]) => c.size > 1).map(([k]) => k));
+})();
 
 function nomeCanonico(disciplinaDaGrade, curso) {
   const base = capitalizar(disciplinaDaGrade);
-  return RENOMEAR_POR_CURSO.has(normalizar(disciplinaDaGrade))
+  return NOMES_EM_DOIS_CURSOS.has(normalizar(disciplinaDaGrade))
     ? `${base} - ${curso}`
     : base;
 }
@@ -73,10 +99,6 @@ function pontuar(celula, aba) {
   if (r && r === sufixoRomano(nomeDaAba)) nota += 0.1;
   return nota;
 }
-
-const grade = await lerGrade(PASTA_PADRAO);
-const planilhas = await lerPlanilhas(PASTA_PADRAO);
-const pendencias = [];
 
 // ── Entidades derivadas da grade ─────────────────────────────────────────────
 const salas = [...new Set(grade.itens.map(i => i.sala).filter(Boolean))]
@@ -146,6 +168,14 @@ for (const t of turmas.values()) {
 // ── Relatório ────────────────────────────────────────────────────────────────
 titulo(`PLANO DE IMPORTAÇÃO  ·  semestre ${SEMESTRE_ATUAL}  ·  a grade manda`);
 
+if (deOutroSemestre.length) {
+  const arquivos = [...new Set(deOutroSemestre.map(t => `${t.arquivo} (${t.semestreDoArquivo})`))];
+  console.log(`\n  Ignorados por serem de outro semestre (${arquivos.length} arquivo(s)):`);
+  arquivos.forEach(a => item(`  · ${a}`));
+  pendencias.push(`${arquivos.length} arquivo(s) de outro semestre foram ignorados — conferir se é isso mesmo.`);
+  console.log("");
+}
+
 item(`salas ......... ${salas.length}`);
 item(`professores ... ${professores.length}`);
 item(`turmas ........ ${turmas.size}`);
@@ -172,18 +202,12 @@ for (const t of [...turmas.values()].sort((a, b) => a.nome.localeCompare(b.nome)
   }
 }
 
+// Turma sem aluno não é criada: é o caso da turma que não abriu por falta de
+// inscritos. O sistema não precisa registrar o que não existe.
 const semAlunos = [...turmas.values()].filter(t => t.alunos.size === 0);
-for (const t of semAlunos) pendencias.push(`${t.nome} ficaria sem nenhum aluno.`);
-
-// Turma prevista na grade que não apareceu em planilha nenhuma
-for (const curso of ["Animação", "Cine/TV"]) {
-  for (const modulo of [1, 2, 3]) {
-    for (const turno of ["Manhã", "Noite"]) {
-      if (!turmas.has(`${curso}|${turno}|${modulo}`)) {
-        pendencias.push(`Não há planilha para ${curso} ${turno} ${modulo}º módulo — essa turma não será criada.`);
-      }
-    }
-  }
+for (const t of semAlunos) {
+  turmas.delete(`${t.curso}|${t.turno}|${t.modulo}`);
+  item(`  (${t.nome} não será criada — nenhum aluno)`);
 }
 
 const semPlanilha = grade.itens.filter(
@@ -204,23 +228,71 @@ const multi = [...alunos.values()].filter(a => a.turmas.length > 1);
 if (multi.length === 0) item("Nenhum.");
 else multi.forEach(a => item(`${a.nome} (${a.email ?? "sem e-mail"}): ${a.turmas.join("  +  ")}`));
 
-titulo("DISCIPLINAS COM NOME REPETIDO NOS DOIS CURSOS");
-const porNome = new Map();
-for (const d of disciplinas) {
-  const k = normalizar(d.nome.replace(/ - (Animação|Cine\/TV)$/, ""));
-  if (!porNome.has(k)) porNome.set(k, new Set());
-  porNome.get(k).add(d.curso);
-}
-const repetidas = [...porNome].filter(([, cursos]) => cursos.size > 1);
-if (repetidas.length === 0) item("Nenhuma.");
+titulo(`NOMES QUE GANHARAM SUFIXO DO CURSO (${NOMES_EM_DOIS_CURSOS.size})`);
+if (NOMES_EM_DOIS_CURSOS.size === 0) item("Nenhum.");
 else {
-  item("O coordenador pediu o sufixo do curso para Edição de Som. Estas estão no mesmo caso:");
-  repetidas.forEach(([k]) => {
-    const jaTratada = RENOMEAR_POR_CURSO.has(k);
-    item(`  ${jaTratada ? "✓ já com sufixo" : "? sem sufixo"}  ${capitalizar(k)}`);
-    if (!jaTratada) pendencias.push(`"${capitalizar(k)}" existe nos dois cursos — quer o sufixo também?`);
+  item("Existem nos dois cursos, com professores diferentes:");
+  [...NOMES_EM_DOIS_CURSOS].sort().forEach(k => item(`  ${capitalizar(k)}  →  ... - Animação  /  ... - Cine/TV`));
+}
+
+// ── Calendário real, lido das planilhas ──────────────────────────────────────
+// Janela do semestre. Há aba de arquivo do 2º semestre que ficou com o
+// calendário do 1º — copiaram o arquivo e não trocaram as datas. Sem esta
+// janela, essas abas puxam o período inteiro para março.
+const [anoSem, metadeSem] = SEMESTRE_ATUAL.split("/").map(Number);
+const JANELA = metadeSem === 1
+  ? { de: `${anoSem}-01-01`, ate: `${anoSem}-06-30` }
+  : { de: `${anoSem}-07-01`, ate: `${anoSem}-12-31` };
+
+const todasAsDatas = new Set();
+const abasForaDaJanela = [];
+
+for (const t of planilhas.turmasDeAula) {
+  const fora = t.datas.filter(d => d < JANELA.de || d > JANELA.ate);
+  if (fora.length > 0) {
+    abasForaDaJanela.push({ ...t, fora: fora.length, primeira: fora[0] });
+    continue; // não contamina o calendário
+  }
+  for (const d of t.datas) todasAsDatas.add(d);
+}
+
+if (abasForaDaJanela.length) {
+  titulo(`ABAS COM O CALENDÁRIO DO SEMESTRE ERRADO (${abasForaDaJanela.length})`);
+  item("O arquivo é do semestre certo, mas estas abas ficaram com as datas do anterior:");
+  abasForaDaJanela.forEach(t => {
+    item(`  · ${t.arquivo}`);
+    item(`      aba "${t.aba}" — ${t.fora} data(s) fora da janela, começando em ${t.primeira}`);
+    pendencias.push(`Aba "${t.aba}" de ${t.arquivo} está com o calendário do semestre anterior.`);
   });
 }
+const ordenadas = [...todasAsDatas].sort();
+const inicio = ordenadas[0];
+const fim = ordenadas[ordenadas.length - 1];
+
+titulo("CALENDÁRIO REAL, SEGUNDO AS PLANILHAS");
+item(`período: ${inicio} a ${fim}`);
+item(`dias com aula: ${ordenadas.length}`);
+
+// Dia útil dentro do período em que nenhuma turma teve aula = feriado/recesso
+const candidatosFeriado = [];
+const cursor = new Date(`${inicio}T12:00:00`);
+const ultimo = new Date(`${fim}T12:00:00`);
+while (cursor <= ultimo) {
+  const iso = cursor.toISOString().split("T")[0];
+  const dow = cursor.getDay();
+  if (dow >= 1 && dow <= 5 && !todasAsDatas.has(iso)) candidatosFeriado.push(iso);
+  cursor.setDate(cursor.getDate() + 1);
+}
+
+console.log(`\n  Dias úteis no período sem aula em turma nenhuma (${candidatosFeriado.length}):`);
+candidatosFeriado.forEach(d => {
+  const nome = new Date(`${d}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "long" });
+  item(`  · ${d} (${nome})`);
+});
+pendencias.push(
+  `Cronograma 2026/2 cadastrado vai de 2026-08-03 a 2026-11-27 e não tem feriado. ` +
+  `As planilhas mostram ${inicio} a ${fim} e ${candidatosFeriado.length} dia(s) úteis sem aula.`,
+);
 
 if (naoCasadas.length) {
   titulo(`ABAS QUE NÃO CASARAM COM A GRADE (${naoCasadas.length})`);

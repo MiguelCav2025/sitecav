@@ -173,12 +173,64 @@ const pareceNomeDePessoa = (nome) => {
   return limpo.length >= 5 && limpo.split(/\s+/).filter(p => p.length > 1).length >= 2;
 };
 
+const MESES = {
+  JANEIRO: 1, FEVEREIRO: 2, MARCO: 3, ABRIL: 4, MAIO: 5, JUNHO: 6,
+  JULHO: 7, AGOSTO: 8, SETEMBRO: 9, OUTUBRO: 10, NOVEMBRO: 11, DEZEMBRO: 12,
+};
+
+/** Ano usado ao montar as datas das aulas a partir de mês e dia. */
+export const ANO_PADRAO = 2026;
+
+/**
+ * Datas reais das aulas, lidas do cabeçalho da planilha.
+ *
+ * A linha do cabeçalho traz o mês (por extenso ou em número) no início de
+ * cada bloco de colunas; a linha seguinte traz o dia em cada coluna. São as
+ * datas em que a aula de fato aconteceu — mais fiéis do que regerar pelo
+ * cronograma, que está sem feriados.
+ */
+export function lerDatasDasAulas(ws, linhaCabecalho, ano = ANO_PADRAO) {
+  const cabecalho = ws.getRow(linhaCabecalho);
+  const linhaDias = ws.getRow(linhaCabecalho + 1);
+  const datas = [];
+  let mes = null;
+
+  for (let c = 4; c <= Math.max(cabecalho.cellCount, linhaDias.cellCount); c++) {
+    const marcador = normalizar(textoDaCelula(cabecalho.getCell(c)));
+
+    // "OBSERVAÇÕES" encerra o bloco de datas; depois vêm as notas
+    if (marcador.startsWith("OBSERVA") || marcador.startsWith("NOTA") || marcador === "BANCA") break;
+
+    if (marcador) {
+      const porExtenso = MESES[marcador.replace(/[^A-Z]/g, "")];
+      const numero = Number(marcador);
+      if (porExtenso) mes = porExtenso;
+      else if (Number.isInteger(numero) && numero >= 1 && numero <= 12) mes = numero;
+    }
+
+    const dia = Number(textoDaCelula(linhaDias.getCell(c)));
+    if (mes && Number.isInteger(dia) && dia >= 1 && dia <= 31) {
+      datas.push(`${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`);
+    }
+  }
+
+  return datas;
+}
+
 export async function lerPlanilhas(pasta = PASTA_PADRAO) {
   const arquivos = readdirSync(pasta).filter(f => f.toLowerCase().endsWith(".xlsx")).sort();
   const turmasDeAula = [];
   const avisos = [];
 
   for (const arquivo of arquivos) {
+    // O nome do arquivo diz de que semestre ele é: "... - 2º sem 2026.xlsx".
+    // Um arquivo do semestre errado contamina o calendário inteiro.
+    const m = /(\d)\s*º?\s*sem\w*\s*(\d{4})/i.exec(arquivo);
+    const semestreDoArquivo = m ? `${m[2]}/${m[1]}` : null;
+    if (!semestreDoArquivo) {
+      avisos.push(`${arquivo}: não consegui ler o semestre do nome do arquivo.`);
+    }
+
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(path.join(pasta, arquivo));
 
@@ -206,6 +258,8 @@ export async function lerPlanilhas(pasta = PASTA_PADRAO) {
         continue;
       }
 
+      const datas = lerDatasDasAulas(ws, linhaCabecalho, ANO_PADRAO);
+
       const alunos = [];
       let descartadas = 0;
       for (let r = linhaCabecalho + 1; r <= ws.rowCount; r++) {
@@ -225,10 +279,12 @@ export async function lerPlanilhas(pasta = PASTA_PADRAO) {
 
       turmasDeAula.push({
         arquivo,
+        semestreDoArquivo,
         aba: ws.name.trim(),
         ...cabecalhoAba,
         disciplina: disciplina.trim(),
         professor: professor.trim(),
+        datas,
         alunos,
       });
     }
