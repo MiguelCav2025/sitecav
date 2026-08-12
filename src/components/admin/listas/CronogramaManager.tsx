@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { contarDiasLetivos } from "@/lib/calendario-escolar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,21 +24,10 @@ function formatarData(iso: string) {
   return `${d}/${m}/${y}`;
 }
 
-// Conta quantas ocorrências de cada dia da semana (1=Seg…5=Sex) há no período
-function contarOcorrencias(inicio: string, fim: string, feriados: string[]): Record<number, number> {
-  const resultado: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-  const feriadosSet = new Set(feriados);
-  const d = new Date(inicio + "T12:00:00");
-  const fimDate = new Date(fim + "T12:00:00");
-  while (d <= fimDate) {
-    const dow = d.getDay(); // 0=Dom … 6=Sáb
-    if (dow >= 1 && dow <= 5 && !feriadosSet.has(d.toISOString().split("T")[0])) {
-      resultado[dow] = (resultado[dow] ?? 0) + 1;
-    }
-    d.setDate(d.getDate() + 1);
-  }
-  return resultado;
-}
+// Conta quantas ocorrências de cada dia da semana (1=Seg…5=Sex) há no período.
+// A regra vive em @/lib/calendario-escolar, com testes.
+const contarOcorrencias = (inicio: string, fim: string, feriados: string[]) =>
+  contarDiasLetivos({ data_inicio: inicio, data_fim: fim, feriados });
 
 export default function CronogramaManager() {
   const supabase = createClient();

@@ -27,7 +27,12 @@ export function interpretarGabarito(texto: string): ItemGabarito[] {
 
     const numero = Number(m[1]);
     const resposta = m[2].trim();
-    if (!Number.isInteger(numero) || numero < 1 || !resposta) continue;
+    if (!Number.isInteger(numero) || numero < 1) continue;
+
+    // O separador e opcional no regex, entao "1-" faz o proprio hifen ser
+    // capturado como resposta. Exigir ao menos uma letra ou digito descarta
+    // esses restos sem recusar respostas legitimas.
+    if (!/[\p{L}\p{N}]/u.test(resposta)) continue;
 
     porNumero.set(numero, resposta);
   }

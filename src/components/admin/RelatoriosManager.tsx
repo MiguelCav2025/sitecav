@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { semestreDoCurso } from "@/lib/calendario-escolar";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Download, BarChart3, Users, BookOpen, AlertCircle } from "lucide-react";
@@ -13,16 +14,11 @@ interface LinhaRelatorio { aluno: string; total_aulas: number; presentes: number
 
 const ROMANOS = ["I", "II", "III", "IV", "V", "VI"];
 
-function calcularSemestreDoCurso(semestreEntrada: string): number {
-  // "2025/1" → ano=2025, metade=1
-  const [ano, metade] = semestreEntrada.split("/").map(Number);
-  const hoje = new Date();
-  const anoAtual = hoje.getFullYear();
-  const metadeAtual = hoje.getMonth() < 6 ? 1 : 2;
-  const semEntrada = ano * 2 + metade;
-  const semAtual = anoAtual * 2 + metadeAtual;
-  return Math.max(1, semAtual - semEntrada + 1);
-}
+// O piso em 1 é comportamento herdado: uma turma que ainda não começou aparece
+// no relatório como se estivesse no 1º semestre. Mantido para não alterar a
+// saída dos relatórios sem decisão. Ver P10 no plano de ajustes.
+const calcularSemestreDoCurso = (semestreEntrada: string) =>
+  Math.max(1, semestreDoCurso(semestreEntrada) ?? 1);
 
 function labelTurma(t: Turma): string {
   const sem = calcularSemestreDoCurso(t.semestre);

@@ -2,6 +2,12 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  semestreDoCurso,
+  semestreLetivo,
+  contarDiasLetivos,
+  gerarDatasAulas,
+} from "@/lib/calendario-escolar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -82,56 +88,15 @@ const badgeSem = (s: number) => {
   return { badge: "bg-purple-100 text-purple-700", border: "border-purple-200", header: "bg-purple-50" };
 };
 
-function calcularSemestreDoCurso(semestreEntrada: string): number {
-  const hoje = new Date();
-  const anoAtual = hoje.getFullYear();
-  const semestreAtual = hoje.getMonth() < 6 ? 1 : 2;
-  const [anoEntrada, semEntrada] = semestreEntrada.split("/").map(Number);
-  if (!anoEntrada || !semEntrada) return 0;
-  return (anoAtual - anoEntrada) * 2 + (semestreAtual - semEntrada) + 1;
-}
+// As regras de calendário vivem em @/lib/calendario-escolar, com testes.
+// Estavam duplicadas aqui e em outros três componentes.
+const calcularSemestreDoCurso = (semestreEntrada: string) =>
+  semestreDoCurso(semestreEntrada) ?? 0;
 
-// Calcula qual semestre letivo (ex: "2026/1") a turma está cursando, dado o nº do semestre do curso
-function semestreLetivoParaTurma(semestreEntrada: string, semestreDoCurso: number): string {
-  const [ano, sem] = semestreEntrada.split("/").map(Number);
-  if (!ano || !sem) return "";
-  const total = ano * 2 + sem - 1 + (semestreDoCurso - 1); // half-years from year 0
-  const novoAno = Math.floor(total / 2);
-  const novoSem = (total % 2) + 1;
-  return `${novoAno}/${novoSem}`;
-}
+const semestreLetivoParaTurma = semestreLetivo;
 
-// Conta ocorrências de cada dia útil (1=Seg…5=Sex) no período, excluindo feriados
-function contarOcorrencias(inicio: string, fim: string, feriados: string[]): Record<number, number> {
-  const resultado: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-  const feriadosSet = new Set(feriados);
-  const d = new Date(inicio + "T12:00:00");
-  const fimDate = new Date(fim + "T12:00:00");
-  while (d <= fimDate) {
-    const dow = d.getDay();
-    if (dow >= 1 && dow <= 5 && !feriadosSet.has(d.toISOString().split("T")[0])) {
-      resultado[dow] = (resultado[dow] ?? 0) + 1;
-    }
-    d.setDate(d.getDate() + 1);
-  }
-  return resultado;
-}
-
-// Retorna as datas do dia_da_semana no período, excluindo feriados, até totalAulas datas
-function gerarDatasAulas(inicio: string, fim: string, diaSemana: number, feriados: string[], totalAulas: number): (string | null)[] {
-  const feriadosSet = new Set(feriados);
-  const datas: (string | null)[] = [];
-  const d = new Date(inicio + "T12:00:00");
-  const fimDate = new Date(fim + "T12:00:00");
-  while (d <= fimDate && datas.length < totalAulas) {
-    if (d.getDay() === diaSemana && !feriadosSet.has(d.toISOString().split("T")[0])) {
-      datas.push(d.toISOString().split("T")[0]);
-    }
-    d.setDate(d.getDate() + 1);
-  }
-  while (datas.length < totalAulas) datas.push(null);
-  return datas;
-}
+const contarOcorrencias = (inicio: string, fim: string, feriados: string[]) =>
+  contarDiasLetivos({ data_inicio: inicio, data_fim: fim, feriados });
 
 // ── Modal de aulas por disciplina ─────────────────────────────────────────────
 
@@ -528,7 +493,7 @@ export default function DisciplinasManager() {
         const semLetivo = semestreLetivoParaTurma(turma.semestre, parseInt(form.semestre_do_curso));
         const cron = cronogramas.find(c => c.semestre === semLetivo);
         if (cron) {
-          datas = gerarDatasAulas(cron.data_inicio, cron.data_fim, diaSemanaNum, cron.feriados, totalAulasNum);
+          datas = gerarDatasAulas(cron, diaSemanaNum, totalAulasNum);
         }
       }
 

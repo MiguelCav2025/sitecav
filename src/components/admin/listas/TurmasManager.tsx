@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { semestreDoCurso, rotuloSemestreDoCurso } from "@/lib/calendario-escolar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,20 +30,8 @@ interface Aluno {
 const CURSOS = ["Animação", "Cine/TV"];
 const TURNOS = ["Manhã", "Noite"];
 
-function calcularSemestreDoCurso(semestreEntrada: string): string {
-  const hoje = new Date();
-  const anoAtual = hoje.getFullYear();
-  const semestreAtual = hoje.getMonth() < 6 ? 1 : 2;
-  const [anoEntrada, semEntrada] = semestreEntrada.split("/").map(Number);
-  if (!anoEntrada || !semEntrada) return "";
-  const totalSemestresPassados = (anoAtual - anoEntrada) * 2 + (semestreAtual - semEntrada);
-  const semCurso = totalSemestresPassados + 1;
-  if (semCurso <= 0) return "Ainda não iniciou";
-  if (semCurso === 1) return "1º semestre do curso";
-  if (semCurso === 2) return "2º semestre do curso";
-  if (semCurso === 3) return "3º semestre do curso";
-  return "Curso concluído";
-}
+const calcularSemestreDoCurso = (semestreEntrada: string) =>
+  rotuloSemestreDoCurso(semestreDoCurso(semestreEntrada), " do curso");
 
 function badgeSemestre(semCurso: string) {
   if (semCurso.includes("1º")) return "bg-green-100 text-green-700";

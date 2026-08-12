@@ -8,6 +8,7 @@ import {
   BookOpen, LogOut, ChevronRight, CheckCircle, XCircle,
   Loader2, GraduationCap, Users, ArrowLeft
 } from "lucide-react";
+import { semestreDoCurso, rotuloSemestreDoCurso } from "@/lib/calendario-escolar";
 
 interface Turma { id: string; nome: string; turno: string; semestre: string; curso: string; }
 interface Disciplina { id: string; nome: string; emoji: string | null; }
@@ -29,19 +30,8 @@ interface Aluno { id: string; nome: string; }
 interface Presenca { aluno_id: string; presente: boolean; }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-function semDocurso(semestreEntrada: string): string {
-  const hoje = new Date();
-  const anoAtual = hoje.getFullYear();
-  const semAtual = hoje.getMonth() < 6 ? 1 : 2;
-  const [ano, sem] = semestreEntrada.split("/").map(Number);
-  if (!ano || !sem) return "";
-  const n = (anoAtual - ano) * 2 + (semAtual - sem) + 1;
-  if (n <= 0) return "Ainda não iniciou";
-  if (n === 1) return "1º semestre";
-  if (n === 2) return "2º semestre";
-  if (n === 3) return "3º semestre";
-  return "Concluído";
-}
+const semDocurso = (semestreEntrada: string) =>
+  rotuloSemestreDoCurso(semestreDoCurso(semestreEntrada));
 
 function labelTurma(turma: Turma): string {
   return `${semDocurso(turma.semestre)} · ${turma.curso} ${turma.turno}`;

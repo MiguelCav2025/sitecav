@@ -127,6 +127,29 @@ E apareceu um efeito colateral: a v2 insere marcadores `-- 1 of 3 --` entre as p
 
 > ⚠️ **Correção de um relato meu:** eu havia afirmado que a fusão do `next.config` tinha resolvido o erro do `pdf-parse`. Estava errado — eu tinha olhado só o fim da saída do build, e esse erro aparece no início. A fusão do config foi necessária, mas não era a causa.
 
+### Revisão com testes ✅
+
+`npm test` — runner nativo do Node, sem dependência nova. **65 testes, 16 suítes.**
+
+| Módulo | O que é coberto |
+|---|---|
+| `lib/calendario-escolar.ts` | Leitura de "2025/1", posição da turma no curso, virada de 1º de julho, semestre letivo atravessando o ano, contagem de dias úteis, geração de datas com feriado |
+| `lib/gabarito.ts` | Formatos de colagem misturados, resposta por extenso, número repetido, buracos na numeração |
+| `parse-results/extractor.ts` | Separação por curso e período, número e nome em linhas separadas, cabeçalhos, e os marcadores de página do pdf-parse v2 |
+| `lib/admin-navegacao.ts` | Sem seções duplicadas, passos 1..N sem furo, ordem cronograma → turmas → disciplinas |
+
+#### O que a revisão encontrou
+
+**`P10` era pior do que eu havia registrado.** A regra do semestre não estava duplicada em dois arquivos, e sim em **quatro** — `TurmasManager`, `DisciplinasManager`, `RelatoriosManager` e o app do professor — **com comportamentos diferentes**:
+
+- o `RelatoriosManager` aplicava `Math.max(1, …)`, então turma que ainda não começou aparecia no relatório como se estivesse no 1º semestre;
+- os rótulos divergiam entre telas ("1º semestre" × "1º semestre do curso");
+- o tratamento de entrada inválida era diferente em cada cópia.
+
+Tudo unificado em `lib/calendario-escolar.ts`, com a data "hoje" **injetável** — antes a função chamava `new Date()` por dentro, o que a tornava intestável. O piso do relatório foi preservado de propósito, com comentário, para não alterar a saída sem decisão sua.
+
+**Um bug real encontrado pelos testes.** `interpretarGabarito("1-")` devolvia `{ numero: 1, resposta: "-" }`: como o separador é opcional no regex, o motor voltava atrás e usava o próprio hífen como resposta. Agora a resposta precisa conter ao menos uma letra ou dígito.
+
 > Nada commitado. Tudo no working tree. Produção intocada.
 
 ---
@@ -173,7 +196,7 @@ Não existe tabela ligando os dois. É derivado de `aulas.professor_id` + `aulas
 | **P6** | `chamada_aberta = true` significa **finalizada**. Nome invertido | 🟡 |
 | **P8** | PWA não existe (sem manifest, ícones ou service worker) | 🟡 |
 | **P9** | `/api/admin/list-users` retorna "Database error finding users" | 🟡 |
-| **P10** | Regra de semestre duplicada em dois arquivos | 🟡 |
+| **P10** | ~~Regra de semestre duplicada em dois arquivos~~ — eram **quatro**, com comportamentos diferentes. Unificada em `lib/calendario-escolar.ts` | ✅ |
 | **P11** | "Semestre atual" fixo em julho, ignorando o cronograma | 🟡 |
 | **P12** | `professor_turmas` sem uso; bucket `project-images` órfão | 🟡 |
 | **P16** | `aulas.descricao` ficou **sem dono** (ver `D5`) | 🟡 |
