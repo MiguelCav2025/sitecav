@@ -33,6 +33,10 @@ export type Situacao = "aprovado" | "retido" | "indefinido";
 export interface AvaliacaoDaDisciplina {
   disciplinaId: string;
   disciplina: string;
+  /** Nota atribuída pelo professor desta disciplina. */
+  notaProfessor: number | null;
+  /** Nota da banca. É a mesma em todas as disciplinas do semestre. */
+  notaBanca: number | null;
   /** Média com a banca, já arredondada. Null enquanto faltar nota ou banca. */
   notaFinal: number | null;
   /** Frequência nesta matéria. Null enquanto nenhuma chamada tiver sido fechada. */
@@ -115,7 +119,16 @@ export function avaliarDisciplina(d: DesempenhoDisciplina): AvaliacaoDaDisciplin
     motivos.push(`Nota ${notaFinal} e frequência de ${percentual}%.`);
   }
 
-  return { disciplinaId: d.disciplina_id, disciplina: d.disciplina, notaFinal, percentual, situacao, motivos };
+  return {
+    disciplinaId: d.disciplina_id,
+    disciplina: d.disciplina,
+    notaProfessor: d.nota_professor,
+    notaBanca: d.nota_banca,
+    notaFinal,
+    percentual,
+    situacao,
+    motivos,
+  };
 }
 
 /**

@@ -11,7 +11,13 @@ import {
   AlertCircle, AlertTriangle, CheckCircle, Loader2, Plus, Trash2, UserPlus, Users, X,
 } from "lucide-react";
 import { semestreDoCurso, SEMESTRES_DO_CURSO } from "@/lib/calendario-escolar";
-import { avaliarSemestre, type DesempenhoDisciplina, type Situacao } from "@/lib/aprovacao";
+import { buscarAlunosDaTurma } from "@/lib/matriculas";
+import {
+  avaliarSemestre,
+  type AvaliacaoDaDisciplina,
+  type DesempenhoDisciplina,
+  type Situacao,
+} from "@/lib/aprovacao";
 
 interface Turma { id: string; nome: string; semestre: string; curso: string; turno: string; }
 interface Aluno { id: string; nome: string; }
@@ -20,6 +26,27 @@ interface Grupo {
   nome: string;
   nota_banca: number | null;
   integrantes: string[]; // aluno_id
+}
+
+const virgula = (n: number) => String(n).replace(".", ",");
+
+/**
+ * Explica de onde a média saiu. A nota da banca é a mesma em todas as
+ * disciplinas do semestre; o que muda de uma para outra é a parte do professor.
+ */
+function composicaoDaNota(d: AvaliacaoDaDisciplina): string {
+  const partes: string[] = [];
+
+  if (d.notaProfessor !== null && d.notaBanca !== null && d.notaFinal !== null) {
+    partes.push(`Professor ${virgula(d.notaProfessor)} + banca ${virgula(d.notaBanca)} → média ${virgula(d.notaFinal)}`);
+  } else if (d.notaProfessor !== null) {
+    partes.push(`Professor ${virgula(d.notaProfessor)}, banca pendente`);
+  } else {
+    partes.push("Nota do professor pendente");
+  }
+
+  partes.push(d.percentual !== null ? `Frequência ${d.percentual}%` : "Sem chamada fechada");
+  return `${partes.join(". ")}.`;
 }
 
 const SITUACAO_ESTILO: Record<Situacao, { rotulo: string; classe: string }> = {
@@ -74,8 +101,8 @@ export default function GruposEBancaManager() {
     if (!turmaId) return;
     setCarregando(true);
 
-    const [{ data: alunosData }, { data: gruposData }, { data: vwData }] = await Promise.all([
-      supabase.from("alunos").select("id, nome").eq("turma_id", turmaId).eq("ativo", true).order("nome"),
+    const [{ alunos: daTurma }, { data: gruposData }, { data: vwData }] = await Promise.all([
+      buscarAlunosDaTurma(supabase, turmaId),
       supabase.from("grupos").select("id, nome, nota_banca, grupo_alunos(aluno_id)")
         .eq("turma_id", turmaId).eq("semestre_do_curso", Number(semestre)).order("nome"),
       supabase.from("vw_desempenho_aluno")
@@ -83,7 +110,7 @@ export default function GruposEBancaManager() {
         .eq("turma_id", turmaId).eq("semestre_do_curso", Number(semestre)),
     ]);
 
-    setAlunos((alunosData ?? []) as Aluno[]);
+    setAlunos(daTurma.map(a => ({ id: a.id, nome: a.nome })));
     setGrupos(((gruposData ?? []) as unknown as (Omit<Grupo, "integrantes"> & { grupo_alunos: { aluno_id: string }[] })[])
       .map(g => ({ id: g.id, nome: g.nome, nota_banca: g.nota_banca, integrantes: (g.grupo_alunos ?? []).map(i => i.aluno_id) })));
     setDesempenho((vwData ?? []) as (DesempenhoDisciplina & { aluno_id: string })[]);
@@ -325,11 +352,11 @@ export default function GruposEBancaManager() {
                               {r.disciplinas.map(d => (
                                 <span
                                   key={d.disciplinaId}
-                                  title={d.motivos.join(" ")}
-                                  className={`rounded-lg px-2 py-1 text-xs ${SITUACAO_ESTILO[d.situacao].classe}`}
+                                  title={composicaoDaNota(d)}
+                                  className={`cursor-help rounded-lg px-2 py-1 text-xs ${SITUACAO_ESTILO[d.situacao].classe}`}
                                 >
                                   <strong className="font-semibold">{d.disciplina}</strong>
-                                  {d.notaFinal !== null && ` · ${String(d.notaFinal).replace(".", ",")}`}
+                                  {d.notaFinal !== null && ` · ${virgula(d.notaFinal)}`}
                                   {d.percentual !== null && ` · ${d.percentual}%`}
                                 </span>
                               ))}

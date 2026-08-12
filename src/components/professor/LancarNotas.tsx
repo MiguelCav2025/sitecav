@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { CheckCircle, Loader2 } from "lucide-react";
 import { NOTA_MINIMA } from "@/lib/aprovacao";
+import { buscarAlunosDaTurma } from "@/lib/matriculas";
 
 interface Aluno {
   id: string;
@@ -40,13 +41,13 @@ export default function LancarNotas({
   useEffect(() => {
     const carregar = async () => {
       setCarregando(true);
-      const [{ data: alunosData }, { data: notasData }] = await Promise.all([
-        supabase.from("alunos").select("id, nome").eq("turma_id", turmaId).eq("ativo", true).order("nome"),
+      const [{ alunos: daTurma }, { data: notasData }] = await Promise.all([
+        buscarAlunosDaTurma(supabase, turmaId),
         supabase.from("notas_disciplina").select("aluno_id, nota")
           .eq("disciplina_id", disciplinaId).eq("turma_id", turmaId),
       ]);
 
-      setAlunos((alunosData ?? []) as Aluno[]);
+      setAlunos(daTurma.map(a => ({ id: a.id, nome: a.nome })));
       const mapa: Record<string, string> = {};
       for (const n of notasData ?? []) {
         mapa[(n as { aluno_id: string }).aluno_id] = String((n as { nota: number }).nota);

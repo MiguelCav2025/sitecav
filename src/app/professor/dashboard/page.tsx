@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { semestreDoCurso, rotuloSemestreDoCurso } from "@/lib/calendario-escolar";
 import LancarNotas from "@/components/professor/LancarNotas";
+import { buscarAlunosDaTurma } from "@/lib/matriculas";
 
 interface Turma { id: string; nome: string; turno: string; semestre: string; curso: string; }
 interface Disciplina { id: string; nome: string; emoji: string | null; }
@@ -178,10 +179,10 @@ export default function ProfessorDashboard() {
     setErro(null);
     setConteudo("");
 
-    const { data: alunosData } = await supabase
-      .from("alunos").select("id, nome")
-      .eq("turma_id", aula.turma.id).eq("ativo", true).order("nome");
-    setAlunos((alunosData ?? []) as Aluno[]);
+    // A lista sai das matrículas em andamento, não de um campo no aluno:
+    // quem cursa duas turmas precisa aparecer na chamada das duas.
+    const { alunos: daTurma } = await buscarAlunosDaTurma(supabase, aula.turma.id);
+    setAlunos(daTurma.map(a => ({ id: a.id, nome: a.nome })));
 
     const { data: presData } = await supabase
       .from("presencas").select("aluno_id, presente").eq("aula_id", aula.id);

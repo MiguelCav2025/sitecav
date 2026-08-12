@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { semestreDoCurso } from "@/lib/calendario-escolar";
+import { buscarAlunosDaTurma } from "@/lib/matriculas";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Download, BarChart3, Users, BookOpen, AlertCircle } from "lucide-react";
@@ -50,7 +51,7 @@ export default function RelatoriosManager() {
   const gerarRelatorioPorTurma = async () => {
     if (!turmaSel) return;
     setLoading(true);
-    const { data: alunosData } = await supabase.from("alunos").select("id, nome").eq("turma_id", turmaSel).eq("ativo", true).order("nome");
+    const { alunos: alunosData } = await buscarAlunosDaTurma(supabase, turmaSel);
     const { data: aulasData } = await supabase.from("aulas").select("id").eq("turma_id", turmaSel).eq("chamada_aberta", true);
     const aulaIds = (aulasData ?? []).map((a: { id: string }) => a.id);
     const totalAulas = aulaIds.length;
@@ -74,7 +75,7 @@ export default function RelatoriosManager() {
   const gerarRelatorioPorAula = async () => {
     if (!aulaSel) return;
     setLoading(true);
-    const { data: alunosData } = await supabase.from("alunos").select("id, nome").eq("turma_id", turmaSel).eq("ativo", true).order("nome");
+    const { alunos: alunosData } = await buscarAlunosDaTurma(supabase, turmaSel);
     const { data: presData } = await supabase.from("presencas").select("aluno_id, presente").eq("aula_id", aulaSel);
 
     const mapa = Object.fromEntries((presData ?? []).map((p: { aluno_id: string; presente: boolean }) => [p.aluno_id, p.presente]));

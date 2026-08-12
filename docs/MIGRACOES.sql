@@ -17,7 +17,11 @@
 --   Fase 1.5 .. [x] constraint dos 30 caracteres validada em 12/08/2026
 --   Fase 3 .... [x] aplicada e verificada em 12/08/2026 (blocos 3.1-3.8 e 3.9)
 --   Fase 5 .... [x] aplicada e verificada em 12/08/2026
---   Fase 8 .... [ ] nao aplicada — aguardando revisao
+--   Fase 8 .... [x] aplicada e verificada em 12/08/2026
+--   Fase 9 .... [x] aplicada em 12/08/2026
+--   Fase 9-B .. [ ] CORRECAO — o aluno pode cursar duas turmas ao mesmo tempo.
+--                   Blocos 9B.1 a 9B.3 podem ir agora (aditivos).
+--                   O bloco 9B.4 SO depois do deploy do codigo novo.
 --
 -- COMO RODAR: um bloco de cada vez (FASE 1, depois FASE 2), conferindo o
 -- resultado entre eles. O editor do Supabase executa a selecao inteira como
@@ -1031,6 +1035,257 @@ comment on view public.vw_desempenho_aluno is
 -- drop table if exists public.grupo_alunos;
 -- drop table if exists public.grupos;
 -- drop function if exists public.professor_leciona_disciplina_na_turma(uuid, uuid);
+
+
+-- ============================================================================
+-- FASE 9 — Matriculas: a progressao passa a ser do aluno
+-- Cobre: P15, D24, D25, D26, D29. Depende das fases 2, 3 e 8.
+-- ============================================================================
+--
+-- O PROBLEMA
+--
+-- Hoje `alunos.turma_id` aponta para uma turma, e o semestre do curso e
+-- calculado da data de entrada DELA. A turma inteira avanca junta por
+-- definicao matematica: nao existe lugar onde caiba "este aluno ficou".
+--
+-- O MODELO
+--
+-- O aluno passa a ter MATRICULAS ao longo do tempo. Cada uma diz em que turma
+-- ele esteve, em que semestre do curso, e como aquilo terminou. Reprovou?
+-- A matricula encerra como `retido` e abre-se outra quando houver turma. O
+-- historico fica inteiro e datado.
+--
+-- POR QUE `alunos.turma_id` CONTINUA EXISTINDO
+--
+-- Ele vira um atalho para a turma atual, mantido por trigger a partir da
+-- matricula ativa. Remove-lo obrigaria a reescrever a chamada, as notas, os
+-- relatorios e tres policies de RLS. Como atalho com invariante garantida, ele
+-- e seguro; como fonte da verdade, era o bug.
+
+
+-- ----------------------------------------------------------------------------
+-- 9.1 A tabela
+-- ----------------------------------------------------------------------------
+create table if not exists public.matriculas (
+  id                uuid primary key default gen_random_uuid(),
+  aluno_id          uuid not null references public.alunos(id)  on delete cascade,
+  turma_id          uuid not null references public.turmas(id)  on delete restrict,
+  semestre_do_curso integer not null check (semestre_do_curso between 1 and 3),
+  situacao          text not null default 'cursando'
+                      check (situacao in ('cursando','aprovado','retido','desistente','concluido')),
+  observacao        text,
+  iniciada_em       date not null default current_date,
+  encerrada_em      date,
+  decidida_por      uuid references public.professores(id) on delete set null,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now(),
+
+  -- Matricula em andamento nao tem data de encerramento; encerrada tem.
+  constraint matriculas_encerramento_coerente check (
+    (situacao = 'cursando' and encerrada_em is null)
+    or (situacao <> 'cursando' and encerrada_em is not null)
+  )
+);
+
+-- O aluno cursa UMA coisa de cada vez. Indice parcial: so vale para a
+-- matricula ativa, entao o historico pode ter quantas linhas precisar.
+create unique index if not exists matriculas_uma_ativa_por_aluno
+  on public.matriculas(aluno_id) where situacao = 'cursando';
+
+create index if not exists idx_matriculas_turma
+  on public.matriculas(turma_id, semestre_do_curso, situacao);
+
+comment on table public.matriculas is
+  'Passagem do aluno por uma turma num semestre do curso. Fonte da verdade da progressao (P15/D29).';
+comment on column public.matriculas.situacao is
+  'cursando = em andamento. aprovado/retido/desistente/concluido encerram a matricula.';
+
+
+-- ----------------------------------------------------------------------------
+-- 9.2 Migracao dos alunos que ja existem
+-- ----------------------------------------------------------------------------
+-- Cria a matricula ativa de cada aluno a partir da turma em que ele esta hoje.
+--
+-- A conta do semestre esta replicada aqui de proposito, e SO aqui: e uma
+-- migracao de uma vez so. A regra viva mora em lib/calendario-escolar.ts.
+-- A virada e 1 de julho, igual ao resto do sistema.
+insert into public.matriculas (aluno_id, turma_id, semestre_do_curso, situacao)
+select
+  a.id,
+  a.turma_id,
+  greatest(1, least(3,
+    (extract(year from current_date)::int * 2
+       + case when extract(month from current_date)::int < 7 then 0 else 1 end)
+    - (split_part(t.semestre, '/', 1)::int * 2
+       + (split_part(t.semestre, '/', 2)::int - 1))
+    + 1
+  )),
+  'cursando'
+from public.alunos a
+join public.turmas t on t.id = a.turma_id
+where a.turma_id is not null
+  and a.ativo
+  and t.semestre ~ '^[0-9]{4}/[12]$'   -- ignora turma com semestre malformado
+  and not exists (
+    select 1 from public.matriculas m
+     where m.aluno_id = a.id and m.situacao = 'cursando'
+  );
+
+
+-- ----------------------------------------------------------------------------
+-- 9.3 `alunos.turma_id` passa a seguir a matricula ativa
+-- ----------------------------------------------------------------------------
+-- Sem isto os dois divergem em silencio, e o campo volta a mentir.
+create or replace function public.sincroniza_turma_do_aluno()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_aluno uuid := coalesce(new.aluno_id, old.aluno_id);
+  v_turma uuid;
+begin
+  select m.turma_id into v_turma
+    from public.matriculas m
+   where m.aluno_id = v_aluno and m.situacao = 'cursando'
+   limit 1;
+
+  -- Sem matricula ativa o aluno fica sem turma: e o caso do retido aguardando
+  -- rematricula e o do desistente (D26). O historico dele permanece intacto,
+  -- porque presencas e notas apontam para aula e disciplina, nao para este campo.
+  update public.alunos set turma_id = v_turma where id = v_aluno;
+
+  return coalesce(new, old);
+end;
+$$;
+
+drop trigger if exists trg_sincroniza_turma_do_aluno on public.matriculas;
+create trigger trg_sincroniza_turma_do_aluno
+  after insert or update or delete on public.matriculas
+  for each row execute function public.sincroniza_turma_do_aluno();
+
+
+-- ----------------------------------------------------------------------------
+-- 9.4 RLS
+-- ----------------------------------------------------------------------------
+-- Progressao e decisao do coordenador. O professor nao precisa: a lista de
+-- chamada dele continua vindo de alunos.turma_id.
+alter table public.matriculas enable row level security;
+
+drop policy if exists matriculas_admin on public.matriculas;
+create policy matriculas_admin on public.matriculas
+  for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+
+
+-- ----------------------------------------------------------------------------
+-- ROLLBACK DA FASE 9 (deixar comentado)
+-- ----------------------------------------------------------------------------
+-- drop trigger if exists trg_sincroniza_turma_do_aluno on public.matriculas;
+-- drop function if exists public.sincroniza_turma_do_aluno();
+-- drop table if exists public.matriculas;
+-- Atencao: o rollback NAO devolve alunos.turma_id ao valor anterior nos casos
+-- em que a matricula ja tiver sido encerrada. Conferir antes de reverter.
+
+
+-- ============================================================================
+-- FASE 9-B — CORRECAO: o aluno pode cursar duas turmas ao mesmo tempo
+-- ============================================================================
+--
+-- O QUE ESTAVA ERRADO
+--
+-- A fase 9 assumiu uma matricula ativa por aluno. Existe caso real de aluno
+-- terminando Cine/TV e comecando Animacao no mesmo periodo — duas matriculas
+-- ativas, em turmas diferentes.
+--
+-- Isso derruba `alunos.turma_id`: com dois vinculos simultaneos, um unico
+-- campo nao consegue dizer em que turma o aluno esta. O trigger escolheria uma
+-- arbitrariamente, e o aluno apareceria na chamada de uma turma e sumiria da
+-- outra. O campo volta a ser exatamente a mentira que a fase 9 veio corrigir.
+--
+-- A CORRECAO
+--
+-- `matriculas` passa a ser a UNICA fonte de quem esta em qual turma, e a
+-- coluna `alunos.turma_id` e removida. O que se perde em conveniencia se
+-- ganha em nao ter dois lugares dizendo coisas diferentes.
+
+
+-- ----------------------------------------------------------------------------
+-- 9B.1 Um aluno pode ter varias matriculas ativas, em turmas diferentes
+-- ----------------------------------------------------------------------------
+drop index if exists public.matriculas_uma_ativa_por_aluno;
+
+-- O que continua valendo: nao ha duas matriculas ativas na MESMA turma.
+create unique index if not exists matriculas_uma_ativa_por_turma
+  on public.matriculas(aluno_id, turma_id) where situacao = 'cursando';
+
+
+-- ----------------------------------------------------------------------------
+-- 9B.2 O professor precisa ler as matriculas das turmas dele
+-- ----------------------------------------------------------------------------
+-- A lista de chamada passa a sair daqui, entao a policy admin-only nao basta.
+drop policy if exists matriculas_professor_leitura on public.matriculas;
+create policy matriculas_professor_leitura on public.matriculas
+  for select to authenticated
+  using (public.professor_leciona_turma(turma_id));
+
+
+-- ----------------------------------------------------------------------------
+-- 9B.3 O escopo do professor sobre alunos deixa de usar turma_id
+-- ----------------------------------------------------------------------------
+create or replace function public.professor_leciona_para_aluno(p_aluno uuid)
+returns boolean language sql security definer stable
+set search_path = public as $$
+  select exists (
+    select 1
+      from public.matriculas m
+      join public.aulas a on a.turma_id = m.turma_id
+     where m.aluno_id     = p_aluno
+       and m.situacao     = 'cursando'
+       and a.professor_id = public.professor_atual()
+  );
+$$;
+
+drop policy if exists alunos_professor_leitura on public.alunos;
+create policy alunos_professor_leitura on public.alunos
+  for select to authenticated
+  using (public.professor_leciona_para_aluno(id));
+
+
+-- ----------------------------------------------------------------------------
+-- 9B.4 Remove o campo que nao consegue mais representar a realidade
+--
+-- >>> SO RODAR DEPOIS QUE O CODIGO NOVO ESTIVER NO AR. <<<
+--
+-- O codigo em producao ainda consulta alunos.turma_id na chamada, no
+-- lancamento de notas e nos relatorios. Apagar a coluna antes do deploy
+-- derruba essas telas na hora. Os blocos 9B.1 a 9B.3 sao aditivos e podem ir
+-- agora; este aqui e o ultimo passo.
+-- ----------------------------------------------------------------------------
+drop trigger  if exists trg_sincroniza_turma_do_aluno on public.matriculas;
+drop function if exists public.sincroniza_turma_do_aluno();
+
+-- Confira antes de rodar: nenhuma matricula ativa deve ter sido perdida.
+--   select count(*) from public.alunos where ativo and turma_id is not null;
+--   select count(distinct aluno_id) from public.matriculas where situacao = 'cursando';
+-- Os dois numeros devem bater.
+alter table public.alunos drop column if exists turma_id;
+
+comment on table public.alunos is
+  'Dados da pessoa. Em que turma ela esta vem de `matriculas` — um aluno pode cursar duas turmas ao mesmo tempo.';
+
+
+-- ----------------------------------------------------------------------------
+-- ROLLBACK DA FASE 9-B (deixar comentado)
+-- ----------------------------------------------------------------------------
+-- alter table public.alunos add column if not exists turma_id uuid references public.turmas(id);
+-- update public.alunos a set turma_id = (
+--   select m.turma_id from public.matriculas m
+--    where m.aluno_id = a.id and m.situacao = 'cursando' limit 1
+-- );
+-- drop policy if exists alunos_professor_leitura on public.alunos;
+-- create policy alunos_professor_leitura on public.alunos
+--   for select to authenticated
+--   using (turma_id is not null and public.professor_leciona_turma(turma_id));
 
 
 -- ============================================================================

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { semestreDoCurso, rotuloSemestreDoCurso } from "@/lib/calendario-escolar";
+import { buscarAlunosDaTurma, matricularAlunos, encerrarMatricula } from "@/lib/matriculas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,6 +26,8 @@ interface Aluno {
   id: string;
   nome: string;
   email: string | null;
+  /** Vínculo com esta turma. Sair da turma é encerrar a matrícula. */
+  matriculaId: string;
 }
 
 const CURSOS = ["Animação", "Cine/TV"];
@@ -89,10 +92,9 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
 
   const fetchAlunos = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from("alunos").select("id, nome, email")
-      .eq("turma_id", turma.id).eq("ativo", true).order("nome");
-    setAlunos(data ?? []);
+    const { alunos: daTurma, erro } = await buscarAlunosDaTurma(supabase, turma.id);
+    if (erro) showMsg("erro", `Erro ao carregar alunos: ${erro}`);
+    setAlunos(daTurma.map(a => ({ id: a.id, nome: a.nome, email: a.email, matriculaId: a.matriculaId })));
     setLoading(false);
   };
 
@@ -115,22 +117,40 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
     const validas = linhas.filter(l => l.nome.trim());
     if (validas.length === 0) return showMsg("erro", "Preencha ao menos um nome.");
     setSalvando(true);
-    const { error } = await supabase.from("alunos").insert(
-      validas.map(l => ({ nome: l.nome.trim(), email: l.email.trim() || null, turma_id: turma.id }))
+
+    // Duas etapas: a pessoa e o vínculo dela com a turma. O aluno existe por
+    // si; a turma em que ele está é uma matrícula.
+    const { data: criados, error } = await supabase.from("alunos").insert(
+      validas.map(l => ({ nome: l.nome.trim(), email: l.email.trim() || null }))
+    ).select("id");
+
+    if (error || !criados) {
+      showMsg("erro", `Erro ao salvar: ${error?.message ?? "resposta vazia"}`);
+      setSalvando(false);
+      return;
+    }
+
+    const { erro } = await matricularAlunos(
+      supabase, turma.id, turma.semestre, criados.map(c => c.id),
     );
-    if (error) showMsg("erro", "Erro ao salvar.");
+    if (erro) showMsg("erro", `Alunos criados, mas houve falha ao matricular: ${erro}`);
     else {
       showMsg("ok", `${validas.length} aluno(s) adicionado(s)!`);
       setLinhas([linhaVazia()]);
-      fetchAlunos();
     }
+    fetchAlunos();
     setSalvando(false);
   };
 
-  const handleExcluir = async (id: string) => {
-    if (!confirm("Remover aluno da turma?")) return;
-    await supabase.from("alunos").update({ ativo: false }).eq("id", id);
-    setAlunos(prev => prev.filter(a => a.id !== id));
+  const handleExcluir = async (a: Aluno) => {
+    if (!confirm(
+      `Remover ${a.nome} desta turma? O histórico de presenças e notas dele é preservado.`
+    )) return;
+
+    // Sair da turma é encerrar a matrícula, não apagar a pessoa (D26).
+    const { erro } = await encerrarMatricula(supabase, a.matriculaId, "desistente");
+    if (erro) return showMsg("erro", `Erro ao remover: ${erro}`);
+    setAlunos(prev => prev.filter(x => x.id !== a.id));
   };
 
   // Abre revisão: busca candidatos e mostra para conferência antes de importar
@@ -175,15 +195,26 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
     const selecionados = revisao.filter(c => c.selecionado && !c.jaNaTurma);
     if (selecionados.length === 0) return showMsg("erro", "Nenhum candidato selecionado.");
     setConfirmando(true);
-    const { error } = await supabase.from("alunos").insert(
-      selecionados.map(c => ({ nome: c.nome, turma_id: turma.id }))
+
+    const { data: criados, error } = await supabase.from("alunos").insert(
+      selecionados.map(c => ({ nome: c.nome }))
+    ).select("id");
+
+    if (error || !criados) {
+      showMsg("erro", `Erro ao importar: ${error?.message ?? "resposta vazia"}`);
+      setConfirmando(false);
+      return;
+    }
+
+    const { erro } = await matricularAlunos(
+      supabase, turma.id, turma.semestre, criados.map(c => c.id),
     );
-    if (error) showMsg("erro", "Erro ao importar.");
+    if (erro) showMsg("erro", `Alunos criados, mas houve falha ao matricular: ${erro}`);
     else {
       showMsg("ok", `${selecionados.length} aluno(s) importado(s) com sucesso!`);
       setRevisao(null);
-      fetchAlunos();
     }
+    fetchAlunos();
     setConfirmando(false);
   };
 
@@ -397,7 +428,11 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
                         )}
                       </td>
                       <td className="px-4 py-2">
-                        <button onClick={() => handleExcluir(a.id)} className="text-red-400 hover:text-red-600">
+                        <button
+                          onClick={() => handleExcluir(a)}
+                          title="Remover da turma (preserva o histórico)"
+                          className="text-red-400 hover:text-red-600"
+                        >
                           <X className="h-4 w-4" />
                         </button>
                       </td>
@@ -430,12 +465,22 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
 
   const fetchTurmas = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from("turmas")
-      .select("*, alunos(count)")
-      .order("semestre", { ascending: false });
+
+    // O total por turma sai das matrículas em andamento. Antes vinha de
+    // `alunos(count)`, que dependia da coluna alunos.turma_id — a mesma que
+    // não conseguia representar aluno cursando duas turmas.
+    const [{ data }, { data: matriculas }] = await Promise.all([
+      supabase.from("turmas").select("*").order("semestre", { ascending: false }),
+      supabase.from("matriculas").select("turma_id").eq("situacao", "cursando"),
+    ]);
+
+    const porTurma = new Map<string, number>();
+    for (const m of (matriculas ?? []) as { turma_id: string }[]) {
+      porTurma.set(m.turma_id, (porTurma.get(m.turma_id) ?? 0) + 1);
+    }
+
     if (data) {
-      setTurmas(data.map((t: any) => ({ ...t, _alunos_count: t.alunos?.[0]?.count ?? 0 })));
+      setTurmas((data as Turma[]).map(t => ({ ...t, _alunos_count: porTurma.get(t.id) ?? 0 })));
     }
     setLoading(false);
   };
