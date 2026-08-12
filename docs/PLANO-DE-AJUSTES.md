@@ -101,6 +101,32 @@ IDs: `F` feito · `P` problema · `D` decisão · `N` dúvida aberta · `I` impl
 
 **Resiliente ao deploy fora de ordem:** a página de resultados foi testada com a tabela ainda inexistente e respondeu 200 — a consulta falha, o código cai para lista vazia e o card não aparece. Como o site está no ar em modo "resultados", isso importa.
 
+### Fase 6 — Reorganização do admin ✅
+
+| Item | O que foi feito |
+|---|---|
+| `lib/admin-navegacao.ts` | A estrutura do painel vira dado: áreas, seções, ícones, textos de ajuda e a ordem dos passos |
+| `NavegacaoAdmin` | Navegação em dois níveis — área (Site / Escola / Sistema) e depois seção. No celular a lista de seções vira dropdown |
+| Escola numerada | Cronograma (1) → Turmas (2) → Disciplinas (3) → Professores (4) → Relatórios (5) |
+| `admin/dashboard` | Reescrito: some o dropdown único de 13 opções e o código morto de breakpoint; cada seção mapeia direto para o seu manager |
+| Arquivos removidos | `ListasManager` (absorvido pela navegação), `AulasManager` e `AlunosManager` |
+
+**Verificado visualmente** em desktop e mobile, por página temporária de preview — já removida — porque `/admin/dashboard` exige sessão de coordenador.
+
+#### Correção ao diagnóstico do `P1`
+
+`AulasManager` e `AlunosManager` **não eram importados em lugar nenhum**: o `ListasManager` só renderizava Cronograma, Turmas, Disciplinas e Professores. Ou seja, a tela que criava aulas sem `disciplina_id` nunca foi alcançável pela interface — o risco era um arquivo morto ser religado no futuro. Agora foi apagado.
+
+### P20 — A rota de importar resultados estava quebrada para PDF 🔴 corrigido
+
+O código importava `pdf-parse/lib/pdf-parse.js`, um caminho interno da **versão 1** da biblioteca. A versão instalada é a **2.4.5**, que não expõe mais esse subcaminho no `exports` — então a importação falhava no build **e** falharia em execução. Só o `.docx` funcionava.
+
+Reescrito para a API v2 (`new PDFParse({ data }).getText()`), validado com um PDF gerado no teste.
+
+E apareceu um efeito colateral: a v2 insere marcadores `-- 1 of 3 --` entre as páginas, e o extrator de nomes os aceita como se fossem candidatos. Sem tratar, **cada quebra de página viraria um aprovado fantasma** na lista publicada. A rota passa a limpar esses marcadores; comprovado por teste que reproduz o bug e confirma a correção.
+
+> ⚠️ **Correção de um relato meu:** eu havia afirmado que a fusão do `next.config` tinha resolvido o erro do `pdf-parse`. Estava errado — eu tinha olhado só o fim da saída do build, e esse erro aparece no início. A fusão do config foi necessária, mas não era a causa.
+
 > Nada commitado. Tudo no working tree. Produção intocada.
 
 ---
@@ -361,8 +387,8 @@ Cada fase só começa quando a anterior estiver revisada. O documento é atualiz
 | ~~**3**~~ | ~~RLS das tabelas de dados pessoais~~ — fechou o `P7` inteiro, incluindo o conteúdo do site | ✅ **CONCLUÍDA** |
 | ~~**4**~~ | ~~PWA instalável + primeiro acesso~~ | ✅ **CONCLUÍDA** |
 | ~~**5**~~ | ~~Gabarito do processo seletivo~~ | ✅ **CONCLUÍDA** |
-| **6** | Reorganização do admin (`P13`,`P1`,`D13`, seção 7) | ← próxima |
-| **7** | Cronograma editável + recálculo seguro (`P14`,`D8`,`D9`,`D23`) | — |
+| ~~**6**~~ | ~~Reorganização do admin~~ — resolveu `P13` e `P1`, e de quebra o `P20` | ✅ **CONCLUÍDA** |
+| **7** | Cronograma editável + recálculo seguro (`P14`,`D8`,`D9`,`D23`) | ← próxima |
 | **8** | Grupos, notas e banca (`D18`–`D21`) | — |
 | **9** | Fechamento de semestre e progressão por aluno (`P15`,`D24`–`D26`,`D29`) | — |
 | **10** | Relatórios (`D27`) | fases 8 e 9 |
