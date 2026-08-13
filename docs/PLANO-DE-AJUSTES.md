@@ -485,6 +485,23 @@ Cada fase só começa quando a anterior estiver revisada. O documento é atualiz
 | aulas | 979 | todas com data, professor e disciplina; nenhuma chamada fechada |
 | **presenças** | **0** | ⚠️ ver `N23` |
 
+> **N24 ⚠️ — a disciplina diz 16 aulas, a grade tem 17 a 19.** As disciplinas
+> foram cadastradas com `total_aulas = 16` (número da grade curricular), mas a
+> geração usou **todos os dias letivos disponíveis** do cronograma: 17 às
+> segundas, 19 às terças, 18 às quartas e quintas, 17 às sextas. Sobram **99
+> aulas** com `numero` acima de 16. A aba Disciplinas mostra "16 aulas"
+> enquanto "Ver aulas" lista 17 a 19 — a tela se contradiz.
+>
+> **O risco é concreto:** `planejarRecalculoDaGrade` remove aula aberta cujo
+> `numero > total_aulas`. Como nenhuma chamada está fechada, clicar em
+> *Recalcular grade* hoje **apaga as 99**, sem nada segurar.
+>
+> Duas leituras, e é decisão do coordenador: ou a disciplina tem 16 aulas
+> mesmo e sobram dias no semestre (então `total_aulas` está certo e a grade
+> gerou demais), ou a disciplina ocupa todo dia letivo do seu dia da semana
+> (então `total_aulas` é que está desatualizado). **Não mexer em nada até
+> responder** — as duas correções são opostas.
+
 > **N23 ❓ — as presenças das planilhas não foram importadas.** O leitor
 > (`scripts/importar/fontes.mjs`) usa as planilhas para tirar nomes, turmas e
 > as **datas** das aulas, mas nunca lê as marcações de presença da grade.

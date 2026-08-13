@@ -372,7 +372,12 @@ export default function ProfessoresManager() {
                               <button
                                 onClick={() => handleEnviarAcesso(p)}
                                 disabled={!podeEnviar || enviando === p.id}
-                                className="p-1 text-blue-500 hover:text-blue-700 disabled:text-gray-200 disabled:hover:text-gray-200"
+                                // Estado explícito em vez da variante `disabled:`: o botão
+                                // precisa parecer inerte de longe, senão o coordenador clica
+                                // achando que mandou convite e nada acontece.
+                                className={`p-1 ${podeEnviar
+                                  ? "text-blue-500 hover:text-blue-700"
+                                  : "text-gray-300 cursor-not-allowed"}`}
                                 title={
                                   !p.ativo ? "Professor inativo"
                                     : !p.email ? "Preencha o e-mail para poder enviar"
