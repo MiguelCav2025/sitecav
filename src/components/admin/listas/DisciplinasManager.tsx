@@ -43,6 +43,7 @@ interface Disciplina {
   total_aulas: number;
   dia_da_semana: number | null;
   emoji: string | null;
+  sala_id: string | null;
   created_at: string;
 }
 
@@ -329,6 +330,7 @@ function AulasDaDisciplinaModal({
 function DisciplinaCard({
   disciplina,
   professores,
+  sala,
   onVerAulas,
   onExcluir,
   onChangeDia,
@@ -336,6 +338,8 @@ function DisciplinaCard({
 }: {
   disciplina: Disciplina;
   professores: Professor[];
+  /** Nome da sala já resolvido — o card só recebe o id da sala, não a lista. */
+  sala: string | null;
   onVerAulas: () => void;
   onExcluir: () => void;
   onChangeDia: (dia: number | null) => void;
@@ -380,7 +384,15 @@ function DisciplinaCard({
           <Trash2 className="h-3.5 w-3.5" />
         </button>
       </div>
-      <p className="text-xs text-gray-400 mb-2">{disciplina.total_aulas} aulas</p>
+      {/* A sala era escolhida no formulário e depois sumia: o card não a
+          mostrava, então não havia como conferir a grade sem reabrir cada
+          disciplina. */}
+      <p className="text-xs text-gray-400 mb-2 truncate" title={sala ?? undefined}>
+        {disciplina.total_aulas} aulas
+        {sala
+          ? <> · <span className="text-gray-500">{sala}</span></>
+          : <> · <span className="text-amber-600">sem sala</span></>}
+      </p>
       <div className="flex items-center gap-1 justify-between">
         <button
           onClick={onVerAulas}
@@ -426,7 +438,11 @@ export default function DisciplinasManager() {
     nome: "",
     curso: "",
     semestre_do_curso: "",
-    total_aulas: "16",
+    // Vazio de propósito. O número certo depende do dia da semana e dos
+    // feriados — escolher o dia preenche este campo pelo cronograma. Um valor
+    // fixo aqui já custou caro: 16 entrou como se fosse regra e desmentia a
+    // grade real, que vai de 17 a 19.
+    total_aulas: "",
     dia_da_semana: "",
     emoji: "📚",
     sala_id: "",
@@ -541,7 +557,7 @@ export default function DisciplinasManager() {
       const temDatas = diaSemanaNum && aulasParaInserir.some((a) => (a as { data_aula: string | null }).data_aula);
       const sufixo = temDatas ? " com datas preenchidas pelo cronograma." : " (sem datas — defina o cronograma do semestre).";
       showMsg("ok", `"${form.nome}" criada! ${total} aulas geradas para ${turmasAfetadas.length} turma(s)${sufixo}`);
-      setForm({ nome: "", curso: "", semestre_do_curso: "", total_aulas: "16", dia_da_semana: "", emoji: "📚", sala_id: "", professores_por_turma: {} });
+      setForm({ nome: "", curso: "", semestre_do_curso: "", total_aulas: "", dia_da_semana: "", emoji: "📚", sala_id: "", professores_por_turma: {} });
     }
 
     fetchDados();
@@ -816,6 +832,7 @@ export default function DisciplinasManager() {
                                   key={d.id}
                                   disciplina={d}
                                   professores={professores}
+                                  sala={salas.find(s => s.id === d.sala_id)?.nome ?? null}
                                   onVerAulas={() => setDisciplinaSelecionada(d)}
                                   onExcluir={() => handleExcluir(d.id, d.nome)}
                                   onChangeDia={dia => handleChangeDia(d.id, dia)}
@@ -839,6 +856,7 @@ export default function DisciplinasManager() {
                                 <DisciplinaCard
                                   disciplina={d}
                                   professores={professores}
+                                  sala={salas.find(s => s.id === d.sala_id)?.nome ?? null}
                                   onVerAulas={() => setDisciplinaSelecionada(d)}
                                   onExcluir={() => handleExcluir(d.id, d.nome)}
                                   onChangeDia={dia => handleChangeDia(d.id, dia)}
