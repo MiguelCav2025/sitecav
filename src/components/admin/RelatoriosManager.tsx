@@ -1,14 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { moduloAtual, rotuloModulo } from "@/lib/calendario-escolar";
 import { useSemestreVigente } from "@/hooks/useSemestreVigente";
 import { PRESENCA_MINIMA } from "@/lib/aprovacao";
 import { buscarMatriculasDaTurma, type MatriculaDaTurma } from "@/lib/matriculas";
 import {
-  frequenciaPorDisciplina, resumirFrequencia, montarDiario, aulasPendentesDeChamada, limparParaCSV,
-  type AulaFechada, type AulaPendente, type LinhaFrequencia, type LinhaDoDiario, type RegistroPresenca,
+  frequenciaPorDisciplina, resumirFrequencia, montarDiario, aulasPendentesDeChamada,
+  faltasDoAluno, limparParaCSV,
+  type Abono, type AulaFechada, type AulaPendente, type LinhaFrequencia,
+  type LinhaDoDiario, type RegistroPresenca,
 } from "@/lib/relatorios";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -57,6 +59,13 @@ export default function RelatoriosManager() {
   const [alunosDaTurma, setAlunosDaTurma] = useState<MatriculaDaTurma[]>([]);
   const [totalAulasDaTurma, setTotalAulasDaTurma] = useState(0);
 
+  // Guardados para a tela de abono, que precisa da falta aula a aula.
+  const [aulasFechadasDaTurma, setAulasFechadasDaTurma] = useState<AulaFechada[]>([]);
+  const [presencasDaTurma, setPresencasDaTurma] = useState<RegistroPresenca[]>([]);
+  const [abonos, setAbonos] = useState<Abono[]>([]);
+  const [linhaAberta, setLinhaAberta] = useState<string | null>(null);
+  const [abonando, setAbonando] = useState<string | null>(null);
+
   useEffect(() => {
     supabase.from("turmas").select("id, nome, entrada, curso, turno").order("nome")
       .then(({ data }) => setTurmas((data ?? []) as Turma[]));
@@ -104,14 +113,63 @@ export default function RelatoriosManager() {
       presencas = (data ?? []) as RegistroPresenca[];
     }
 
+    let abonos: Abono[] = [];
+    if (todasAulas.length > 0) {
+      const { data } = await supabase.from("abonos")
+        .select("aula_id, aluno_id")
+        .in("aula_id", todasAulas.map(a => a.id));
+      abonos = (data ?? []) as Abono[];
+    }
+
     const hoje = new Date().toISOString().slice(0, 10);
     setAlunosDaTurma(matriculas);
-    setFrequencia(frequenciaPorDisciplina(matriculas, fechadas, presencas));
+    setAulasFechadasDaTurma(fechadas);
+    setPresencasDaTurma(presencas);
+    setAbonos(abonos);
+    setFrequencia(frequenciaPorDisciplina(matriculas, fechadas, presencas, abonos));
     setDiario(montarDiario(fechadas));
     setPendentes(aulasPendentesDeChamada(todasAulas, hoje));
     setTotalAulasDaTurma(todasAulas.length);
     setCarregando(false);
   }, [supabase, turmaSel]);
+
+  /**
+   * Concede o abono. A presença NÃO é tocada: a falta aconteceu, e a chamada
+   * fechada é definitiva. O abono anda ao lado dela, com dono e data.
+   */
+  const abonar = async (alunoId: string, aulaId: string, nomeAluno: string) => {
+    const motivo = prompt(
+      `Abonar a falta de ${nomeAluno}.\n\n` +
+      `Escreva o motivo (atestado médico, decisão da prefeitura, etc.).\n` +
+      `Ele fica registrado com a data e quem concedeu.`
+    );
+    if (motivo === null) return;
+    if (motivo.trim().length < 3) return alert("O motivo é obrigatório — mínimo 3 caracteres.");
+
+    setAbonando(aulaId);
+    const { data: sessao } = await supabase.auth.getUser();
+    const { data: admin } = await supabase.from("administradores")
+      .select("id").eq("user_id", sessao.user?.id ?? "").maybeSingle();
+
+    const { error } = await supabase.from("abonos").insert([{
+      aluno_id: alunoId, aula_id: aulaId, motivo: motivo.trim(),
+      concedido_por: admin?.id ?? null,
+    }]);
+    setAbonando(null);
+
+    if (error) return alert(`Não foi possível abonar: ${error.message}`);
+    carregar();
+  };
+
+  const removerAbono = async (alunoId: string, aulaId: string) => {
+    if (!confirm("Remover este abono? A falta volta a contar integralmente.")) return;
+    setAbonando(aulaId);
+    const { error } = await supabase.from("abonos").delete()
+      .eq("aluno_id", alunoId).eq("aula_id", aulaId);
+    setAbonando(null);
+    if (error) return alert(`Não foi possível remover: ${error.message}`);
+    carregar();
+  };
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -288,7 +346,9 @@ export default function RelatoriosManager() {
               onClick={() => baixarCSV(
                 frequencia.map(l => ({
                   aluno: l.aluno, disciplina: l.disciplina, aulas_dadas: l.aulasDadas,
-                  presencas: l.presencas, faltas: l.faltas, percentual: l.percentual,
+                  presencas: l.presencas, faltas: l.faltas,
+                  faltas_abonadas: l.faltasAbonadas, percentual: l.percentual,
+                  percentual_com_abono: l.percentualComAbono,
                   situacao: l.abaixoDoMinimo ? "abaixo do minimo" : "ok",
                 })),
                 `frequencia-${turma?.curso}-${turma?.turno}`.replace(/[^\w-]/g, "_"),
@@ -300,9 +360,17 @@ export default function RelatoriosManager() {
           </div>
 
           {resumo.emRisco > 0 ? (
-            <div className="px-4 py-2 bg-red-50 border-b border-red-100 text-xs text-red-800">
-              <strong>{resumo.emRisco} aluno(s) abaixo de {PRESENCA_MINIMA}%</strong> em ao menos uma
-              disciplina: {resumo.nomesEmRisco.join(", ")}.
+            <div className="px-4 py-2 bg-red-50 border-b border-red-100 text-xs text-red-800 space-y-1">
+              <p>
+                <strong>{resumo.emRisco} aluno(s) abaixo de {PRESENCA_MINIMA}%</strong> em ao menos uma
+                disciplina: {resumo.nomesEmRisco.join(", ")}.
+              </p>
+              {resumo.nomesSalvosPeloAbono.length > 0 && (
+                <p className="text-amber-800">
+                  Destes, <strong>{resumo.nomesSalvosPeloAbono.join(", ")}</strong> passaria(m) do mínimo
+                  se o abono contasse. É a linha que não pode passar batido no fechamento.
+                </p>
+              )}
             </div>
           ) : (
             <div className="px-4 py-2 bg-green-50 border-b border-green-100 text-xs text-green-800 flex items-center gap-1">
@@ -323,30 +391,94 @@ export default function RelatoriosManager() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {frequencia.map(l => (
-                  <tr key={`${l.alunoId}-${l.disciplinaId}`} className={l.abaixoDoMinimo ? "bg-red-50" : "hover:bg-gray-50"}>
-                    <td className="px-3 py-2 text-xs font-medium text-gray-800">
-                      {l.aluno}
-                      {/* A situação ao lado do nome é o que permite ler o
-                          relatório de um módulo já fechado sem se perguntar
-                          por que ninguém está mais "cursando". */}
-                      {situacaoPorAluno[l.alunoId] && situacaoPorAluno[l.alunoId] !== "cursando" && (
-                        <span className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] ${SITUACAO[situacaoPorAluno[l.alunoId]]?.cor ?? ""}`}>
-                          {SITUACAO[situacaoPorAluno[l.alunoId]]?.rotulo ?? situacaoPorAluno[l.alunoId]}
-                        </span>
+                {frequencia.map(l => {
+                  const chave = `${l.alunoId}-${l.disciplinaId}`;
+                  const aberta = linhaAberta === chave;
+                  const faltas = aberta
+                    ? faltasDoAluno(l.alunoId, l.disciplinaId, aulasFechadasDaTurma, presencasDaTurma, abonos)
+                    : [];
+                  return (
+                    <Fragment key={chave}>
+                      <tr
+                        className={`cursor-pointer ${l.abaixoDoMinimo ? "bg-red-50" : "hover:bg-gray-50"}`}
+                        onClick={() => setLinhaAberta(aberta ? null : chave)}
+                        title={l.faltas === 0 ? "Sem faltas" : "Ver as faltas e abonar"}
+                      >
+                        <td className="px-3 py-2 text-xs font-medium text-gray-800">
+                          {l.faltas > 0 && (
+                            <span className="mr-1 inline-block text-gray-400">{aberta ? "▾" : "▸"}</span>
+                          )}
+                          {l.aluno}
+                          {/* A situação ao lado do nome é o que permite ler o
+                              relatório de um módulo já fechado sem se perguntar
+                              por que ninguém está mais "cursando". */}
+                          {situacaoPorAluno[l.alunoId] && situacaoPorAluno[l.alunoId] !== "cursando" && (
+                            <span className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] ${SITUACAO[situacaoPorAluno[l.alunoId]]?.cor ?? ""}`}>
+                              {SITUACAO[situacaoPorAluno[l.alunoId]]?.rotulo ?? situacaoPorAluno[l.alunoId]}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-gray-600">{l.disciplina}</td>
+                        <td className="px-3 py-2 text-center text-xs text-gray-500">{l.aulasDadas}</td>
+                        <td className="px-3 py-2 text-center font-semibold text-green-600">{l.presencas}</td>
+                        <td className="px-3 py-2 text-center font-semibold text-red-500">
+                          {l.faltas}
+                          {l.faltasAbonadas > 0 && (
+                            <span className="ml-1 text-[10px] font-normal text-amber-700">
+                              ({l.faltasAbonadas} abonada{l.faltasAbonadas > 1 ? "s" : ""})
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <span className={`text-sm font-bold ${l.abaixoDoMinimo ? "text-red-600" : "text-gray-700"}`}>
+                            {l.percentual}%
+                          </span>
+                          {/* O oficial continua sendo o de cima. Este segundo número
+                              existe para o coordenador não decidir sem saber do abono. */}
+                          {l.faltasAbonadas > 0 && (
+                            <span className={`block text-[10px] ${l.salvoPeloAbono ? "font-bold text-amber-700" : "text-gray-400"}`}>
+                              com abono: {l.percentualComAbono}%
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+
+                      {aberta && faltas.length > 0 && (
+                        <tr className="bg-gray-50/70">
+                          <td colSpan={6} className="px-6 py-3">
+                            <p className="text-xs text-gray-500 mb-2">
+                              Faltas de <strong>{l.aluno}</strong> em {l.disciplina}. Abonar não apaga
+                              a falta — ela aconteceu e continua no histórico. O abono anda ao lado,
+                              com motivo, data e quem concedeu.
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {faltas.map(f => (
+                                <button
+                                  key={f.aulaId}
+                                  disabled={abonando === f.aulaId}
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    if (f.abonada) removerAbono(l.alunoId, f.aulaId);
+                                    else abonar(l.alunoId, f.aulaId, l.aluno);
+                                  }}
+                                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                                    f.abonada
+                                      ? "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                                      : "border-gray-300 bg-white text-gray-600 hover:bg-gray-100"}`}
+                                  title={f.abonada ? "Clique para remover o abono" : "Clique para abonar esta falta"}
+                                >
+                                  {abonando === f.aulaId
+                                    ? "..."
+                                    : <>Aula {f.numero} · {formatarData(f.data)}{f.abonada && " · abonada"}</>}
+                                </button>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
                       )}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-gray-600">{l.disciplina}</td>
-                    <td className="px-3 py-2 text-center text-xs text-gray-500">{l.aulasDadas}</td>
-                    <td className="px-3 py-2 text-center font-semibold text-green-600">{l.presencas}</td>
-                    <td className="px-3 py-2 text-center font-semibold text-red-500">{l.faltas}</td>
-                    <td className="px-3 py-2 text-center">
-                      <span className={`text-sm font-bold ${l.abaixoDoMinimo ? "text-red-600" : "text-gray-700"}`}>
-                        {l.percentual}%
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

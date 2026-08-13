@@ -205,6 +205,47 @@ export function montarDiario(aulas: readonly AulaFechada[]): LinhaDoDiario[] {
     );
 }
 
+export interface FaltaDoAluno {
+  aulaId: string;
+  numero: number;
+  data: string | null;
+  disciplina: string;
+  abonada: boolean;
+}
+
+/**
+ * As aulas em que o aluno faltou numa disciplina, para a tela de abono.
+ *
+ * Só entram aulas com chamada fechada: numa aula ainda aberta a ausência de
+ * registro não é falta, é chamada que o professor não fez. Abonar isso seria
+ * perdoar uma falta que talvez nem exista.
+ */
+export function faltasDoAluno(
+  alunoId: string,
+  disciplinaId: string,
+  aulas: readonly AulaFechada[],
+  presencas: readonly RegistroPresenca[],
+  abonos: readonly Abono[] = [],
+): FaltaDoAluno[] {
+  const presenteEm = new Set(
+    presencas.filter(p => p.aluno_id === alunoId && p.presente).map(p => p.aula_id),
+  );
+  const abonadas = new Set(
+    abonos.filter(a => a.aluno_id === alunoId).map(a => a.aula_id),
+  );
+
+  return aulas
+    .filter(a => a.disciplina_id === disciplinaId && !presenteEm.has(a.id))
+    .map(a => ({
+      aulaId: a.id,
+      numero: a.numero,
+      data: a.data_aula,
+      disciplina: a.disciplina,
+      abonada: abonadas.has(a.id),
+    }))
+    .sort((x, y) => x.numero - y.numero);
+}
+
 export interface AulaPendente {
   disciplina: string;
   numero: number;

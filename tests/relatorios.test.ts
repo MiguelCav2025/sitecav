@@ -5,6 +5,7 @@ import {
   resumirFrequencia,
   montarDiario,
   aulasPendentesDeChamada,
+  faltasDoAluno,
   limparParaCSV,
   type AulaFechada,
   type RegistroPresenca,
@@ -205,6 +206,42 @@ describe("abono de falta", () => {
     );
     assert.deepEqual(r.nomesEmRisco, ["Bruno"]);
     assert.deepEqual(r.nomesSalvosPeloAbono, ["Bruno"]);
+  });
+});
+
+describe("faltasDoAluno", () => {
+  const aulas = [
+    aula("r1", "Roteiro", 1), aula("r2", "Roteiro", 2), aula("r3", "Roteiro", 3),
+    aula("d1", "Desenho", 1),
+  ];
+
+  it("lista so as aulas em que ele faltou, naquela disciplina", () => {
+    const f = faltasDoAluno("a1", "d-Roteiro", aulas, [presente("r1", "a1"), presente("d1", "a1")]);
+    assert.deepEqual(f.map(x => x.numero), [2, 3]);
+  });
+
+  it("marca quais ja foram abonadas", () => {
+    const f = faltasDoAluno("a1", "d-Roteiro", aulas, [presente("r1", "a1")], [
+      { aula_id: "r2", aluno_id: "a1" },
+    ]);
+    assert.deepEqual(f.map(x => x.abonada), [true, false]);
+  });
+
+  it("nao mistura o abono de outro aluno", () => {
+    const f = faltasDoAluno("a1", "d-Roteiro", aulas, [], [{ aula_id: "r1", aluno_id: "a2" }]);
+    assert.equal(f.every(x => !x.abonada), true);
+  });
+
+  it("registro presente=false conta como falta", () => {
+    const f = faltasDoAluno("a1", "d-Roteiro", aulas,
+      [{ aula_id: "r1", aluno_id: "a1", presente: false }]);
+    assert.deepEqual(f.map(x => x.numero), [1, 2, 3]);
+  });
+
+  it("vem em ordem de aula", () => {
+    const embaralhado = [aula("r3", "Roteiro", 3), aula("r1", "Roteiro", 1), aula("r2", "Roteiro", 2)];
+    const f = faltasDoAluno("a1", "d-Roteiro", embaralhado, []);
+    assert.deepEqual(f.map(x => x.numero), [1, 2, 3]);
   });
 });
 
