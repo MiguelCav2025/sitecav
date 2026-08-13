@@ -837,16 +837,18 @@ export default function DisciplinasManager() {
               <div key={curso} className="space-y-3">
                 <p className="text-white font-bold text-lg border-b border-white/20 pb-2">{curso}</p>
 
-                {/* Os dias da semana aparecem UMA vez por curso. Repeti-los em
-                    cada módulo dobrava a altura da grade sem dizer nada novo:
-                    a coluna da terça é a terça nos três módulos. */}
-                <div className="grid grid-cols-5 gap-2 sticky top-0 z-10">
+                {/* Os dias aparecem UMA vez por curso, com o mesmo desenho que
+                    tinham em cada linha — repeti-los nos três módulos dobrava a
+                    altura sem dizer nada novo: a coluna da terça é a terça nos
+                    três. Em cinza porque agora valem para todos, e não para o
+                    módulo de baixo. */}
+                <div className="grid grid-cols-5 gap-2">
                   {DIAS.map(dia => (
                     <div
                       key={dia.value}
-                      className="flex items-center justify-center gap-1.5 rounded-lg bg-blue-950/80 backdrop-blur py-1.5 text-xs font-semibold text-white/80"
+                      className="text-center text-xs font-semibold py-1.5 rounded-lg bg-white text-gray-600 shadow-sm"
                     >
-                      <Calendar className="h-3 w-3" />
+                      <Calendar className="h-3 w-3 mx-auto mb-0.5" />
                       {dia.label}
                     </div>
                   ))}
