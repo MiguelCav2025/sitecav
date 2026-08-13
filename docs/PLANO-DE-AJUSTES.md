@@ -468,7 +468,35 @@ Cada fase só começa quando a anterior estiver revisada. O documento é atualiz
 | ~~**8**~~ | ~~Grupos, notas e banca (`D18`–`D21`)~~ | ✅ **CONCLUÍDA** |
 | ~~**9**~~ | ~~Fechamento de módulo e progressão por aluno (`P15`,`D24`–`D26`,`D29`)~~ | ✅ **CONCLUÍDA** — aba **Fechamento**, passo 6 |
 | ~~**10**~~ | ~~Relatórios (`D27`)~~ | ✅ **CONCLUÍDA** — frequência por disciplina + diário de sala |
-| **11** | Limpezas — **Fase 15** escrita (`P12`,`P16`,`P22`); **`P6` preparado**, ver Fase 16 | falta aplicar o SQL |
+| ~~**11**~~ | ~~Limpezas (`P6`,`P11`,`P12`,`P16`,`P22`)~~ | ✅ **CONCLUÍDA** — fases 15 e 16 aplicadas |
+
+> **Todas as fases estão concluídas e o banco está alinhado com o código.**
+> O que resta não é código: falta um **domínio verificado no Resend** para os
+> professores receberem o link de acesso (`sitecav.vercel.app` não serve — o
+> domínio é da Vercel e não aceita registro de DNS nosso).
+
+### `P11` resolvido — o módulo virava em 1º de julho
+
+O cálculo tinha a virada de semestre escrita no código:
+
+```js
+const semestreAtual = hoje.getMonth() < 6 ? 1 : 2;
+```
+
+Este ano o semestre começou em **3 de agosto**. De 1º de julho até 2 de agosto o
+sistema mostrava **toda turma um módulo à frente** — 34 dias de resposta errada,
+sem erro nenhum na tela. Quem entrou em 2026/2 apareceria no módulo 2 antes da
+primeira aula.
+
+**`D50`** — o semestre vigente sai de `cronogramas`: vale o que **já começou** e
+é o mais recente. No intervalo entre semestres (dezembro a março) o aluno fica
+onde estava, porque nada novo começou. Sem calendário cadastrado o sistema
+responde `null` em vez de chutar; a exceção é matricular aluno, que cai no
+módulo 1 — essa operação não pode travar por falta de calendário, e módulo
+errado se corrige depois, matrícula perdida não.
+
+`src/hooks/useSemestreVigente.ts` carrega o calendário uma vez e serve as seis
+telas que dependiam da conta antiga.
 | ~~**11-B**~~ | ~~Admin por concessão explícita + `P9` investigado~~ | ✅ **CONCLUÍDA** |
 | ~~**12**~~ | ~~Acesso do professor por e-mail (`P21`)~~ | ✅ **CONCLUÍDA** — migração aplicada em 13/08/2026 |
 | ~~**IMP**~~ | ~~Importação das planilhas reais~~ | ✅ **aplicada em 13/08/2026** — ver `N23` |

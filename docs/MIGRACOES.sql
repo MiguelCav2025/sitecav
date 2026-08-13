@@ -28,10 +28,14 @@
 --   Fase 14 ... [x] aplicada e verificada em 13/08/2026 (modulo != semestre)
 --                   Colunas conferidas, funcao e view reescritas, dados
 --                   intactos: 38/47/28 matriculas por modulo, como antes.
---   Fase 15 ... [ ] NAO APLICADA — limpezas (semana, descricao, professor_turmas).
---                   Rodar DEPOIS do deploy que parou de escrever nelas.
---   Fase 16 ... [ ] PREPARADA, nao escrita — renomear chamada_aberta.
---                   Precisa do corpo real das funcoes: ver a consulta na fase.
+--   Fase 15 ... [x] aplicada em 13/08/2026 (semana, descricao, professor_turmas)
+--   Fase 16 ... [x] aplicada e verificada em 13/08/2026
+--                   chamada_aberta -> chamada_finalizada, com as 5 funcoes
+--                   reescritas a partir do corpo real extraido de pg_proc.
+--                   Conferido: nenhuma funcao cita mais o nome antigo, e as
+--                   consultas das quatro telas respondem.
+--
+-- NAO HA MIGRACAO PENDENTE. O banco e o codigo estao alinhados.
 --
 -- COMO RODAR: um bloco de cada vez (FASE 1, depois FASE 2), conferindo o
 -- resultado entre eles. O editor do Supabase executa a selecao inteira como
