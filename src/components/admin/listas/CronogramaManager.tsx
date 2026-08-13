@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { contarDiasLetivos } from "@/lib/calendario-escolar";
+import { conciliarFeriados, type TipoDeFeriado } from "@/lib/feriados";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -121,6 +122,30 @@ export default function CronogramaManager() {
     setCronogramas(prev => prev.map(c => c.id === cron.id ? { ...c, feriados: novosFeriados } : c));
   };
 
+  /**
+   * Aceita feriados sugeridos pelo calendário.
+   *
+   * A sugestão nunca se aplica sozinha: quem decide se o CAV para naquele dia é
+   * a coordenação. Ponto facultativo, então, muda de escola para escola.
+   */
+  const handleAceitarSugestoes = async (cron: Cronograma, datas: string[]) => {
+    if (datas.length === 0) return;
+    const novosFeriados = [...new Set([...cron.feriados, ...datas])].sort();
+    const { error } = await supabase
+      .from("cronogramas").update({ feriados: novosFeriados }).eq("id", cron.id);
+    if (error) return showMsg("erro", `Erro ao salvar feriados: ${error.message}`);
+    setCronogramas(prev => prev.map(c => c.id === cron.id ? { ...c, feriados: novosFeriados } : c));
+    showMsg("ok", datas.length === 1
+      ? "Feriado adicionado."
+      : `${datas.length} feriados adicionados.`);
+  };
+
+  const CORES_POR_TIPO: Record<TipoDeFeriado, string> = {
+    nacional:    "bg-red-50 border-red-200 text-red-700",
+    municipal:   "bg-orange-50 border-orange-200 text-orange-700",
+    facultativo: "bg-amber-50 border-amber-200 text-amber-800",
+  };
+
   return (
     <div className="space-y-6">
 
@@ -129,7 +154,8 @@ export default function CronogramaManager() {
         <Calendar className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
         <div className="text-sm text-blue-800 space-y-1">
           <p className="font-semibold">Como funciona</p>
-          <p>Cadastre o período letivo de cada semestre. Ao criar uma disciplina com <strong>dia da semana definido</strong>, o sistema usa o cronograma para preencher automaticamente as datas de cada aula.</p>
+          <p>Cadastre o período letivo de cada semestre — início, fim e os dias em que não há aula. Ao criar uma disciplina com <strong>dia da semana definido</strong>, o sistema usa este calendário para preencher as datas de cada aula e saber quantas são.</p>
+          <p>Os feriados nacionais e o aniversário de São Bernardo aparecem <strong>sugeridos</strong>, já calculados para o período. Quem confirma é você: incluir um dia aqui tira uma aula da grade. Datas da escola — emenda, recesso, evento — você adiciona à mão.</p>
         </div>
       </div>
 
@@ -294,36 +320,102 @@ export default function CronogramaManager() {
                     })()}
 
                     {/* Feriados */}
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold text-gray-500">Feriados / Recessos</p>
-                      <div className="flex gap-2">
-                        <input
-                          type="date"
-                          className="h-8 text-xs text-gray-800 border border-gray-300 rounded-lg px-2 w-44 focus:outline-none focus:border-blue-500"
-                          min={cron.data_inicio}
-                          max={cron.data_fim}
-                          value={feriadoInput[cron.id] ?? ""}
-                          onChange={e => setFeriadoInput(prev => ({ ...prev, [cron.id]: e.target.value }))}
-                        />
-                        <Button size="sm" variant="outline" className="h-8 text-xs text-gray-700" onClick={() => handleAdicionarFeriado(cron)}>
-                          + Adicionar
-                        </Button>
-                      </div>
-                      {cron.feriados.length === 0 ? (
-                        <p className="text-xs text-gray-400 italic">Nenhum feriado cadastrado.</p>
-                      ) : (
-                        <div className="flex flex-wrap gap-2">
-                          {cron.feriados.map(f => (
-                            <span key={f} className="flex items-center gap-1 bg-red-50 border border-red-200 text-red-700 text-xs px-2 py-1 rounded-full">
-                              {formatarData(f)}
-                              <button onClick={() => handleRemoverFeriado(cron, f)} className="hover:text-red-900">
-                                <X className="h-3 w-3" />
-                              </button>
-                            </span>
-                          ))}
+                    {(() => {
+                      const inicio = editDatas[cron.id]?.inicio ?? cron.data_inicio;
+                      const fim = editDatas[cron.id]?.fim ?? cron.data_fim;
+                      const { jaMarcados, sugestoes, personalizados } =
+                        conciliarFeriados(cron.feriados, inicio, fim);
+                      const porData = new Map(jaMarcados.map(f => [f.data, f]));
+
+                      return (
+                        <div className="space-y-3">
+                          <p className="text-xs font-semibold text-gray-500">Feriados / Recessos</p>
+
+                          {/* O que o calendário conhece e ainda não foi marcado.
+                              Feriado em fim de semana não entra: não tira aula
+                              de ninguém, e marcá-lo bagunçaria a contagem. */}
+                          {sugestoes.length > 0 && (
+                            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-2">
+                              <div className="flex items-start justify-between gap-3">
+                                <p className="text-xs text-blue-900">
+                                  <strong>
+                                    {sugestoes.length === 1
+                                      ? "1 feriado cai em dia de aula"
+                                      : `${sugestoes.length} feriados caem em dia de aula`}
+                                  </strong>{" "}
+                                  neste período e ainda não está marcado. Clique para incluir —
+                                  ou ignore, se no CAV houver aula.
+                                </p>
+                                <Button
+                                  size="sm"
+                                  className="h-7 text-xs shrink-0"
+                                  onClick={() => handleAceitarSugestoes(cron, sugestoes.map(f => f.data))}
+                                >
+                                  Incluir todos
+                                </Button>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {sugestoes.map(f => (
+                                  <button
+                                    key={f.data}
+                                    onClick={() => handleAceitarSugestoes(cron, [f.data])}
+                                    className="flex items-center gap-1 rounded-full border border-blue-300 bg-white px-2 py-1 text-xs text-blue-800 hover:bg-blue-100"
+                                    title={`Incluir ${f.nome}`}
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                    {formatarData(f.data)} · {f.nome}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Data que nenhuma lista conhece: emenda, recesso,
+                              evento da escola. Só a coordenação sabe. */}
+                          <div className="flex gap-2">
+                            <input
+                              type="date"
+                              className="h-8 text-xs text-gray-800 border border-gray-300 rounded-lg px-2 w-44 focus:outline-none focus:border-blue-500"
+                              min={cron.data_inicio}
+                              max={cron.data_fim}
+                              value={feriadoInput[cron.id] ?? ""}
+                              onChange={e => setFeriadoInput(prev => ({ ...prev, [cron.id]: e.target.value }))}
+                            />
+                            <Button size="sm" variant="outline" className="h-8 text-xs text-gray-700" onClick={() => handleAdicionarFeriado(cron)}>
+                              + Adicionar
+                            </Button>
+                          </div>
+
+                          {cron.feriados.length === 0 ? (
+                            <p className="text-xs text-gray-400 italic">Nenhum feriado cadastrado.</p>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {cron.feriados.map(data => {
+                                const conhecido = porData.get(data);
+                                const ehPersonalizado = personalizados.includes(data);
+                                const cor = conhecido
+                                  ? CORES_POR_TIPO[conhecido.tipo]
+                                  : "bg-gray-50 border-gray-200 text-gray-600";
+                                return (
+                                  <span
+                                    key={data}
+                                    className={`flex items-center gap-1 border text-xs px-2 py-1 rounded-full ${cor}`}
+                                    title={ehPersonalizado ? "Data da escola — nenhum calendário oficial a conhece" : conhecido?.nome}
+                                  >
+                                    {formatarData(data)}
+                                    {conhecido && <span className="opacity-75">· {conhecido.nome}</span>}
+                                    {ehPersonalizado && <span className="opacity-60">· da escola</span>}
+                                    <button onClick={() => handleRemoverFeriado(cron, data)} className="ml-0.5 hover:opacity-60">
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
+                      );
+                    })()}
 
                     <button
                       onClick={() => handleExcluir(cron.id, cron.semestre)}
