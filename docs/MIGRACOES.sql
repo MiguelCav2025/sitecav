@@ -23,9 +23,9 @@
 --   Fase 10 ... [x] aplicada em 12/08/2026 (notas parciais, banca por modulo, salas)
 --   Fase 11 ... [x] aplicada em 12/08/2026 (admin por concessao explicita)
 --   Fase 11-B . [x] aplicada em 12/08/2026 (triggers liberam auth.uid() nulo)
---   Fase 12 ... [ ] NAO APLICADA — acesso do professor por e-mail.
---                   Precisa entrar ANTES de usar o botao "Enviar acesso":
---                   sem ela a tela nao carrega e o convite nao registra.
+--   Fase 12 ... [x] aplicada em 13/08/2026 (acesso do professor por e-mail)
+--   Fase 13 ... [ ] NAO APLICADA — total de aulas da disciplina (N24).
+--                   Urgente: com o valor errado, "Recalcular grade" apaga 99 aulas.
 --
 -- COMO RODAR: um bloco de cada vez (FASE 1, depois FASE 2), conferindo o
 -- resultado entre eles. O editor do Supabase executa a selecao inteira como
@@ -1690,6 +1690,53 @@ update public.professores
 --   -- so volte o not null depois de preencher os e-mails vazios, senao falha:
 --   -- update public.professores set email = id || '@cav.temp' where email is null;
 --   alter table public.professores alter column email set not null;
+
+
+-- ============================================================================
+-- FASE 13 — total de aulas da disciplina bate com a grade real  (N24)
+-- ----------------------------------------------------------------------------
+-- As disciplinas foram gravadas com `total_aulas = 16`, numero fixo que eu
+-- inventei no script de importacao. As planilhas do CAV desmentem: a disciplina
+-- ocupa TODO dia letivo do seu dia da semana, e o total varia com os feriados —
+-- 17 as segundas, 19 as tercas, 18 as quartas e quintas, 17 as sextas.
+--
+-- Conferido nas 56 abas das planilhas e nas 979 aulas ja gravadas: as duas
+-- fontes concordam, e nenhuma disciplina diverge entre a turma da manha e a
+-- da noite.
+--
+-- POR QUE CORRIGIR AGORA: `planejarRecalculoDaGrade` apaga aula aberta cujo
+-- numero passa de `total_aulas`. Com 16, um clique em "Recalcular grade"
+-- apagaria 99 aulas — nenhuma chamada esta fechada para segurar.
+-- ============================================================================
+
+-- 13.1 — o total passa a ser o que a grade realmente tem.
+-- Derivado das proprias aulas, e nao de uma tabela de numeros escrita a mao:
+-- se o cronograma mudar e a grade for regerada, rodar isto de novo reconcilia.
+update public.disciplinas d
+   set total_aulas = real.n
+  from (
+    select disciplina_id, count(distinct numero) as n
+      from public.aulas
+     group by disciplina_id
+  ) real
+ where real.disciplina_id = d.id
+   and d.total_aulas is distinct from real.n;
+
+-- 13.2 — conferencia: deve voltar VAZIO.
+-- Qualquer linha aqui e disciplina cuja grade nao bate com o total declarado.
+-- select d.nome, d.dia_da_semana, d.total_aulas, count(distinct a.numero) as na_grade
+--   from public.disciplinas d
+--   left join public.aulas a on a.disciplina_id = d.id
+--  group by d.id, d.nome, d.dia_da_semana, d.total_aulas
+-- having d.total_aulas is distinct from count(distinct a.numero);
+
+-- 13.3 — visao geral, para bater o olho
+-- select dia_da_semana, total_aulas, count(*) as disciplinas
+--   from public.disciplinas group by 1, 2 order by 1;
+--   esperado: 1→17, 2→19, 3→18, 4→18, 5→17
+
+-- ROLLBACK (volta ao numero fixo — so faz sentido se a decisao mudar)
+--   update public.disciplinas set total_aulas = 16;
 
 
 -- ============================================================================

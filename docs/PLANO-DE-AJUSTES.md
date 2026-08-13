@@ -485,22 +485,30 @@ Cada fase só começa quando a anterior estiver revisada. O documento é atualiz
 | aulas | 979 | todas com data, professor e disciplina; nenhuma chamada fechada |
 | **presenças** | **0** | ⚠️ ver `N23` |
 
-> **N24 ⚠️ — a disciplina diz 16 aulas, a grade tem 17 a 19.** As disciplinas
-> foram cadastradas com `total_aulas = 16` (número da grade curricular), mas a
-> geração usou **todos os dias letivos disponíveis** do cronograma: 17 às
-> segundas, 19 às terças, 18 às quartas e quintas, 17 às sextas. Sobram **99
-> aulas** com `numero` acima de 16. A aba Disciplinas mostra "16 aulas"
-> enquanto "Ver aulas" lista 17 a 19 — a tela se contradiz.
+> **~~N24~~ → `D45` ✅ RESOLVIDO.** **A disciplina ocupa todo dia letivo do seu
+> dia da semana — não sobra dia no semestre.** Logo `total_aulas` não é um
+> número fixo: varia com os feriados. **17** às segundas, **19** às terças,
+> **18** às quartas e quintas, **17** às sextas.
 >
-> **O risco é concreto:** `planejarRecalculoDaGrade` remove aula aberta cujo
-> `numero > total_aulas`. Como nenhuma chamada está fechada, clicar em
-> *Recalcular grade* hoje **apaga as 99**, sem nada segurar.
+> As disciplinas tinham `total_aulas = 16`, número que **eu inventei** no
+> script de importação (`aplicar.mjs`) — não veio da grade curricular nem de
+> lugar nenhum. Conferido nas 56 abas das planilhas e nas 979 aulas gravadas:
+> as duas fontes concordam entre si e desmentem o 16. Nenhuma disciplina
+> diverge entre a turma da manhã e a da noite.
 >
-> Duas leituras, e é decisão do coordenador: ou a disciplina tem 16 aulas
-> mesmo e sobram dias no semestre (então `total_aulas` está certo e a grade
-> gerou demais), ou a disciplina ocupa todo dia letivo do seu dia da semana
-> (então `total_aulas` é que está desatualizado). **Não mexer em nada até
-> responder** — as duas correções são opostas.
+> Era perigoso: `planejarRecalculoDaGrade` apaga aula aberta cujo
+> `numero > total_aulas`, e com 16 um clique em *Recalcular grade* apagaria
+> **99 aulas** — nenhuma chamada fechada para segurar.
+>
+> Corrigido na **Fase 13** (banco) e no script (para uma reimportação não
+> reintroduzir). O script agora tira o total do cronograma, e imprime o
+> número por dia da semana ao rodar.
+
+> **~~Falta `Animação Manhã 2026/2`~~ → explicado.** A turma **existe** nas
+> planilhas — quatro abas, uma por disciplina — mas **todas sem nenhum aluno**.
+> São as únicas quatro abas vazias do conjunto. A importação não cria turma
+> sem aluno, e agiu certo. Resta ao coordenador dizer se a turma não abriu ou
+> se a lista ainda não foi preenchida.
 
 > **N23 ❓ — as presenças das planilhas não foram importadas.** O leitor
 > (`scripts/importar/fontes.mjs`) usa as planilhas para tirar nomes, turmas e

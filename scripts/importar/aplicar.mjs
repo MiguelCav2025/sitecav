@@ -263,11 +263,21 @@ const disciplinasCriadas = await inserir("disciplinas", grade.itens.map(i => ({
   semestre_do_curso: i.modulo,
   dia_da_semana: i.diaDaSemana,
   sala_id: idPorSala.get(normalizar(capitalizar(i.sala))) ?? null,
-  total_aulas: 16,
+  // A disciplina ocupa TODO dia letivo do seu dia da semana — não sobra dia no
+  // semestre. Por isso o total sai do cronograma, e varia: 17 às segundas, 19
+  // às terças, 18 às quartas e quintas, 17 às sextas, conforme os feriados
+  // caem. Era 16 fixo aqui, número que eu inventei e que as planilhas
+  // desmentem — e `total_aulas` menor que a grade real faz o recálculo de
+  // grade apagar as aulas excedentes.
+  total_aulas: gerarDatasDoCronograma(CRONOGRAMA, i.diaDaSemana).length,
   emoji: "📚",
   ativa: true,
 })));
 console.log(`  ${disciplinasCriadas.length} disciplinas`);
+for (const dia of [1, 2, 3, 4, 5]) {
+  const q = disciplinasCriadas.filter(d => d.dia_da_semana === dia);
+  if (q.length) console.log(`    dia ${dia}: ${q.length} disciplina(s) × ${q[0].total_aulas} aulas`);
+}
 const semSala = disciplinasCriadas.filter(d => !d.sala_id).length;
 if (semSala) console.log(`  ⚠ ${semSala} sem sala vinculada`);
 
