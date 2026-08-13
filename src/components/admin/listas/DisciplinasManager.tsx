@@ -335,6 +335,7 @@ function DisciplinaCard({
   professores,
   sala,
   professor,
+  tom,
   onVerAulas,
   onExcluir,
   onChangeDia,
@@ -347,6 +348,8 @@ function DisciplinaCard({
   /** Quem leciona. Vem das aulas, não da disciplina: o mesmo nome pode ter
       professor diferente na turma da manhã e na da noite. */
   professor: { nome: string; varios: boolean } | null;
+  /** Classes de fundo e borda do módulo, para o card carregar a cor da linha. */
+  tom: { fundo: string; borda: string };
   onVerAulas: () => void;
   onExcluir: () => void;
   onChangeDia: (dia: number | null) => void;
@@ -355,7 +358,9 @@ function DisciplinaCard({
   const [emojiAberto, setEmojiAberto] = useState(false);
 
   return (
-    <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-sm hover:shadow-md transition-shadow group">
+    // O card leva a cor do módulo bem diluída. É o que liga o card à faixa
+    // "1º semestre" à esquerda sem repetir o rótulo em cada um deles.
+    <div className={`${tom.fundo} ${tom.borda} rounded-xl p-3 border shadow-sm hover:shadow-md transition-shadow group`}>
       <div className="flex items-start justify-between gap-1 mb-2">
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
           <div className="relative shrink-0">
@@ -894,6 +899,7 @@ export default function DisciplinasManager() {
                                   professores={professores}
                                   sala={salas.find(s => s.id === d.sala_id)?.nome ?? null}
                                   professor={professorPorDisciplina[d.id] ?? null}
+                                  tom={{ fundo: cores.header, borda: cores.border }}
                                   onVerAulas={() => setDisciplinaSelecionada(d)}
                                   onExcluir={() => handleExcluir(d.id, d.nome)}
                                   onChangeDia={dia => handleChangeDia(d.id, dia)}
@@ -919,6 +925,7 @@ export default function DisciplinasManager() {
                                   professores={professores}
                                   sala={salas.find(s => s.id === d.sala_id)?.nome ?? null}
                                   professor={professorPorDisciplina[d.id] ?? null}
+                                  tom={{ fundo: cores.header, borda: cores.border }}
                                   onVerAulas={() => setDisciplinaSelecionada(d)}
                                   onExcluir={() => handleExcluir(d.id, d.nome)}
                                   onChangeDia={dia => handleChangeDia(d.id, dia)}
