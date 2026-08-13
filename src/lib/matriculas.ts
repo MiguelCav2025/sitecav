@@ -154,6 +154,29 @@ export async function matricularAlunos(
  * Sair da turma não apaga nada: presenças e notas apontam para aula e
  * disciplina, então o histórico sobrevive à saída (D26).
  */
+/**
+ * Desfaz um encerramento: a matrícula volta a "cursando".
+ *
+ * Sem isto, aprovar alguém por engano não tinha caminho de volta pela tela — e
+ * a decisão do fechamento é justamente a que mais custa errar. Limpa a data e a
+ * observação para não sobrar registro de uma decisão que foi desfeita.
+ */
+export async function reabrirMatricula(
+  supabase: SupabaseClient,
+  matriculaId: string,
+): Promise<{ erro: string | null }> {
+  const { error } = await supabase
+    .from("matriculas")
+    .update({
+      situacao: "cursando",
+      encerrada_em: null,
+      observacao: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", matriculaId);
+  return { erro: error?.message ?? null };
+}
+
 export async function encerrarMatricula(
   supabase: SupabaseClient,
   matriculaId: string,

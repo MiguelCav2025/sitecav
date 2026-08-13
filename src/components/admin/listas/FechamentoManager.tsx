@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { moduloAtual, rotuloModulo } from "@/lib/calendario-escolar";
 import { useSemestreVigente } from "@/hooks/useSemestreVigente";
 import { NOTA_MINIMA, PRESENCA_MINIMA, type Situacao } from "@/lib/aprovacao";
-import { encerrarMatricula } from "@/lib/matriculas";
+import { encerrarMatricula, reabrirMatricula } from "@/lib/matriculas";
 import {
   montarFechamento, resumirFechamento, pendenciasDaTurma, situacaoSugerida,
   type AlunoParaFechar, type LinhaDesempenho, type MatriculaAberta,
@@ -24,6 +24,18 @@ interface Turma {
   curso: string;
   turno: string;
 }
+
+interface Decidido {
+  matriculaId: string;
+  alunoId: string;
+  nome: string;
+  situacao: string;
+  modulo: number;
+}
+
+const ROTULO_SITUACAO: Record<string, string> = {
+  aprovado: "Aprovado", retido: "Retido", desistente: "Desistente", concluido: "Concluído",
+};
 
 const ESTILO: Record<Situacao, { cor: string; rotulo: string; Icone: typeof CheckCircle }> = {
   aprovado:   { cor: "bg-green-50 text-green-700 border-green-200", rotulo: "Aprovado",   Icone: CheckCircle },
@@ -45,6 +57,8 @@ export default function FechamentoManager() {
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [turmaId, setTurmaId] = useState("");
   const [alunos, setAlunos] = useState<AlunoParaFechar[]>([]);
+  const [decididos, setDecididos] = useState<Decidido[]>([]);
+  const [abonosPorAluno, setAbonosPorAluno] = useState<Map<string, number>>(new Map());
   const [carregando, setCarregando] = useState(false);
   const [aberto, setAberto] = useState<string | null>(null);
   const [decidindo, setDecidindo] = useState<string | null>(null);
@@ -70,19 +84,42 @@ export default function FechamentoManager() {
     // Duas fontes de propósito: a lista de quem decidir vem das matrículas em
     // andamento, e as notas vêm da view. Aluno sem nada lançado não aparece na
     // view — se a lista saísse de lá, ele sumiria da tela.
-    const [{ data: mats }, { data: desempenho }] = await Promise.all([
+    const [{ data: mats }, { data: desempenho }, { data: aulasData }] = await Promise.all([
       supabase.from("matriculas")
-        .select("id, aluno:alunos(id, nome)")
-        .eq("turma_id", turmaId).eq("situacao", "cursando"),
+        .select("id, modulo, situacao, aluno:alunos(id, nome)")
+        .eq("turma_id", turmaId),
       supabase.from("vw_desempenho_aluno").select("*").eq("turma_id", turmaId),
+      supabase.from("aulas").select("id").eq("turma_id", turmaId),
     ]);
 
-    const matriculas: MatriculaAberta[] = ((mats ?? []) as unknown as
-      { id: string; aluno: { id: string; nome: string } | null }[])
-      .filter(m => m.aluno)
+    const linhas = ((mats ?? []) as unknown as {
+      id: string; modulo: number; situacao: string; aluno: { id: string; nome: string } | null;
+    }[]).filter(m => m.aluno);
+
+    // Só quem ainda está cursando entra na lista de decidir; os já encerrados
+    // ficam à parte, para o coordenador ver o que decidiu e poder desfazer.
+    const emAberto: MatriculaAberta[] = linhas
+      .filter(m => m.situacao === "cursando")
       .map(m => ({ matriculaId: m.id, alunoId: m.aluno!.id, nome: m.aluno!.nome }));
 
-    setAlunos(montarFechamento(matriculas, (desempenho ?? []) as LinhaDesempenho[]));
+    // Abonos concedidos nas aulas desta turma. O número por aluno basta aqui:
+    // ele serve para avisar que a frequência oficial não conta a história toda.
+    const idsDasAulas = ((aulasData ?? []) as { id: string }[]).map(a => a.id);
+    const porAluno = new Map<string, number>();
+    if (idsDasAulas.length > 0) {
+      const { data: abonos } = await supabase
+        .from("abonos").select("aluno_id").in("aula_id", idsDasAulas);
+      for (const a of (abonos ?? []) as { aluno_id: string }[]) {
+        porAluno.set(a.aluno_id, (porAluno.get(a.aluno_id) ?? 0) + 1);
+      }
+    }
+
+    setAbonosPorAluno(porAluno);
+    setDecididos(linhas
+      .filter(m => m.situacao !== "cursando")
+      .map(m => ({ matriculaId: m.id, alunoId: m.aluno!.id, nome: m.aluno!.nome, situacao: m.situacao, modulo: m.modulo }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")));
+    setAlunos(montarFechamento(emAberto, (desempenho ?? []) as LinhaDesempenho[]));
     setCarregando(false);
   }, [supabase, turmaId]);
 
@@ -115,8 +152,24 @@ export default function FechamentoManager() {
     carregar();
   };
 
+  const desfazer = async (d: Decidido) => {
+    if (!confirm(
+      `Desfazer a decisão sobre ${d.nome}?\n\n` +
+      `A matrícula volta a "cursando" e ele reaparece na lista para decidir de novo. ` +
+      `A data e a observação do encerramento são apagadas.`
+    )) return;
+
+    setDecidindo(d.matriculaId);
+    const { erro } = await reabrirMatricula(supabase, d.matriculaId);
+    setDecidindo(null);
+    if (erro) return aviso("erro", `Não foi possível desfazer: ${erro}`);
+    aviso("ok", `${d.nome} voltou para a lista.`);
+    carregar();
+  };
+
   const resumo = resumirFechamento(alunos);
   const pendencias = pendenciasDaTurma(alunos);
+  const retidos = decididos.filter(d => d.situacao === "retido");
 
   return (
     <div className="space-y-6">
@@ -254,7 +307,18 @@ export default function FechamentoManager() {
                               {expandido ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                             </button>
                           </td>
-                          <td className="px-4 py-3 font-medium text-gray-800">{a.nome}</td>
+                          <td className="px-4 py-3 font-medium text-gray-800">
+                            {a.nome}
+                            {/* A frequência calculada NÃO desconta o abono: a falta
+                                aconteceu. Este aviso existe para o coordenador não
+                                decidir com meia informação — que era o risco real,
+                                já que o sistema nunca retém sozinho. */}
+                            {(abonosPorAluno.get(a.alunoId) ?? 0) > 0 && (
+                              <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800 border border-amber-200">
+                                {abonosPorAluno.get(a.alunoId)} falta(s) abonada(s)
+                              </span>
+                            )}
+                          </td>
                           <td className="px-4 py-3">
                             <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${estilo.cor}`}>
                               <estilo.Icone className="h-3 w-3" /> {estilo.rotulo}
@@ -348,6 +412,82 @@ export default function FechamentoManager() {
           </p>
         </>
       )}
+
+      {decididos.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-gray-400" /> Já decididos
+            </CardTitle>
+            <p className="text-sm text-gray-500">
+              O que já foi encerrado nesta turma. Errou? Desfaça — a matrícula volta
+              para a lista de cima e a decisão anterior é apagada.
+            </p>
+          </CardHeader>
+          <CardContent className="p-0">
+            <table className="w-full text-sm">
+              <tbody className="divide-y divide-gray-100">
+                {decididos.map(d => (
+                  <tr key={d.matriculaId} className="hover:bg-gray-50">
+                    <td className="px-4 py-2 text-gray-700">{d.nome}</td>
+                    <td className="px-4 py-2">
+                      <span className={`rounded-full px-2 py-0.5 text-xs ${
+                        d.situacao === "aprovado" ? "bg-green-50 text-green-700"
+                        : d.situacao === "retido" ? "bg-red-50 text-red-700"
+                        : "bg-gray-100 text-gray-600"}`}>
+                        {ROTULO_SITUACAO[d.situacao] ?? d.situacao}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <Button
+                        size="sm" variant="outline" className="h-7 text-xs text-gray-600"
+                        disabled={decidindo === d.matriculaId}
+                        onClick={() => desfazer(d)}
+                      >
+                        {decidindo === d.matriculaId
+                          ? <Loader2 className="h-3 w-3 animate-spin" />
+                          : "Desfazer"}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
+
+      {retidos.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2 text-amber-700">
+              <AlertCircle className="h-4 w-4" /> Aguardando rematrícula
+            </CardTitle>
+            <p className="text-sm text-gray-500">
+              Quem foi retido refaz o mesmo módulo — mas <strong>não nesta turma</strong>,
+              que vai avançar. Ele entra na turma que começou um semestre depois, que é a
+              que estará neste módulo quando o próximo semestre começar.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-1 text-sm text-gray-600">
+              {retidos.map(d => (
+                <li key={d.matriculaId} className="flex gap-2">
+                  <span className="text-amber-500">•</span>
+                  {d.nome} — refaz o módulo {d.modulo}
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-gray-400 mt-3">
+              A matrícula nova só deve nascer quando o próximo semestre começar. Criá-la
+              agora faria o aluno aparecer na chamada de uma turma que ainda cursa outro
+              módulo. Até lá ele fica nesta lista — ela se esvazia sozinha conforme cada
+              um for rematriculado pela aba Turmas.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
     </div>
   );
 }
