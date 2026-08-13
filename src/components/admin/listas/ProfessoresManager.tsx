@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Plus, Trash2, Loader2, CheckCircle, AlertCircle, UserCheck, Pencil, X, Check,
-  Power, Send, ShieldCheck, Copy,
+  Power, Send, ShieldCheck, Copy, Link2,
 } from "lucide-react";
 
 interface Professor {
@@ -36,8 +36,10 @@ export default function ProfessoresManager() {
 
   /** id do professor cujo convite está sendo gerado agora */
   const [enviando, setEnviando] = useState<string | null>(null);
+  /** O link aparece na linha do próprio professor — nunca solto na tela, para
+      não restar dúvida de a quem ele dá acesso. */
   const [linkGerado, setLinkGerado] = useState<
-    { professor: string; link: string; horas: number; copiou: boolean } | null
+    { professorId: string; professor: string; link: string; horas: number; copiou: boolean } | null
   >(null);
 
   // edição inline
@@ -123,7 +125,10 @@ export default function ProfessoresManager() {
         copiou = true;
       } catch { /* mostrado abaixo, para copiar manualmente */ }
 
-      setLinkGerado({ professor: p.nome, link: json.link, horas: json.validadeEmHoras, copiou });
+      setLinkGerado({
+        professorId: p.id, professor: p.nome,
+        link: json.link, horas: json.validadeEmHoras, copiou,
+      });
       fetchDados();
     } catch {
       showMsg("erro", "Erro de rede ao gerar o acesso.");
@@ -251,60 +256,6 @@ export default function ProfessoresManager() {
         </div>
       </div>
 
-      {linkGerado && (
-        <div className="rounded-xl border border-blue-300 bg-white p-4 shadow-sm space-y-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-gray-800">
-                Link de acesso de {linkGerado.professor}
-                {linkGerado.copiou && <span className="ml-2 text-green-600">· copiado</span>}
-              </p>
-              <p className="text-xs text-gray-500">
-                Vale {linkGerado.horas}h e só pode ser usado uma vez. Mande direto para ele.
-              </p>
-            </div>
-            <button onClick={() => setLinkGerado(null)} className="text-gray-400 hover:text-gray-600">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          <input
-            readOnly
-            value={linkGerado.link}
-            onFocus={e => e.currentTarget.select()}
-            className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-700"
-          />
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              onClick={() => {
-                navigator.clipboard.writeText(linkGerado.link)
-                  .then(() => setLinkGerado({ ...linkGerado, copiou: true }))
-                  .catch(() => showMsg("erro", "Não consegui copiar — selecione o texto acima e copie à mão."));
-              }}
-            >
-              <Copy className="h-4 w-4 mr-1" /> Copiar de novo
-            </Button>
-            <a
-              href={`https://wa.me/?text=${encodeURIComponent(
-                `Olá! Seu acesso ao sistema do CAV: ${linkGerado.link}\n\nO link vale ${linkGerado.horas}h e só pode ser usado uma vez. Ao abrir, você cria sua própria senha.`,
-              )}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 rounded-lg border border-green-300 bg-green-50 px-3 py-1.5 text-sm text-green-800 hover:bg-green-100"
-            >
-              <Send className="h-4 w-4" /> Abrir no WhatsApp
-            </a>
-          </div>
-
-          <p className="text-xs text-amber-700">
-            Trate como senha: quem tiver o link entra como {linkGerado.professor} até ele ser usado.
-            Mande na conversa direta, não em grupo.
-          </p>
-        </div>
-      )}
-
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -379,8 +330,10 @@ export default function ProfessoresManager() {
                 {professores.map(p => {
                   const situacao = situacaoDoAcesso(p);
                   const podeEnviar = p.ativo && !!p.email;
+                  const meuLink = linkGerado?.professorId === p.id ? linkGerado : null;
                   return (
-                    <tr key={p.id} className="hover:bg-gray-50">
+                    <Fragment key={p.id}>
+                    <tr className="hover:bg-gray-50">
                       {editando === p.id ? (
                         <>
                           <td className="px-4 py-2">
@@ -449,14 +402,17 @@ export default function ProfessoresManager() {
                                   : "text-gray-300 cursor-not-allowed"}`}
                                 title={
                                   !p.ativo ? "Professor inativo"
-                                    : !p.email ? "Preencha o e-mail para poder enviar"
-                                    : p.acesso_enviado_em ? "Enviar um novo link de acesso"
-                                    : "Enviar o link do primeiro acesso"
+                                    : !p.email ? "Preencha o e-mail para poder gerar o link"
+                                    : p.acesso_enviado_em ? `Gerar um novo link para ${p.nome}`
+                                    : `Copiar o link de primeiro acesso de ${p.nome}`
                                 }
                               >
+                                {/* Copiar, não enviar: o avião de papel prometia
+                                    um envio que não acontece — quem manda é o
+                                    coordenador, pelo caminho que quiser. */}
                                 {enviando === p.id
                                   ? <Loader2 className="h-4 w-4 animate-spin" />
-                                  : <Send className="h-4 w-4" />}
+                                  : <Link2 className="h-4 w-4" />}
                               </button>
                               <button onClick={() => iniciarEdicao(p)} className="text-blue-400 hover:text-blue-600 p-1" title="Editar nome e e-mail">
                                 <Pencil className="h-4 w-4" />
@@ -480,6 +436,70 @@ export default function ProfessoresManager() {
                         </>
                       )}
                     </tr>
+
+                    {meuLink && (
+                      <tr className="bg-blue-50/70">
+                        <td colSpan={5} className="px-4 py-3">
+                          <div className="space-y-2">
+                            <div className="flex items-start justify-between gap-3">
+                              <p className="text-sm text-gray-700">
+                                Link de <strong>{p.nome}</strong> — {p.email}
+                                <span className="block text-xs text-gray-500">
+                                  Vale {meuLink.horas}h, uso único. Só esta pessoa deve recebê-lo:
+                                  quem abrir entra como ela.
+                                </span>
+                              </p>
+                              <button onClick={() => setLinkGerado(null)} className="text-gray-400 hover:text-gray-600 shrink-0">
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+
+                            {meuLink.copiou ? (
+                              <p className="flex items-center gap-1.5 text-sm text-green-700">
+                                <CheckCircle className="h-4 w-4 shrink-0" /> Copiado — é só colar na conversa com {p.nome.split(" ")[0]}.
+                              </p>
+                            ) : (
+                              <p className="flex items-center gap-1.5 text-sm text-amber-700">
+                                <AlertCircle className="h-4 w-4 shrink-0" /> O navegador não deixou copiar sozinho — selecione o texto e copie.
+                              </p>
+                            )}
+
+                            <input
+                              readOnly
+                              value={meuLink.link}
+                              onFocus={e => e.currentTarget.select()}
+                              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-xs text-gray-700"
+                            />
+
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(meuLink.link)
+                                    .then(() => setLinkGerado({ ...meuLink, copiou: true }))
+                                    .catch(() => showMsg("erro", "Não consegui copiar — selecione o texto e copie à mão."));
+                                }}
+                              >
+                                <Copy className="h-4 w-4 mr-1" /> Copiar link
+                              </Button>
+                              <a
+                                href={`https://wa.me/?text=${encodeURIComponent(
+                                  `Olá, ${p.nome.split(" ")[0]}! Seu acesso ao sistema do CAV: ${meuLink.link}\n\n` +
+                                  `Você entra com o e-mail ${p.email} e a senha que criar ao abrir o link. ` +
+                                  `Ele vale ${meuLink.horas}h e só pode ser usado uma vez.`,
+                                )}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 rounded-lg border border-green-300 bg-green-50 px-3 py-1.5 text-sm text-green-800 hover:bg-green-100"
+                              >
+                                <Send className="h-4 w-4" /> Abrir no WhatsApp
+                              </a>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })}
               </tbody>
