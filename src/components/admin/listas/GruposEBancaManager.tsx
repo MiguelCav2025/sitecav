@@ -8,13 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  AlertCircle, AlertTriangle, CheckCircle, Loader2, Plus, Trash2, UserPlus, Users, X,
+  AlertCircle, AlertTriangle, CheckCircle, Info, Loader2, Plus, Trash2, UserPlus, Users, X,
 } from "lucide-react";
 import { moduloAtual, MODULOS_DO_CURSO } from "@/lib/calendario-escolar";
 import { useSemestreVigente } from "@/hooks/useSemestreVigente";
 import { buscarAlunosDaTurma } from "@/lib/matriculas";
 import {
   avaliarModulo,
+  moduloTemBanca,
   type AvaliacaoDaDisciplina,
   type DesempenhoDisciplina,
   type Situacao,
@@ -219,6 +220,26 @@ export default function GruposEBancaManager() {
         <div className="flex items-center gap-2 py-4 text-white/60">
           <Loader2 className="h-4 w-4 animate-spin" /> Carregando...
         </div>
+      ) : !moduloTemBanca(Number(modulo)) ? (
+        /* O 1º módulo não tem banca (D19). A tela oferecia grupos assim mesmo, e
+           acusava "11 alunos sem grupo" — uma pendência inventada, para uma
+           avaliação que não existe naquele módulo. A nota final ali é a do
+           professor, e é só isso que o fechamento espera. */
+        <Card>
+          <CardContent className="flex items-start gap-3 py-6">
+            <Info className="mt-0.5 h-5 w-5 shrink-0 text-blue-500" />
+            <div className="space-y-1">
+              <p className="font-medium text-gray-800">O módulo 1 não tem banca.</p>
+              <p className="text-sm text-gray-600">
+                A banca começa no <strong>módulo 2</strong>. Aqui a nota final da disciplina é a
+                que o professor lança — não há grupo a montar nem nota de banca a esperar.
+              </p>
+              <p className="text-sm text-gray-500">
+                Para ver a situação desta turma, use a aba <strong>Fechamento</strong>.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       ) : (
         <>
           {/* Grupos */}

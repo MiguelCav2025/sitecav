@@ -94,10 +94,12 @@ const DIAS = [
   { value: "5", label: "Sexta" },
 ];
 
+// `header` é o fundo do card da disciplina. O verde funciona no tom mais claro;
+// azul e roxo somem contra o fundo azul-escuro da página, então sobem um passo.
 const badgeSem = (s: number) => {
   if (s === 1) return { badge: "bg-green-100 text-green-700", border: "border-green-200", header: "bg-green-50" };
-  if (s === 2) return { badge: "bg-blue-100 text-blue-700", border: "border-blue-200", header: "bg-blue-50" };
-  return { badge: "bg-purple-100 text-purple-700", border: "border-purple-200", header: "bg-purple-50" };
+  if (s === 2) return { badge: "bg-blue-100 text-blue-700", border: "border-blue-300", header: "bg-blue-100" };
+  return { badge: "bg-purple-100 text-purple-700", border: "border-purple-300", header: "bg-purple-100" };
 };
 
 // As regras de calendário vivem em @/lib/calendario-escolar, com testes.
