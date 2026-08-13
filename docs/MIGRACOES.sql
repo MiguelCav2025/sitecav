@@ -25,9 +25,9 @@
 --   Fase 11-B . [x] aplicada em 12/08/2026 (triggers liberam auth.uid() nulo)
 --   Fase 12 ... [x] aplicada em 13/08/2026 (acesso do professor por e-mail)
 --   Fase 13 ... [x] aplicada em 13/08/2026 (total de aulas veio para 17/19/18/18/17)
---   Fase 14 ... [ ] NAO APLICADA — renomeia semestre_do_curso -> modulo e
---                   turmas.semestre -> entrada. LEIA A ORDEM no bloco da fase:
---                   rode 14.0 primeiro e me mande o resultado.
+--   Fase 14 ... [x] aplicada e verificada em 13/08/2026 (modulo != semestre)
+--                   Colunas conferidas, funcao e view reescritas, dados
+--                   intactos: 38/47/28 matriculas por modulo, como antes.
 --
 -- COMO RODAR: um bloco de cada vez (FASE 1, depois FASE 2), conferindo o
 -- resultado entre eles. O editor do Supabase executa a selecao inteira como
