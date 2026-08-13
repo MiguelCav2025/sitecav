@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Confirmacao } from "@/components/ui/confirmar";
 import {
   Plus, Trash2, Loader2, CheckCircle, AlertCircle, UserCheck, Pencil, X, Check,
   Power, Send, ShieldCheck, Copy, Link2,
@@ -41,6 +42,7 @@ export default function ProfessoresManager() {
   const [linkGerado, setLinkGerado] = useState<
     { professorId: string; professor: string; link: string; horas: number; copiou: boolean } | null
   >(null);
+  const [confirmandoNovoLink, setConfirmandoNovoLink] = useState<Professor | null>(null);
 
   // edição inline
   const [editando, setEditando] = useState<string | null>(null);
@@ -99,13 +101,19 @@ export default function ProfessoresManager() {
    * define a própria senha ao clicar — nenhuma senha passa por esta tela nem
    * pelas mãos da coordenação.
    */
-  const handleEnviarAcesso = async (p: Professor) => {
-    const reenvio = p.acesso_enviado_em !== null;
-    if (reenvio && !confirm(
-      `Gerar um novo link para ${p.nome}?\n\n` +
-      `O link anterior deixa de valer. A senha atual continua funcionando até ele criar uma nova.`
-    )) return;
+  /**
+   * Primeiro link: sem cerimônia. Segundo em diante: confirma, porque o
+   * anterior deixa de valer no mesmo instante — e pode já estar na mão do
+   * professor. O texto muda conforme ele já tenha entrado ou não: para quem
+   * está acessando, isto é uma redefinição de senha, não um convite.
+   */
+  const handleEnviarAcesso = (p: Professor) => {
+    if (p.acesso_enviado_em === null) return gerarLink(p);
+    setConfirmandoNovoLink(p);
+  };
 
+  const gerarLink = async (p: Professor) => {
+    setConfirmandoNovoLink(null);
     setEnviando(p.id);
     try {
       const res = await fetch("/api/admin/enviar-acesso", {
@@ -226,6 +234,38 @@ export default function ProfessoresManager() {
 
   return (
     <div className="space-y-6">
+      <Confirmacao
+        aberto={confirmandoNovoLink !== null}
+        titulo={confirmandoNovoLink?.senha_alterada ? "Redefinir a senha?" : "Gerar um novo link?"}
+        perigo={confirmandoNovoLink?.senha_alterada ?? false}
+        rotuloConfirmar={confirmandoNovoLink?.senha_alterada ? "Redefinir senha" : "Gerar novo link"}
+        onCancelar={() => setConfirmandoNovoLink(null)}
+        onConfirmar={() => confirmandoNovoLink && gerarLink(confirmandoNovoLink)}
+        descricao={
+          confirmandoNovoLink?.senha_alterada ? (
+            <>
+              <p>
+                <strong>{confirmandoNovoLink.nome}</strong> já está usando o sistema. O novo link
+                serve para ele <strong>criar outra senha</strong> — use quando ele esquecer a atual.
+              </p>
+              <p>A senha de hoje continua valendo até ele abrir o link e trocar.</p>
+            </>
+          ) : (
+            <>
+              <p>
+                <strong>{confirmandoNovoLink?.nome}</strong> já tem um link gerado
+                {confirmandoNovoLink?.acesso_enviado_em
+                  ? ` em ${formatarData(confirmandoNovoLink.acesso_enviado_em)}`
+                  : ""}, e ele ainda não foi usado.
+              </p>
+              <p className="text-amber-700">
+                Gerar outro <strong>invalida o anterior na hora</strong>. Se você já mandou o
+                primeiro, ele deixa de funcionar e o professor verá "link expirado".
+              </p>
+            </>
+          )
+        }
+      />
       <div className="bg-white rounded-xl border border-blue-200 shadow-sm p-4 flex gap-3">
         <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
           <ShieldCheck className="h-4 w-4 text-blue-600" />
