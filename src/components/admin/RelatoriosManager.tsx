@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { semestreDoCurso } from "@/lib/calendario-escolar";
+import { moduloAtual } from "@/lib/calendario-escolar";
 import { buscarAlunosDaTurma } from "@/lib/matriculas";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Download, BarChart3, Users, BookOpen, AlertCircle } from "lucide-react";
 
-interface Turma { id: string; nome: string; semestre: string; curso: string; turno: string; }
+interface Turma { id: string; nome: string; entrada: string; curso: string; turno: string; }
 interface Aluno { id: string; nome: string; }
 interface Aula { id: string; numero: number; chamada_aberta: boolean; }
 interface LinhaRelatorio { aluno: string; total_aulas: number; presentes: number; ausentes: number; percentual: number; }
@@ -18,11 +18,11 @@ const ROMANOS = ["I", "II", "III", "IV", "V", "VI"];
 // O piso em 1 é comportamento herdado: uma turma que ainda não começou aparece
 // no relatório como se estivesse no 1º semestre. Mantido para não alterar a
 // saída dos relatórios sem decisão. Ver P10 no plano de ajustes.
-const calcularSemestreDoCurso = (semestreEntrada: string) =>
-  Math.max(1, semestreDoCurso(semestreEntrada) ?? 1);
+const moduloDaTurma = (entrada: string) =>
+  Math.max(1, moduloAtual(entrada) ?? 1);
 
 function labelTurma(t: Turma): string {
-  const sem = calcularSemestreDoCurso(t.semestre);
+  const sem = moduloDaTurma(t.entrada);
   const romano = ROMANOS[sem - 1] ?? `${sem}°`;
   return `${t.curso} ${romano} · ${t.turno}`;
 }
@@ -38,7 +38,7 @@ export default function RelatoriosManager() {
   const [relatorioAula, setRelatorioAula] = useState<{ nome: string; presente: boolean }[]>([]);
 
   useEffect(() => {
-    supabase.from("turmas").select("id, nome, semestre, curso, turno").order("nome").then(({ data }) => setTurmas(data ?? []));
+    supabase.from("turmas").select("id, nome, entrada, curso, turno").order("nome").then(({ data }) => setTurmas(data ?? []));
   }, []);
 
   useEffect(() => {

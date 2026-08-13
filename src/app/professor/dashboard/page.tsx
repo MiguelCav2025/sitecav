@@ -8,11 +8,11 @@ import {
   BookOpen, LogOut, ChevronRight, CheckCircle, XCircle,
   Loader2, GraduationCap, Users, ArrowLeft, ClipboardList
 } from "lucide-react";
-import { semestreDoCurso, rotuloSemestreDoCurso } from "@/lib/calendario-escolar";
+import { moduloAtual, rotuloModulo } from "@/lib/calendario-escolar";
 import LancarNotas from "@/components/professor/LancarNotas";
 import { buscarAlunosDaTurma } from "@/lib/matriculas";
 
-interface Turma { id: string; nome: string; turno: string; semestre: string; curso: string; }
+interface Turma { id: string; nome: string; turno: string; entrada: string; curso: string; }
 interface Disciplina { id: string; nome: string; emoji: string | null; }
 interface Aula {
   id: string;
@@ -33,10 +33,10 @@ interface Presenca { aluno_id: string; presente: boolean; }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const semDocurso = (semestreEntrada: string) =>
-  rotuloSemestreDoCurso(semestreDoCurso(semestreEntrada));
+  rotuloModulo(moduloAtual(semestreEntrada));
 
 function labelTurma(turma: Turma): string {
-  return `${semDocurso(turma.semestre)} · ${turma.curso} ${turma.turno}`;
+  return `${semDocurso(turma.entrada)} · ${turma.curso} ${turma.turno}`;
 }
 
 function formatarData(iso: string | null): string {
@@ -132,7 +132,7 @@ export default function ProfessorDashboard() {
 
       const { data: aulasData } = await supabase
         .from("aulas")
-        .select("id, numero, semana, chamada_aberta, data_aula, conteudo_ministrado, turma:turmas(id, nome, turno, semestre, curso), disciplina:disciplinas(id, nome, emoji)")
+        .select("id, numero, semana, chamada_aberta, data_aula, conteudo_ministrado, turma:turmas(id, nome, turno, entrada, curso), disciplina:disciplinas(id, nome, emoji)")
         .eq("professor_id", prof.id)
         .order("numero", { ascending: true });
 
@@ -534,7 +534,7 @@ export default function ProfessorDashboard() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-gray-900 font-semibold">{turma.curso} {turma.turno}</p>
-                  <p className="text-gray-400 text-xs mt-0.5">{semDocurso(turma.semestre)}</p>
+                  <p className="text-gray-400 text-xs mt-0.5">{semDocurso(turma.entrada)}</p>
                   <div className="mt-2 flex items-center gap-2">
                     <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                       <div className="h-1.5 bg-green-500 rounded-full" style={{ width: `${pct}%` }} />

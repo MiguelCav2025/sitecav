@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { semestreDoCurso, rotuloSemestreDoCurso } from "@/lib/calendario-escolar";
+import { moduloAtual, rotuloModulo } from "@/lib/calendario-escolar";
 import { buscarAlunosDaTurma, matricularAlunos, encerrarMatricula } from "@/lib/matriculas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,8 @@ import { Plus, Trash2, Users, Loader2, CheckCircle, AlertCircle, Info, Graduatio
 interface Turma {
   id: string;
   nome: string;
-  semestre: string;
+  /** Semestre do calendário em que a turma começou. Dele sai o módulo atual. */
+  entrada: string;
   curso: string;
   turno: string;
   ativa: boolean;
@@ -33,21 +34,24 @@ interface Aluno {
 const CURSOS = ["Animação", "Cine/TV"];
 const TURNOS = ["Manhã", "Noite"];
 
-const calcularSemestreDoCurso = (semestreEntrada: string) =>
-  rotuloSemestreDoCurso(semestreDoCurso(semestreEntrada), " do curso");
+const rotuloDoModulo = (entrada: string) =>
+  rotuloModulo(moduloAtual(entrada));
 
-function badgeSemestre(semCurso: string) {
-  if (semCurso.includes("1º")) return "bg-green-100 text-green-700";
-  if (semCurso.includes("2º")) return "bg-blue-100 text-blue-700";
-  if (semCurso.includes("3º")) return "bg-purple-100 text-purple-700";
-  if (semCurso.includes("concluído")) return "bg-gray-100 text-gray-500";
+// A cor sai do NÚMERO do módulo, não de procurar "1º" no texto do rótulo.
+// Enquanto o rótulo era "1º semestre do curso", casar por texto funcionava; ao
+// virar "Módulo 1" todas as turmas cairiam na cor de exceção, sem erro nenhum.
+function badgeModulo(modulo: number | null) {
+  if (modulo === 1) return "bg-green-100 text-green-700";
+  if (modulo === 2) return "bg-blue-100 text-blue-700";
+  if (modulo === 3) return "bg-purple-100 text-purple-700";
+  if (modulo !== null && modulo > 3) return "bg-gray-100 text-gray-500";
   return "bg-yellow-100 text-yellow-700";
 }
 
-function cardBgSemestre(semCurso: string) {
-  if (semCurso.includes("1º")) return "bg-green-50";
-  if (semCurso.includes("2º")) return "bg-blue-50";
-  if (semCurso.includes("3º")) return "bg-purple-50";
+function cardBgModulo(modulo: number | null) {
+  if (modulo === 1) return "bg-green-50";
+  if (modulo === 2) return "bg-blue-50";
+  if (modulo === 3) return "bg-purple-50";
   return "bg-white";
 }
 
@@ -131,7 +135,7 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
     }
 
     const { erro } = await matricularAlunos(
-      supabase, turma.id, turma.semestre, criados.map(c => c.id),
+      supabase, turma.id, turma.entrada, criados.map(c => c.id),
     );
     if (erro) showMsg("erro", `Alunos criados, mas houve falha ao matricular: ${erro}`);
     else {
@@ -207,7 +211,7 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
     }
 
     const { erro } = await matricularAlunos(
-      supabase, turma.id, turma.semestre, criados.map(c => c.id),
+      supabase, turma.id, turma.entrada, criados.map(c => c.id),
     );
     if (erro) showMsg("erro", `Alunos criados, mas houve falha ao matricular: ${erro}`);
     else {
@@ -223,7 +227,7 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <Users className="h-5 w-5 text-blue-600" />
-          Alunos — {turma.curso} {turma.turno} (Entrada {turma.semestre})
+          Alunos — {turma.curso} {turma.turno} (Entrada {turma.entrada})
         </DialogTitle>
       </DialogHeader>
 
@@ -309,7 +313,7 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
         <div className="space-y-3 bg-gray-50 rounded-xl p-4">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-gray-700">Adicionar alunos</p>
-            {calcularSemestreDoCurso(turma.semestre) === "1º semestre do curso" && (
+            {rotuloDoModulo(turma.entrada) === "Módulo 1" && (
               <Button size="sm" variant="outline" onClick={handleAbrirRevisao} disabled={carregandoRevisao}>
                 {carregandoRevisao ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Download className="h-3.5 w-3.5 mr-1" />}
                 Importar do Processo Seletivo
@@ -455,12 +459,12 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
-  const [form, setForm] = useState({ semestre: "", curso: "", turno: "" });
+  const [form, setForm] = useState({ entrada: "", curso: "", turno: "" });
   const [turmaSelecionada, setTurmaSelecionada] = useState<Turma | null>(null);
   const [formAberto, setFormAberto] = useState(false);
 
-  const preview = form.curso && form.turno && form.semestre
-    ? `${form.curso} · ${form.turno} · Entrada ${form.semestre}`
+  const preview = form.curso && form.turno && form.entrada
+    ? `${form.curso} · ${form.turno} · Entrada ${form.entrada}`
     : null;
 
   const fetchTurmas = async () => {
@@ -470,7 +474,7 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
     // `alunos(count)`, que dependia da coluna alunos.turma_id — a mesma que
     // não conseguia representar aluno cursando duas turmas.
     const [{ data }, { data: matriculas }] = await Promise.all([
-      supabase.from("turmas").select("*").order("semestre", { ascending: false }),
+      supabase.from("turmas").select("*").order("entrada", { ascending: false }),
       supabase.from("matriculas").select("turma_id").eq("situacao", "cursando"),
     ]);
 
@@ -488,14 +492,14 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
   useEffect(() => { fetchTurmas(); }, []);
 
   const handleCriar = async () => {
-    if (!form.semestre || !form.curso || !form.turno) return setMsg({ tipo: "erro", texto: "Preencha todos os campos." });
+    if (!form.entrada || !form.curso || !form.turno) return setMsg({ tipo: "erro", texto: "Preencha todos os campos." });
     setSalvando(true);
-    const nome = `${form.curso} ${form.turno} ${form.semestre}`;
-    const { error } = await supabase.from("turmas").insert([{ nome, semestre: form.semestre, curso: form.curso, turno: form.turno }]);
+    const nome = `${form.curso} ${form.turno} ${form.entrada}`;
+    const { error } = await supabase.from("turmas").insert([{ nome, entrada: form.entrada, curso: form.curso, turno: form.turno }]);
     if (error) setMsg({ tipo: "erro", texto: "Erro ao criar turma." });
     else {
       setMsg({ tipo: "ok", texto: `Turma criada: ${nome}` });
-      setForm({ semestre: "", curso: "", turno: "" });
+      setForm({ entrada: "", curso: "", turno: "" });
       fetchTurmas();
     }
     setSalvando(false);
@@ -568,8 +572,8 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
                 <Input
                   className="w-full text-gray-800"
                   placeholder="ex: 2026/2"
-                  value={form.semestre}
-                  onChange={e => setForm(f => ({ ...f, semestre: e.target.value }))}
+                  value={form.entrada}
+                  onChange={e => setForm(f => ({ ...f, entrada: e.target.value }))}
                 />
                 <p className="text-xs text-gray-400">Quando este grupo começou o curso</p>
               </div>
@@ -622,49 +626,50 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
             const lista = turmasPorCurso[curso];
             if (!lista || lista.length === 0) return null;
 
-            // Ordena por semestre do curso (1,2,3) e dentro de cada um Manhã antes de Noite
-            const ORDEM_SEM = ["1º semestre do curso", "2º semestre do curso", "3º semestre do curso", "Ainda não iniciou", "Curso concluído"];
+            // Ordena por módulo (1,2,3) e dentro de cada um Manhã antes de Noite
+            const ORDEM_ROTULO = ["Módulo 1", "Módulo 2", "Módulo 3", "Ainda não iniciou", "Curso concluído"];
             const ORDEM_TURNO = ["Manhã", "Noite"];
             const sorted = [...lista].sort((a, b) => {
-              const sA = ORDEM_SEM.indexOf(calcularSemestreDoCurso(a.semestre));
-              const sB = ORDEM_SEM.indexOf(calcularSemestreDoCurso(b.semestre));
+              const sA = ORDEM_ROTULO.indexOf(rotuloDoModulo(a.entrada));
+              const sB = ORDEM_ROTULO.indexOf(rotuloDoModulo(b.entrada));
               if (sA !== sB) return sA - sB;
               return ORDEM_TURNO.indexOf(a.turno) - ORDEM_TURNO.indexOf(b.turno);
             });
 
-            // Agrupa por semestre do curso para exibir em linhas separadas
-            const grupos: Record<string, Turma[]> = {};
+            // Agrupa por módulo para exibir em linhas separadas. O módulo em
+            // número acompanha o rótulo, porque é dele que sai a cor.
+            const grupos: Record<string, { modulo: number | null; turmas: Turma[] }> = {};
             sorted.forEach(t => {
-              const sem = calcularSemestreDoCurso(t.semestre);
-              if (!grupos[sem]) grupos[sem] = [];
-              grupos[sem].push(t);
+              const rotulo = rotuloDoModulo(t.entrada);
+              if (!grupos[rotulo]) grupos[rotulo] = { modulo: moduloAtual(t.entrada), turmas: [] };
+              grupos[rotulo].turmas.push(t);
             });
 
             return (
               <div key={curso} className="space-y-4">
                 <p className="text-white font-bold text-lg border-b border-white/20 pb-2">{curso}</p>
 
-                {ORDEM_SEM.filter(sem => grupos[sem]?.length).map(sem => (
-                  <div key={sem} className="space-y-2">
-                    {/* Rótulo da linha de semestre */}
+                {ORDEM_ROTULO.filter(r => grupos[r]?.turmas.length).map(rotulo => (
+                  <div key={rotulo} className="space-y-2">
+                    {/* Rótulo da linha do módulo */}
                     <div className="flex items-center gap-2">
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badgeSemestre(sem)}`}>{sem}</span>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badgeModulo(grupos[rotulo].modulo)}`}>{rotulo}</span>
                       <div className="flex-1 h-px bg-white/10" />
                     </div>
 
                     {/* Cards da linha: Manhã | Noite */}
                     <div className="grid sm:grid-cols-2 gap-3">
-                      {grupos[sem].map(t => (
+                      {grupos[rotulo].turmas.map(t => (
                         <button
                           key={t.id}
                           onClick={() => setTurmaSelecionada(t)}
-                          className={`${cardBgSemestre(sem)} rounded-xl p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all text-left w-full group cursor-pointer`}
+                          className={`${cardBgModulo(grupos[rotulo].modulo)} rounded-xl p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all text-left w-full group cursor-pointer`}
                         >
                           <div className="flex items-start justify-between">
                             <div className="space-y-2 flex-1">
                               <div>
                                 <p className="font-semibold text-gray-800 group-hover:text-blue-700 transition-colors">{t.turno}</p>
-                              <p className="text-xs text-gray-500">Entrada: {t.semestre}</p>
+                              <p className="text-xs text-gray-500">Entrada: {t.entrada}</p>
                             </div>
                               <p className="text-xs text-gray-600 flex items-center gap-1 pt-1">
                                 <Users className="h-3 w-3" />

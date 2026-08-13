@@ -1790,9 +1790,26 @@ update public.disciplinas d
 --    and column_name in ('semestre', 'semestre_do_curso')
 --  order by table_name;
 
+-- A PRE-CHECAGEM ACUSOU DOIS PONTOS. Ambos tratados abaixo, em 14.4 e 14.5:
+--
+--   impede_aluno_em_dois_grupos()  funcao plpgsql que le grupos.semestre_do_curso
+--   vw_desempenho_aluno            view que EXPOE uma coluna semestre_do_curso
+--
+-- Renomear a coluna nao conserta nenhum dos dois. A funcao guarda o corpo como
+-- texto e quebraria na primeira insercao de aluno em grupo. A view continuaria
+-- servindo a coluna com o nome velho, que e o que o relatorio le.
+--
+-- E apareceu uma tabela que eu tinha esquecido: `grupos` tambem tem
+-- semestre_do_curso.
+--
+-- NAO SAO RENOMEADAS, e esta certo: cronogramas.semestre, gabaritos.semestre e
+-- resultados_processo.semestre. Essas tres falam do semestre do CALENDARIO —
+-- exatamente o significado que fica valendo.
+
 -- 14.1 — o modulo passa a se chamar modulo
 alter table public.disciplinas rename column semestre_do_curso to modulo;
 alter table public.matriculas  rename column semestre_do_curso to modulo;
+alter table public.grupos      rename column semestre_do_curso to modulo;
 
 -- 14.2 — o que a turma guarda e a ENTRADA dela, nao "o semestre dela"
 alter table public.turmas rename column semestre to entrada;
@@ -1803,8 +1820,101 @@ comment on column public.disciplinas.modulo is
   'Posicao no curso: 1, 2 ou 3. Nao confundir com o semestre do calendario.';
 comment on column public.matriculas.modulo is
   'Em que modulo o aluno estava nesta matricula.';
+comment on column public.grupos.modulo is
+  'Modulo a que o grupo de banca pertence.';
 
--- 14.3 — conferencia: as tres colunas novas devem aparecer, e nenhuma velha
+-- 14.4 — a funcao, reescrita. Mesma regra, nomes novos.
+create or replace function public.impede_aluno_em_dois_grupos()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_turma    uuid;
+  v_modulo   integer;
+  v_conflito text;
+begin
+  select g.turma_id, g.modulo
+    into v_turma, v_modulo
+    from public.grupos g
+   where g.id = new.grupo_id;
+
+  select g.nome into v_conflito
+    from public.grupo_alunos ga
+    join public.grupos g on g.id = ga.grupo_id
+   where ga.aluno_id = new.aluno_id
+     and ga.grupo_id <> new.grupo_id
+     and g.turma_id = v_turma
+     and g.modulo   = v_modulo
+   limit 1;
+
+  if v_conflito is not null then
+    raise exception
+      'Este aluno ja esta no grupo "%" nesta turma e modulo. Remova-o de la antes.', v_conflito
+      using errcode = 'unique_violation';
+  end if;
+
+  return new;
+end;
+$$;
+
+-- 14.5 — a view, recriada para EXPOR `modulo`.
+-- O rename da coluna de base nao muda o nome de saida da view: ela continuaria
+-- entregando `semestre_do_curso`, e o relatorio leria o nome velho de uma
+-- coluna que ja nao existe assim em lugar nenhum. Texto identico ao da fase 10,
+-- so com os nomes trocados.
+drop view if exists public.vw_desempenho_aluno;
+create view public.vw_desempenho_aluno
+with (security_invoker = true) as
+select
+  n.aluno_id,
+  al.nome                       as aluno,
+  n.turma_id,
+  n.disciplina_id,
+  d.nome                        as disciplina,
+  d.modulo,
+  s.nome                        as sala,
+  n.nota                        as nota_professor,
+  n.nota1, n.nota2, n.nota3, n.nota4,
+  case when d.modulo = 1 then null else g.nota_banca end as nota_banca,
+  case
+    -- 1o modulo nao tem banca: vale a nota do professor
+    when d.modulo = 1         then n.nota
+    when g.nota_banca is null then null
+    else round((n.nota + g.nota_banca) / 2, 2)
+  end                           as nota_final,
+  pres.aulas_dadas,
+  pres.presencas,
+  case
+    when pres.aulas_dadas is null or pres.aulas_dadas = 0 then null
+    else round(pres.presencas * 100.0 / pres.aulas_dadas, 1)
+  end                           as percentual_presenca
+from public.notas_disciplina n
+join public.alunos      al on al.id = n.aluno_id
+join public.disciplinas d  on d.id  = n.disciplina_id
+left join public.salas  s  on s.id  = d.sala_id
+left join public.grupos g
+  on  g.turma_id = n.turma_id
+  and g.modulo   = d.modulo
+  and exists (
+    select 1 from public.grupo_alunos ga
+     where ga.grupo_id = g.id and ga.aluno_id = n.aluno_id
+  )
+left join lateral (
+  select
+    count(*)                           as aulas_dadas,
+    count(*) filter (where p.presente) as presencas
+  from public.aulas a
+  left join public.presencas p
+    on p.aula_id = a.id and p.aluno_id = n.aluno_id
+ where a.turma_id      = n.turma_id
+   and a.disciplina_id = n.disciplina_id
+   and a.chamada_aberta
+) pres on true;
+
+comment on view public.vw_desempenho_aluno is
+  'Nota final e frequencia por aluno/disciplina. No 1o modulo nao ha banca e a final e a nota do professor. NULL significa indeterminado, nunca zero.';
+
+-- 14.3 — conferencia: as colunas novas devem aparecer, e nenhuma velha
 -- select table_name, column_name
 --   from information_schema.columns
 --  where table_schema = 'public'
@@ -1812,13 +1922,24 @@ comment on column public.matriculas.modulo is
 --  order by table_name, column_name;
 --
 -- esperado:
---   cronogramas  semestre   <- este continua, e esta certo
---   disciplinas  modulo
---   matriculas   modulo
---   turmas       entrada
+--   cronogramas          semestre   <- continua, e esta certo (calendario)
+--   gabaritos            semestre   <- idem (processo seletivo)
+--   resultados_processo  semestre   <- idem
+--   disciplinas          modulo
+--   grupos               modulo
+--   matriculas           modulo
+--   turmas               entrada
+--   vw_desempenho_aluno  modulo
+--
+-- E a pre-checagem das funcoes deve voltar VAZIA agora:
+-- select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+--   join pg_language l on l.oid = p.prolang
+--  where n.nspname='public' and p.prokind in ('f','p')
+--    and l.lanname in ('plpgsql','sql') and p.prosrc ~* 'semestre_do_curso';
 
--- ROLLBACK
---   alter table public.turmas rename column entrada to semestre;
+-- ROLLBACK (a view e a funcao precisam voltar ao texto da fase 10 tambem)
+--   alter table public.turmas      rename column entrada to semestre;
+--   alter table public.grupos      rename column modulo to semestre_do_curso;
 --   alter table public.matriculas  rename column modulo to semestre_do_curso;
 --   alter table public.disciplinas rename column modulo to semestre_do_curso;
 

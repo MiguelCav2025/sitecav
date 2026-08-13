@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
-  semestreDoCurso,
+  moduloAtual,
   semestreLetivo,
   contarDiasLetivos,
   gerarDatasAulas,
@@ -25,7 +25,8 @@ import {
 interface Turma {
   id: string;
   nome: string;
-  semestre: string;
+  /** Semestre do calendário em que a turma começou. Dele sai o módulo atual. */
+  entrada: string;
   curso: string;
   turno: string;
 }
@@ -39,7 +40,7 @@ interface Disciplina {
   id: string;
   nome: string;
   curso: string;
-  semestre_do_curso: number;
+  modulo: number;
   total_aulas: number;
   dia_da_semana: number | null;
   emoji: string | null;
@@ -71,7 +72,7 @@ interface AulaDaDisciplina {
   numero: number;
   chamada_aberta: boolean;
   data_aula: string | null;
-  turma: { id: string; turno: string; semestre: string };
+  turma: { id: string; turno: string; entrada: string };
   // A consulta pede professores(id, nome); o tipo declarava so o nome, o que
   // obrigava a contornar com `as any` na hora de ler o id.
   professor: { id: string; nome: string } | null;
@@ -79,9 +80,9 @@ interface AulaDaDisciplina {
 
 const CURSOS = ["Animação", "Cine/TV"];
 const SEMESTRES_CURSO = [
-  { value: "1", label: "1º semestre do curso" },
-  { value: "2", label: "2º semestre do curso" },
-  { value: "3", label: "3º semestre do curso" },
+  { value: "1", label: "Módulo 1" },
+  { value: "2", label: "Módulo 2" },
+  { value: "3", label: "Módulo 3" },
 ];
 const DIAS = [
   { value: "1", label: "Segunda" },
@@ -100,7 +101,7 @@ const badgeSem = (s: number) => {
 // As regras de calendário vivem em @/lib/calendario-escolar, com testes.
 // Estavam duplicadas aqui e em outros três componentes.
 const calcularSemestreDoCurso = (semestreEntrada: string) =>
-  semestreDoCurso(semestreEntrada) ?? 0;
+  moduloAtual(semestreEntrada) ?? 0;
 
 const semestreLetivoParaTurma = semestreLetivo;
 
@@ -141,7 +142,7 @@ function AulasDaDisciplinaModal({
   const carregarAulas = () => {
     supabase
       .from("aulas")
-      .select("id, numero, chamada_aberta, data_aula, turma:turmas(id, turno, semestre), professor:professores(id, nome)")
+      .select("id, numero, chamada_aberta, data_aula, turma:turmas(id, turno, entrada), professor:professores(id, nome)")
       .eq("disciplina_id", disciplina.id)
       .order("numero")
       .then(({ data }) => {
@@ -191,7 +192,7 @@ function AulasDaDisciplinaModal({
   aulas.forEach(a => {
     if (!porTurma[a.turma.id]) {
       porTurma[a.turma.id] = {
-        label: `${a.turma.turno} — Entrada ${a.turma.semestre}`,
+        label: `${a.turma.turno} — Entrada ${a.turma.entrada}`,
         turmaId: a.turma.id,
         aulas: [],
       };
@@ -233,7 +234,7 @@ function AulasDaDisciplinaModal({
           </div>
           {disciplina.nome}
           <span className="text-sm font-normal text-gray-500 ml-1">
-            · {disciplina.curso} · {disciplina.semestre_do_curso}º semestre
+            · {disciplina.curso} · {disciplina.modulo}º semestre
           </span>
         </DialogTitle>
       </DialogHeader>
@@ -437,7 +438,7 @@ export default function DisciplinasManager() {
   const [form, setForm] = useState({
     nome: "",
     curso: "",
-    semestre_do_curso: "",
+    modulo: "",
     // Vazio de propósito. O número certo depende do dia da semana e dos
     // feriados — escolher o dia preenche este campo pelo cronograma. Um valor
     // fixo aqui já custou caro: 16 entrou como se fosse regra e desmentia a
@@ -450,15 +451,15 @@ export default function DisciplinasManager() {
   });
 
   const turmasAfetadas = turmas.filter(t => {
-    if (!form.curso || !form.semestre_do_curso) return false;
-    return t.curso === form.curso && calcularSemestreDoCurso(t.semestre) === parseInt(form.semestre_do_curso);
+    if (!form.curso || !form.modulo) return false;
+    return t.curso === form.curso && calcularSemestreDoCurso(t.entrada) === parseInt(form.modulo);
   });
 
   // Calcula quantas aulas o cronograma oferece para o dia selecionado (usa a primeira turma afetada como referência)
   const aulasNoCronograma: number | null = (() => {
-    if (!form.dia_da_semana || turmasAfetadas.length === 0 || !form.semestre_do_curso) return null;
+    if (!form.dia_da_semana || turmasAfetadas.length === 0 || !form.modulo) return null;
     const turmaRef = turmasAfetadas[0];
-    const semLetivo = semestreLetivoParaTurma(turmaRef.semestre, parseInt(form.semestre_do_curso));
+    const semLetivo = semestreLetivoParaTurma(turmaRef.entrada, parseInt(form.modulo));
     const cron = cronogramas.find(c => c.semestre === semLetivo);
     if (!cron) return null;
     const oc = contarOcorrencias(cron.data_inicio, cron.data_fim, cron.feriados);
@@ -468,8 +469,8 @@ export default function DisciplinasManager() {
   const fetchDados = useCallback(async () => {
     setLoading(true);
     const [{ data: discs }, { data: ts }, { data: ps }, { data: crons }, { data: sls }] = await Promise.all([
-      supabase.from("disciplinas").select("*").order("curso").order("semestre_do_curso").order("dia_da_semana", { ascending: true, nullsFirst: false }).order("nome"),
-      supabase.from("turmas").select("id, nome, semestre, curso, turno").order("semestre", { ascending: false }),
+      supabase.from("disciplinas").select("*").order("curso").order("modulo").order("dia_da_semana", { ascending: true, nullsFirst: false }).order("nome"),
+      supabase.from("turmas").select("id, nome, entrada, curso, turno").order("entrada", { ascending: false }),
       // Só professores ativos podem receber novas atribuições
       supabase.from("professores").select("id, nome").eq("ativo", true).order("nome"),
       supabase.from("cronogramas").select("*").order("data_inicio", { ascending: false }),
@@ -491,7 +492,7 @@ export default function DisciplinasManager() {
   };
 
   const handleCriar = async () => {
-    if (!form.nome.trim() || !form.curso || !form.semestre_do_curso || !form.total_aulas) {
+    if (!form.nome.trim() || !form.curso || !form.modulo || !form.total_aulas) {
       return showMsg("erro", "Preencha nome, curso, semestre e quantidade de aulas.");
     }
     if (turmasAfetadas.length === 0) {
@@ -505,7 +506,7 @@ export default function DisciplinasManager() {
       .insert([{
         nome: form.nome.trim(),
         curso: form.curso,
-        semestre_do_curso: parseInt(form.semestre_do_curso),
+        modulo: parseInt(form.modulo),
         total_aulas: parseInt(form.total_aulas),
         dia_da_semana: form.dia_da_semana ? parseInt(form.dia_da_semana) : null,
         emoji: form.emoji || "📚",
@@ -530,7 +531,7 @@ export default function DisciplinasManager() {
       // Tenta encontrar cronograma correspondente ao semestre letivo desta turma
       let datas: (string | null)[] = Array(totalAulasNum).fill(null);
       if (diaSemanaNum) {
-        const semLetivo = semestreLetivoParaTurma(turma.semestre, parseInt(form.semestre_do_curso));
+        const semLetivo = semestreLetivoParaTurma(turma.entrada, parseInt(form.modulo));
         const cron = cronogramas.find(c => c.semestre === semLetivo);
         if (cron) {
           datas = gerarDatasAulas(cron, diaSemanaNum, totalAulasNum);
@@ -557,7 +558,7 @@ export default function DisciplinasManager() {
       const temDatas = diaSemanaNum && aulasParaInserir.some((a) => (a as { data_aula: string | null }).data_aula);
       const sufixo = temDatas ? " com datas preenchidas pelo cronograma." : " (sem datas — defina o cronograma do semestre).";
       showMsg("ok", `"${form.nome}" criada! ${total} aulas geradas para ${turmasAfetadas.length} turma(s)${sufixo}`);
-      setForm({ nome: "", curso: "", semestre_do_curso: "", total_aulas: "", dia_da_semana: "", emoji: "📚", sala_id: "", professores_por_turma: {} });
+      setForm({ nome: "", curso: "", modulo: "", total_aulas: "", dia_da_semana: "", emoji: "📚", sala_id: "", professores_por_turma: {} });
     }
 
     fetchDados();
@@ -585,7 +586,7 @@ export default function DisciplinasManager() {
   const porCursoSemestre = CURSOS.reduce<Record<string, Record<number, Disciplina[]>>>((acc, curso) => {
     acc[curso] = {};
     [1, 2, 3].forEach(sem => {
-      acc[curso][sem] = disciplinas.filter(d => d.curso === curso && d.semestre_do_curso === sem);
+      acc[curso][sem] = disciplinas.filter(d => d.curso === curso && d.modulo === sem);
     });
     return acc;
   }, {});
@@ -638,14 +639,14 @@ export default function DisciplinasManager() {
             </div>
             <div className="space-y-1">
               <Label className="text-gray-700">Curso *</Label>
-              <Select value={form.curso} onValueChange={v => setForm(f => ({ ...f, curso: v, semestre_do_curso: "", professores_por_turma: {} }))}>
+              <Select value={form.curso} onValueChange={v => setForm(f => ({ ...f, curso: v, modulo: "", professores_por_turma: {} }))}>
                 <SelectTrigger className="w-full text-gray-800"><SelectValue placeholder="Selecione o curso" /></SelectTrigger>
                 <SelectContent>{CURSOS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
               <Label className="text-gray-700">Semestre do curso *</Label>
-              <Select value={form.semestre_do_curso} onValueChange={v => setForm(f => ({ ...f, semestre_do_curso: v, professores_por_turma: {} }))}>
+              <Select value={form.modulo} onValueChange={v => setForm(f => ({ ...f, modulo: v, professores_por_turma: {} }))}>
                 <SelectTrigger className="w-full text-gray-800"><SelectValue placeholder="Selecione o semestre" /></SelectTrigger>
                 <SelectContent>{SEMESTRES_CURSO.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
               </Select>
@@ -673,8 +674,8 @@ export default function DisciplinasManager() {
                   onValueChange={v => {
                     const novoDia = v === "none" ? "" : v;
                     // Auto-preenche total_aulas com o cronograma se possível
-                    if (novoDia && turmasAfetadas.length > 0 && form.semestre_do_curso) {
-                      const semLetivo = semestreLetivoParaTurma(turmasAfetadas[0].semestre, parseInt(form.semestre_do_curso));
+                    if (novoDia && turmasAfetadas.length > 0 && form.modulo) {
+                      const semLetivo = semestreLetivoParaTurma(turmasAfetadas[0].entrada, parseInt(form.modulo));
                       const cron = cronogramas.find(c => c.semestre === semLetivo);
                       if (cron) {
                         const oc = contarOcorrencias(cron.data_inicio, cron.data_fim, cron.feriados);
@@ -719,12 +720,12 @@ export default function DisciplinasManager() {
             </div>
           </div>
 
-          {form.curso && form.semestre_do_curso && (
+          {form.curso && form.modulo && (
             <div className={`rounded-xl p-4 border ${turmasAfetadas.length > 0 ? "bg-blue-50 border-blue-200" : "bg-amber-50 border-amber-200"}`}>
               {turmasAfetadas.length === 0 ? (
                 <p className="text-sm text-amber-700 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4 shrink-0" />
-                  Nenhuma turma de <strong>{form.curso}</strong> está no <strong>{form.semestre_do_curso}º semestre</strong> agora.
+                  Nenhuma turma de <strong>{form.curso}</strong> está no <strong>{form.modulo}º semestre</strong> agora.
                 </p>
               ) : (
                 <div className="space-y-3">
@@ -737,7 +738,7 @@ export default function DisciplinasManager() {
                       <div key={t.id} className="flex items-center gap-3 bg-white rounded-lg p-3 border border-blue-100">
                         <div className="flex-1">
                           <p className="text-sm font-medium text-gray-800">{t.turno}</p>
-                          <p className="text-xs text-gray-400">Entrada {t.semestre}</p>
+                          <p className="text-xs text-gray-400">Entrada {t.entrada}</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <UserCheck className="h-4 w-4 text-gray-400" />

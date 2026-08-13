@@ -1,7 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
-  avaliarSemestre,
+  avaliarModulo,
   avaliarDisciplina,
   arredondar,
   NOTA_MINIMA,
@@ -30,7 +30,7 @@ function disciplina(
   return {
     disciplina_id: nome,
     disciplina: nome,
-    semestre_do_curso: modulo,
+    modulo: modulo,
     nota_professor: professor,
     nota_banca: bancaEfetiva,
     nota_final: final,
@@ -49,14 +49,14 @@ describe("arredondar", () => {
 
 describe("aprovado", () => {
   test("nota e frequencia acima do minimo em todas as disciplinas", () => {
-    const r = avaliarSemestre([disciplina("Roteiro"), disciplina("Direção")]);
+    const r = avaliarModulo([disciplina("Roteiro"), disciplina("Direção")]);
     assert.equal(r.situacao, "aprovado");
     assert.equal(r.presencaGeral, 100);
     assert.deepEqual(r.reprovadasPorNota, []);
   });
 
   test("exatamente no limite de nota e de presenca aprova", () => {
-    const r = avaliarSemestre([
+    const r = avaliarModulo([
       disciplina("Roteiro", { professor: 6, banca: 6, aulas: 10, presencas: 7 }),
     ]);
     assert.equal(r.situacao, "aprovado");
@@ -65,14 +65,14 @@ describe("aprovado", () => {
 
   test("o arredondamento pode salvar o aluno (N18)", () => {
     // (6.5 + 5.4) / 2 = 5.95 -> arredondado para 6.0
-    const r = avaliarSemestre([disciplina("Roteiro", { professor: 6.5, banca: 5.4 })]);
+    const r = avaliarModulo([disciplina("Roteiro", { professor: 6.5, banca: 5.4 })]);
     assert.equal(r.situacao, "aprovado");
   });
 });
 
 describe("retido", () => {
   test("basta ficar abaixo da nota em UMA disciplina (N21)", () => {
-    const r = avaliarSemestre([
+    const r = avaliarModulo([
       disciplina("Roteiro"),
       disciplina("Direção", { professor: 4, banca: 4 }),
       disciplina("Montagem"),
@@ -83,7 +83,7 @@ describe("retido", () => {
   });
 
   test("frequencia abaixo de 70% retem, mesmo com notas boas", () => {
-    const r = avaliarSemestre([
+    const r = avaliarModulo([
       disciplina("Roteiro", { aulas: 10, presencas: 6 }),
       disciplina("Direção", { aulas: 10, presencas: 7 }),
     ]);
@@ -95,7 +95,7 @@ describe("retido", () => {
   test("a frequencia e exigida EM CADA disciplina, nao na media (N22)", () => {
     // 4/10 numa e 10/10 na outra da 70% somados — mas a regra e por
     // disciplina, entao Roteiro reprova o aluno com 40%.
-    const r = avaliarSemestre([
+    const r = avaliarModulo([
       disciplina("Roteiro", { aulas: 10, presencas: 4 }),
       disciplina("Direção", { aulas: 10, presencas: 10 }),
     ]);
@@ -105,7 +105,7 @@ describe("retido", () => {
   });
 
   test("uma disciplina no limite exato de 70% nao reprova", () => {
-    const r = avaliarSemestre([
+    const r = avaliarModulo([
       disciplina("Roteiro", { aulas: 10, presencas: 7 }),
       disciplina("Direção", { aulas: 10, presencas: 10 }),
     ]);
@@ -114,7 +114,7 @@ describe("retido", () => {
   });
 
   test("lista todas as disciplinas com frequencia insuficiente", () => {
-    const r = avaliarSemestre([
+    const r = avaliarModulo([
       disciplina("Roteiro", { aulas: 10, presencas: 3 }),
       disciplina("Direção", { aulas: 10, presencas: 5 }),
       disciplina("Montagem", { aulas: 10, presencas: 9 }),
@@ -124,7 +124,7 @@ describe("retido", () => {
 
   test("reprova mesmo com outra disciplina pendente", () => {
     // Ja ficou abaixo em Direcao: nao ha o que esperar
-    const r = avaliarSemestre([
+    const r = avaliarModulo([
       disciplina("Direção", { professor: 3, banca: 3 }),
       disciplina("Roteiro", { professor: null }),
     ]);
@@ -133,7 +133,7 @@ describe("retido", () => {
   });
 
   test("nota abaixo e presenca abaixo: ambos os motivos aparecem", () => {
-    const r = avaliarSemestre([disciplina("Roteiro", { professor: 2, banca: 2, aulas: 10, presencas: 2 })]);
+    const r = avaliarModulo([disciplina("Roteiro", { professor: 2, banca: 2, aulas: 10, presencas: 2 })]);
     assert.equal(r.situacao, "retido");
     assert.equal(r.motivos.length, 2);
   });
@@ -141,13 +141,13 @@ describe("retido", () => {
 
 describe("indefinido", () => {
   test("professor ainda nao lancou a nota", () => {
-    const r = avaliarSemestre([disciplina("Roteiro"), disciplina("Direção", { professor: null })]);
+    const r = avaliarModulo([disciplina("Roteiro"), disciplina("Direção", { professor: null })]);
     assert.equal(r.situacao, "indefinido");
     assert.ok(r.pendencias[0].includes("professor ainda não lançou"));
   });
 
   test("banca ainda nao avaliou o grupo", () => {
-    const r = avaliarSemestre([disciplina("Roteiro", { banca: null })]);
+    const r = avaliarModulo([disciplina("Roteiro", { banca: null })]);
     assert.equal(r.situacao, "indefinido");
     assert.ok(r.pendencias[0].includes("banca"));
   });
@@ -155,13 +155,13 @@ describe("indefinido", () => {
   test("aluno sem grupo nao leva zero: fica pendente (N20)", () => {
     // Sem grupo, a view devolve nota_banca null. Transformar isso em zero
     // reprovaria o aluno por esquecimento administrativo.
-    const r = avaliarSemestre([disciplina("Roteiro", { professor: 9, banca: null })]);
+    const r = avaliarModulo([disciplina("Roteiro", { professor: 9, banca: null })]);
     assert.equal(r.situacao, "indefinido");
     assert.deepEqual(r.reprovadasPorNota, []);
   });
 
   test("nenhuma chamada fechada ainda", () => {
-    const r = avaliarSemestre([disciplina("Roteiro", { aulas: 0, presencas: 0 })]);
+    const r = avaliarModulo([disciplina("Roteiro", { aulas: 0, presencas: 0 })]);
     assert.equal(r.situacao, "indefinido");
     assert.equal(r.presencaGeral, null);
     assert.ok(r.pendencias.some(p => p.includes("chamada")));
@@ -169,7 +169,7 @@ describe("indefinido", () => {
 
   test("disciplina sem chamada nao conta na frequencia das outras", () => {
     // A disciplina sem aula dada vira pendencia; a outra e avaliada normalmente
-    const r = avaliarSemestre([
+    const r = avaliarModulo([
       disciplina("Roteiro", { aulas: 10, presencas: 10 }),
       disciplina("Direção", { aulas: 0, presencas: 0 }),
     ]);
@@ -179,7 +179,7 @@ describe("indefinido", () => {
   });
 
   test("semestre sem disciplina alguma", () => {
-    const r = avaliarSemestre([]);
+    const r = avaliarModulo([]);
     assert.equal(r.situacao, "indefinido");
     assert.equal(r.presencaGeral, null);
   });
@@ -221,7 +221,7 @@ describe("avaliarDisciplina — o veredito de cada materia", () => {
 
 describe("os dois niveis se encaixam", () => {
   test("cada disciplina tem seu veredito e o semestre agrega", () => {
-    const r = avaliarSemestre([
+    const r = avaliarModulo([
       disciplina("Roteiro", { professor: 8, banca: 8, aulas: 10, presencas: 10 }),
       disciplina("Direção", { professor: 4, banca: 4, aulas: 10, presencas: 10 }),
       disciplina("Montagem", { professor: 9, banca: null }),
@@ -236,13 +236,13 @@ describe("os dois niveis se encaixam", () => {
   });
 
   test("aprovado no semestre exige aprovacao em todas", () => {
-    const r = avaliarSemestre([disciplina("Roteiro"), disciplina("Direção")]);
+    const r = avaliarModulo([disciplina("Roteiro"), disciplina("Direção")]);
     assert.ok(r.disciplinas.every(d => d.situacao === "aprovado"));
     assert.equal(r.situacao, "aprovado");
   });
 
   test("uma pendente segura o semestre, mas nao as aprovadas", () => {
-    const r = avaliarSemestre([disciplina("Roteiro"), disciplina("Direção", { professor: null })]);
+    const r = avaliarModulo([disciplina("Roteiro"), disciplina("Direção", { professor: null })]);
     assert.equal(r.disciplinas[0].situacao, "aprovado");
     assert.equal(r.disciplinas[1].situacao, "indefinido");
     assert.equal(r.situacao, "indefinido");
@@ -277,7 +277,7 @@ describe("1o modulo nao tem banca", () => {
   });
 
   test("semestre inteiro de 1o modulo fecha sem banca", () => {
-    const r = avaliarSemestre([
+    const r = avaliarModulo([
       disciplina("Fundamentos de Desenho", { professor: 7, modulo: 1 }),
       disciplina("Animação Tradicional", { professor: 8, modulo: 1 }),
     ]);

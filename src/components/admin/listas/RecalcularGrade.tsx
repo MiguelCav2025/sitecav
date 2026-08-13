@@ -23,7 +23,7 @@ interface AulaDaGrade {
   numero: number;
   data_aula: string | null;
   chamada_aberta: boolean;
-  turma: { id: string; turno: string; semestre: string };
+  turma: { id: string; turno: string; entrada: string };
   professor: { id: string; nome: string } | null;
 }
 
@@ -66,7 +66,7 @@ export default function RecalcularGrade({
   cronogramas,
   onAplicado,
 }: {
-  disciplina: { id: string; nome: string; dia_da_semana: number | null; total_aulas: number; semestre_do_curso: number };
+  disciplina: { id: string; nome: string; dia_da_semana: number | null; total_aulas: number; modulo: number };
   aulas: AulaDaGrade[];
   cronogramas: Cronograma[];
   onAplicado: () => void;
@@ -91,14 +91,14 @@ export default function RecalcularGrade({
   const calcularPrevia = () => {
     setErro(null);
     const planos: PlanoDaTurma[] = turmas.map(turma => {
-      const semLetivo = semestreLetivo(turma.semestre, disciplina.semestre_do_curso);
+      const semLetivo = semestreLetivo(turma.entrada, disciplina.modulo);
       const cronograma = cronogramas.find(c => c.semestre === semLetivo) ?? null;
       const aulasDaTurma = aulas.filter(a => a.turma.id === turma.id);
       const professorId = aulasDaTurma.find(a => a.professor?.id)?.professor?.id ?? null;
 
       return {
         turmaId: turma.id,
-        rotulo: `${turma.turno} — entrada ${turma.semestre}`,
+        rotulo: `${turma.turno} — entrada ${turma.entrada}`,
         semestreLetivoDaTurma: semLetivo,
         cronograma,
         professorId,

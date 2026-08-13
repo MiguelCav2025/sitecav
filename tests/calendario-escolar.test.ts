@@ -2,8 +2,8 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
   lerSemestre,
-  semestreDoCurso,
-  rotuloSemestreDoCurso,
+  moduloAtual,
+  rotuloModulo,
   semestreLetivo,
   contarDiasLetivos,
   gerarDatasAulas,
@@ -25,53 +25,56 @@ describe("lerSemestre", () => {
   });
 });
 
-describe("semestreDoCurso", () => {
+describe("modulo", () => {
   test("avanca a cada seis meses a partir da entrada", () => {
-    assert.equal(semestreDoCurso("2025/1", em("2025-03-10")), 1);
-    assert.equal(semestreDoCurso("2025/1", em("2025-08-10")), 2);
-    assert.equal(semestreDoCurso("2025/1", em("2026-03-10")), 3);
+    assert.equal(moduloAtual("2025/1", em("2025-03-10")), 1);
+    assert.equal(moduloAtual("2025/1", em("2025-08-10")), 2);
+    assert.equal(moduloAtual("2025/1", em("2026-03-10")), 3);
   });
 
   test("passa de 3 quando a turma ja concluiu", () => {
-    assert.equal(semestreDoCurso("2025/1", em("2026-08-10")), 4);
+    assert.equal(moduloAtual("2025/1", em("2026-08-10")), 4);
   });
 
   test("fica negativo para turma que ainda nao comecou", () => {
-    assert.equal(semestreDoCurso("2026/1", em("2025-03-10")), -1);
+    assert.equal(moduloAtual("2026/1", em("2025-03-10")), -1);
   });
 
   test("a virada e em 1 de julho", () => {
-    assert.equal(semestreDoCurso("2025/1", em("2025-06-30")), 1);
-    assert.equal(semestreDoCurso("2025/1", em("2025-07-01")), 2);
+    assert.equal(moduloAtual("2025/1", em("2025-06-30")), 1);
+    assert.equal(moduloAtual("2025/1", em("2025-07-01")), 2);
   });
 
   test("entrada invalida devolve null, nao zero", () => {
     // Zero e uma resposta legitima: a turma comeca no semestre que vem.
     // Confundir os dois casos foi o que fez uma tela mostrar turma futura
     // como se estivesse no 1o semestre.
-    assert.equal(semestreDoCurso("", em("2025-03-10")), null);
-    assert.equal(semestreDoCurso("lixo", em("2025-03-10")), null);
-    assert.equal(semestreDoCurso("2025/2", em("2025-03-10")), 0);
+    assert.equal(moduloAtual("", em("2025-03-10")), null);
+    assert.equal(moduloAtual("lixo", em("2025-03-10")), null);
+    assert.equal(moduloAtual("2025/2", em("2025-03-10")), 0);
   });
 });
 
-describe("rotuloSemestreDoCurso", () => {
+describe("rotuloModulo", () => {
   test("traduz o numero para texto", () => {
-    assert.equal(rotuloSemestreDoCurso(0), "Ainda não iniciou");
-    assert.equal(rotuloSemestreDoCurso(-1), "Ainda não iniciou");
-    assert.equal(rotuloSemestreDoCurso(1), "1º semestre");
-    assert.equal(rotuloSemestreDoCurso(3), "3º semestre");
-    assert.equal(rotuloSemestreDoCurso(4), "Concluído");
+    assert.equal(rotuloModulo(1), "Módulo 1");
+    assert.equal(rotuloModulo(3), "Módulo 3");
+  });
+
+  test("nunca diz 'semestre' — era essa palavra que colidia com 2026/2", () => {
+    for (const n of [1, 2, 3, 4, 0, -1]) {
+      assert.ok(!/semestre/i.test(rotuloModulo(n)), `rotuloModulo(${n})`);
+    }
+  });
+
+  test("distingue nao comecou de ja terminou", () => {
+    assert.equal(rotuloModulo(0), "Ainda não iniciou");
+    assert.equal(rotuloModulo(-1), "Ainda não iniciou");
+    assert.equal(rotuloModulo(4), "Curso concluído");
   });
 
   test("entrada invalida vira texto vazio", () => {
-    assert.equal(rotuloSemestreDoCurso(null), "");
-  });
-
-  test("aceita sufixo para as telas que usam rotulo longo", () => {
-    assert.equal(rotuloSemestreDoCurso(1, " do curso"), "1º semestre do curso");
-    assert.equal(rotuloSemestreDoCurso(4, " do curso"), "Curso concluído");
-    assert.equal(rotuloSemestreDoCurso(0, " do curso"), "Ainda não iniciou");
+    assert.equal(rotuloModulo(null), "");
   });
 });
 

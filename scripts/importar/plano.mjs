@@ -111,7 +111,7 @@ const professores = [...new Map(
 const disciplinas = grade.itens.map(i => ({
   nome: nomeCanonico(i.disciplina, i.curso),
   curso: i.curso,
-  semestreDoCurso: i.modulo,
+  modulo: i.modulo,
   diaDaSemana: i.diaDaSemana,
   professor: i.professor.trim(),
   sala: capitalizar(i.sala),
@@ -185,9 +185,9 @@ item(`matrículas .... ${[...alunos.values()].reduce((s, a) => s + a.turmas.leng
 
 titulo("DISCIPLINAS COMO SERÃO GRAVADAS");
 for (const d of disciplinas.sort((a, b) =>
-  a.curso.localeCompare(b.curso) || a.semestreDoCurso - b.semestreDoCurso || a.diaDaSemana - b.diaDaSemana)) {
+  a.curso.localeCompare(b.curso) || a.modulo - b.modulo || a.diaDaSemana - b.diaDaSemana)) {
   console.log(
-    `  ${d.curso.padEnd(9)} ${d.semestreDoCurso}º ${DIAS[d.diaDaSemana].padEnd(8)} ` +
+    `  ${d.curso.padEnd(9)} ${d.modulo}º ${DIAS[d.diaDaSemana].padEnd(8)} ` +
     `${d.nome.padEnd(38)} ${d.professor.padEnd(22)} ${d.sala}`,
   );
 }

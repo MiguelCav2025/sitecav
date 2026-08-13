@@ -260,7 +260,7 @@ const idPorSala = new Map(salas.map(s => [normalizar(s.nome), s.id]));
 const disciplinasCriadas = await inserir("disciplinas", grade.itens.map(i => ({
   nome: nomeCanonico(i.disciplina, i.curso),
   curso: i.curso,
-  semestre_do_curso: i.modulo,
+  modulo: i.modulo,
   dia_da_semana: i.diaDaSemana,
   sala_id: idPorSala.get(normalizar(capitalizar(i.sala))) ?? null,
   // A disciplina ocupa TODO dia letivo do seu dia da semana — não sobra dia no
@@ -286,7 +286,7 @@ let totalAulas = 0, porCronograma = 0;
 for (const celula of grade.itens) {
   const disc = disciplinasCriadas.find(d =>
     d.nome === nomeCanonico(celula.disciplina, celula.curso) &&
-    d.curso === celula.curso && d.semestre_do_curso === celula.modulo);
+    d.curso === celula.curso && d.modulo === celula.modulo);
   if (!disc) continue;
 
   for (const turno of ["Manhã", "Noite"]) {
@@ -326,7 +326,7 @@ for (const t of turmas.values()) {
     if (alunoId && turmaId) {
       matriculas.push({
         aluno_id: alunoId, turma_id: turmaId,
-        semestre_do_curso: t.modulo, situacao: "cursando",
+        modulo: t.modulo, situacao: "cursando",
       });
     }
   }

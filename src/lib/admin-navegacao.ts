@@ -53,8 +53,11 @@ export const AREAS: AreaAdmin[] = [
     label: "Escola",
     ajuda: "Gestão acadêmica. Siga a ordem numerada na primeira vez que configurar um semestre.",
     icone: GraduationCap,
+    // "Módulo" é onde o aluno está no curso (1, 2 ou 3); "semestre" é o período
+    // do calendário (2026/2). A aba se chamava Cronograma e falava das duas
+    // coisas — ver D46 no plano.
     secoes: [
-      { passo: 1, value: "cronograma",  label: "Cronograma",  ajuda: "Início, fim e feriados do semestre",   icone: CalendarDays },
+      { passo: 1, value: "cronograma",  label: "Calendário letivo", ajuda: "Início, fim e feriados do semestre", icone: CalendarDays },
       { passo: 2, value: "turmas",      label: "Turmas",      ajuda: "Turmas e os alunos de cada uma",       icone: GraduationCap },
       { passo: 3, value: "disciplinas", label: "Disciplinas", ajuda: "Matérias, aulas e professor de cada",  icone: BookMarked },
       { passo: 4, value: "professores", label: "Professores", ajuda: "Contas de acesso ao app",              icone: UserCheck },

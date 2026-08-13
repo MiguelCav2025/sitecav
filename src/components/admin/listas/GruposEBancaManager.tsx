@@ -10,16 +10,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   AlertCircle, AlertTriangle, CheckCircle, Loader2, Plus, Trash2, UserPlus, Users, X,
 } from "lucide-react";
-import { semestreDoCurso, SEMESTRES_DO_CURSO } from "@/lib/calendario-escolar";
+import { moduloAtual, MODULOS_DO_CURSO } from "@/lib/calendario-escolar";
 import { buscarAlunosDaTurma } from "@/lib/matriculas";
 import {
-  avaliarSemestre,
+  avaliarModulo,
   type AvaliacaoDaDisciplina,
   type DesempenhoDisciplina,
   type Situacao,
 } from "@/lib/aprovacao";
 
-interface Turma { id: string; nome: string; semestre: string; curso: string; turno: string; }
+interface Turma { id: string; nome: string; entrada: string; curso: string; turno: string; }
 interface Aluno { id: string; nome: string; }
 interface Grupo {
   id: string;
@@ -32,7 +32,7 @@ const virgula = (n: number) => String(n).replace(".", ",");
 
 /**
  * Explica de onde a média saiu. A nota da banca é a mesma em todas as
- * disciplinas do semestre; o que muda de uma para outra é a parte do professor.
+ * disciplinas do módulo; o que muda de uma para outra é a parte do professor.
  */
 function composicaoDaNota(d: AvaliacaoDaDisciplina): string {
   const partes: string[] = [];
@@ -69,7 +69,7 @@ export default function GruposEBancaManager() {
 
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [turmaId, setTurmaId] = useState("");
-  const [semestre, setSemestre] = useState("1");
+  const [modulo, setModulo] = useState("1");
 
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [grupos, setGrupos] = useState<Grupo[]>([]);
@@ -85,16 +85,16 @@ export default function GruposEBancaManager() {
   };
 
   useEffect(() => {
-    supabase.from("turmas").select("id, nome, semestre, curso, turno").order("nome")
+    supabase.from("turmas").select("id, nome, entrada, curso, turno").order("nome")
       .then(({ data }) => setTurmas((data ?? []) as Turma[]));
   }, [supabase]);
 
-  // Ao escolher a turma, sugere o semestre em que ela está agora
+  // Ao escolher a turma, sugere o módulo em que ela está agora
   const escolherTurma = (id: string) => {
     setTurmaId(id);
     const t = turmas.find(x => x.id === id);
-    const atual = t ? semestreDoCurso(t.semestre) : null;
-    if (atual !== null && atual >= 1 && atual <= SEMESTRES_DO_CURSO) setSemestre(String(atual));
+    const atual = t ? moduloAtual(t.entrada) : null;
+    if (atual !== null && atual >= 1 && atual <= MODULOS_DO_CURSO) setModulo(String(atual));
   };
 
   const carregar = useCallback(async () => {
@@ -104,10 +104,10 @@ export default function GruposEBancaManager() {
     const [{ alunos: daTurma }, { data: gruposData }, { data: vwData }] = await Promise.all([
       buscarAlunosDaTurma(supabase, turmaId),
       supabase.from("grupos").select("id, nome, nota_banca, grupo_alunos(aluno_id)")
-        .eq("turma_id", turmaId).eq("semestre_do_curso", Number(semestre)).order("nome"),
+        .eq("turma_id", turmaId).eq("modulo", Number(modulo)).order("nome"),
       supabase.from("vw_desempenho_aluno")
-        .select("aluno_id, disciplina_id, disciplina, semestre_do_curso, nota_professor, nota_banca, nota_final, aulas_dadas, presencas")
-        .eq("turma_id", turmaId).eq("semestre_do_curso", Number(semestre)),
+        .select("aluno_id, disciplina_id, disciplina, modulo, nota_professor, nota_banca, nota_final, aulas_dadas, presencas")
+        .eq("turma_id", turmaId).eq("modulo", Number(modulo)),
     ]);
 
     setAlunos(daTurma.map(a => ({ id: a.id, nome: a.nome })));
@@ -115,7 +115,7 @@ export default function GruposEBancaManager() {
       .map(g => ({ id: g.id, nome: g.nome, nota_banca: g.nota_banca, integrantes: (g.grupo_alunos ?? []).map(i => i.aluno_id) })));
     setDesempenho((vwData ?? []) as (DesempenhoDisciplina & { aluno_id: string })[]);
     setCarregando(false);
-  }, [turmaId, semestre, supabase]);
+  }, [turmaId, modulo, supabase]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -130,7 +130,7 @@ export default function GruposEBancaManager() {
   const criarGrupo = async () => {
     if (!novoGrupo.trim()) return aviso("erro", "Dê um nome ao grupo.");
     const { error } = await supabase.from("grupos").insert([{
-      turma_id: turmaId, semestre_do_curso: Number(semestre), nome: novoGrupo.trim(),
+      turma_id: turmaId, modulo: Number(modulo), nome: novoGrupo.trim(),
     }]);
     if (error) return aviso("erro", `Erro ao criar: ${error.message}`);
     setNovoGrupo("");
@@ -146,7 +146,7 @@ export default function GruposEBancaManager() {
 
   const adicionarAoGrupo = async (grupoId: string, alunoId: string) => {
     const { error } = await supabase.from("grupo_alunos").insert([{ grupo_id: grupoId, aluno_id: alunoId }]);
-    // A trava do banco impede o aluno de estar em dois grupos do mesmo semestre
+    // A trava do banco impede o aluno de estar em dois grupos do mesmo módulo
     if (error) return aviso("erro", error.message);
     carregar();
   };
@@ -186,7 +186,7 @@ export default function GruposEBancaManager() {
       )}
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Turma e semestre</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">Turma e módulo</CardTitle></CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1">
             <Label className="text-gray-700">Turma</Label>
@@ -198,12 +198,12 @@ export default function GruposEBancaManager() {
             </Select>
           </div>
           <div className="space-y-1">
-            <Label className="text-gray-700">Semestre do curso</Label>
-            <Select value={semestre} onValueChange={setSemestre}>
+            <Label className="text-gray-700">Módulo</Label>
+            <Select value={modulo} onValueChange={setModulo}>
               <SelectTrigger className="text-gray-800"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {Array.from({ length: SEMESTRES_DO_CURSO }, (_, i) => String(i + 1)).map(s => (
-                  <SelectItem key={s} value={s}>{s}º semestre</SelectItem>
+                {Array.from({ length: MODULOS_DO_CURSO }, (_, i) => String(i + 1)).map(s => (
+                  <SelectItem key={s} value={s}>Módulo {s}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -242,7 +242,7 @@ export default function GruposEBancaManager() {
               </div>
 
               {grupos.length === 0 ? (
-                <p className="text-sm italic text-gray-400">Nenhum grupo neste semestre.</p>
+                <p className="text-sm italic text-gray-400">Nenhum grupo neste módulo.</p>
               ) : (
                 grupos.map(g => (
                   <div key={g.id} className="rounded-xl border border-gray-200 p-4">
@@ -312,7 +312,7 @@ export default function GruposEBancaManager() {
           {/* Situação por aluno */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Situação no semestre</CardTitle>
+              <CardTitle className="text-base">Situação no módulo</CardTitle>
               <p className="text-sm text-gray-500">
                 Somente leitura. Registrar a aprovação ou retenção vem na próxima etapa.
               </p>
@@ -330,7 +330,7 @@ export default function GruposEBancaManager() {
                 <tbody className="divide-y divide-gray-100">
                   {alunos.map(a => {
                     const doAluno = desempenho.filter(d => d.aluno_id === a.id);
-                    const r = avaliarSemestre(doAluno);
+                    const r = avaliarModulo(doAluno);
                     const estilo = SITUACAO_ESTILO[r.situacao];
                     return (
                       <tr key={a.id} className="align-top hover:bg-gray-50">

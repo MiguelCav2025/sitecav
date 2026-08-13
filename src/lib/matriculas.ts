@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { semestreDoCurso, SEMESTRES_DO_CURSO } from "./calendario-escolar.ts";
+import { moduloAtual, MODULOS_DO_CURSO } from "./calendario-escolar.ts";
 
 /**
  * Quem está em qual turma vem de `matriculas`, nunca de um campo no aluno.
@@ -22,12 +22,12 @@ export interface AlunoDaTurma {
   email: string | null;
   /** Id da matrícula que o liga a esta turma. */
   matriculaId: string;
-  semestreDoCurso: number;
+  modulo: number;
 }
 
 interface LinhaMatricula {
   id: string;
-  semestre_do_curso: number;
+  modulo: number;
   aluno: { id: string; nome: string; email: string | null; ativo: boolean } | null;
 }
 
@@ -44,7 +44,7 @@ export async function buscarAlunosDaTurma(
 ): Promise<{ alunos: AlunoDaTurma[]; erro: string | null }> {
   const { data, error } = await supabase
     .from("matriculas")
-    .select("id, semestre_do_curso, aluno:alunos(id, nome, email, ativo)")
+    .select("id, modulo, aluno:alunos(id, nome, email, ativo)")
     .eq("turma_id", turmaId)
     .eq("situacao", "cursando");
 
@@ -57,7 +57,7 @@ export async function buscarAlunosDaTurma(
       nome: m.aluno!.nome,
       email: m.aluno!.email,
       matriculaId: m.id,
-      semestreDoCurso: m.semestre_do_curso,
+      modulo: m.modulo,
     }))
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
@@ -68,27 +68,27 @@ export async function buscarAlunosDaTurma(
  * Em que semestre do curso uma turma está hoje, limitado à duração do curso.
  * Usado ao matricular alguém numa turma já em andamento.
  */
-export function semestreAtualDaTurma(semestreDeEntrada: string): number {
-  const n = semestreDoCurso(semestreDeEntrada);
+export function moduloAtualDaTurma(entrada: string): number {
+  const n = moduloAtual(entrada);
   if (n === null) return 1;
-  return Math.min(SEMESTRES_DO_CURSO, Math.max(1, n));
+  return Math.min(MODULOS_DO_CURSO, Math.max(1, n));
 }
 
 /** Matricula alunos numa turma, no semestre em que ela está. */
 export async function matricularAlunos(
   supabase: SupabaseClient,
   turmaId: string,
-  semestreDeEntradaDaTurma: string,
+  entradaDaTurma: string,
   alunoIds: string[],
 ): Promise<{ erro: string | null }> {
   if (alunoIds.length === 0) return { erro: null };
 
-  const semestre = semestreAtualDaTurma(semestreDeEntradaDaTurma);
+  const modulo = moduloAtualDaTurma(entradaDaTurma);
   const { error } = await supabase.from("matriculas").insert(
     alunoIds.map(aluno_id => ({
       aluno_id,
       turma_id: turmaId,
-      semestre_do_curso: semestre,
+      modulo,
       situacao: "cursando",
     })),
   );

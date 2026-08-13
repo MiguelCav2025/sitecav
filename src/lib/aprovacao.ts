@@ -5,8 +5,8 @@
  *
  *   1. Por disciplina — o aluno passa ou não naquela matéria, pela nota final
  *      (média com a banca) e pela frequência daquela matéria.
- *   2. Por semestre — só avança quem passou em **todas** as disciplinas.
- *      Ficar retido em uma única matéria retém o aluno no semestre (D35/N21).
+ *   2. Por módulo — só avança quem passou em **todas** as disciplinas.
+ *      Ficar retido em uma única matéria retém o aluno no módulo (D35/N21).
  *
  * Fica aqui, e não no banco, para o critério poder mudar sem migração.
  */
@@ -22,7 +22,7 @@ export interface DesempenhoDisciplina {
   disciplina_id: string;
   disciplina: string;
   /** 1, 2 ou 3. O 1º módulo não tem banca. */
-  semestre_do_curso: number;
+  modulo: number;
   nota_professor: number | null;
   nota_banca: number | null;
   nota_final: number | null;
@@ -34,8 +34,8 @@ export interface DesempenhoDisciplina {
  * A banca só existe a partir do 2º módulo. No 1º, a nota final da disciplina
  * é a do professor — não há com o que fazer média.
  */
-export function moduloTemBanca(semestreDoCurso: number): boolean {
-  return semestreDoCurso >= 2;
+export function moduloTemBanca(modulo: number): boolean {
+  return modulo >= 2;
 }
 
 export type Situacao = "aprovado" | "retido" | "indefinido";
@@ -45,7 +45,7 @@ export interface AvaliacaoDaDisciplina {
   disciplina: string;
   /** Nota atribuída pelo professor desta disciplina. */
   notaProfessor: number | null;
-  /** Nota da banca. É a mesma em todas as disciplinas do semestre. */
+  /** Nota da banca. É a mesma em todas as disciplinas do módulo. */
   notaBanca: number | null;
   /** Média com a banca, já arredondada. Null enquanto faltar nota ou banca. */
   notaFinal: number | null;
@@ -56,17 +56,17 @@ export interface AvaliacaoDaDisciplina {
   motivos: string[];
 }
 
-export interface AvaliacaoDoSemestre {
+export interface AvaliacaoDoModulo {
   situacao: Situacao;
   /** O resultado de cada matéria, na ordem recebida. */
   disciplinas: AvaliacaoDaDisciplina[];
-  /** Frequência somada do semestre. Informativa — a regra é por disciplina (D38). */
+  /** Frequência somada do módulo. Informativa — a regra é por disciplina (D38). */
   presencaGeral: number | null;
   /** Nomes das disciplinas em que ficou abaixo da nota. */
   reprovadasPorNota: string[];
   /** Disciplinas em que ficou abaixo da frequência, com o percentual. */
   reprovadasPorFrequencia: { disciplina: string; percentual: number }[];
-  /** O que impede fechar o semestre agora. */
+  /** O que impede fechar o módulo agora. */
   pendencias: string[];
   /** Explicação pronta para a tela. */
   motivos: string[];
@@ -96,7 +96,7 @@ export function avaliarDisciplina(d: DesempenhoDisciplina): AvaliacaoDaDisciplin
   if (d.nota_professor === null) {
     motivos.push("O professor ainda não lançou a nota.");
     indefinido = true;
-  } else if (moduloTemBanca(d.semestre_do_curso) && d.nota_banca === null) {
+  } else if (moduloTemBanca(d.modulo) && d.nota_banca === null) {
     // No 1º módulo não há banca, então a ausência dela não é pendência —
     // tratá-la como tal travaria a decisão de toda a turma de entrada.
     motivos.push("A nota da banca ainda não foi lançada.");
@@ -144,12 +144,12 @@ export function avaliarDisciplina(d: DesempenhoDisciplina): AvaliacaoDaDisciplin
 }
 
 /**
- * Situação do aluno no semestre, a partir do resultado de cada disciplina.
+ * Situação do aluno no módulo, a partir do resultado de cada disciplina.
  *
  * Só avança quem foi aprovado em **todas**. Basta uma retida para reter o
  * aluno, mesmo que outras ainda estejam pendentes — não há o que esperar.
  */
-export function avaliarSemestre(disciplinas: DesempenhoDisciplina[]): AvaliacaoDoSemestre {
+export function avaliarModulo(disciplinas: DesempenhoDisciplina[]): AvaliacaoDoModulo {
   if (disciplinas.length === 0) {
     return {
       situacao: "indefinido",
@@ -157,7 +157,7 @@ export function avaliarSemestre(disciplinas: DesempenhoDisciplina[]): AvaliacaoD
       presencaGeral: null,
       reprovadasPorNota: [],
       reprovadasPorFrequencia: [],
-      pendencias: ["Nenhuma disciplina cursada neste semestre."],
+      pendencias: ["Nenhuma disciplina cursada neste módulo."],
       motivos: [],
     };
   }
@@ -202,7 +202,7 @@ export function avaliarSemestre(disciplinas: DesempenhoDisciplina[]): AvaliacaoD
   if (situacao === "aprovado") {
     motivos.push(
       `Aprovado nas ${avaliadas.length} ` +
-      `${plural(avaliadas.length, "disciplina", "disciplinas")} do semestre.`,
+      `${plural(avaliadas.length, "disciplina", "disciplinas")} do módulo.`,
     );
   }
 

@@ -5,15 +5,18 @@
  * o app do professor), o que as tornava intestáveis e sujeitas a divergir. Aqui
  * elas ficam puras e com a data "hoje" injetável, para poderem ser verificadas.
  *
- * Há três conceitos distintos de semestre neste sistema:
+ * Duas coisas diferentes, e agora com nomes diferentes (D46) — antes as duas se
+ * chamavam "semestre", e a turma "Animação Noite 2026/2" estava no módulo 1:
  *
- *   turmas.semestre               entrada da turma (a coorte). Ex.: "2025/1"
- *   disciplinas.semestre_do_curso qual dos 3 semestres do curso. Ex.: 2
- *   cronogramas.semestre          semestre letivo do calendário. Ex.: "2026/1"
+ *   MÓDULO     onde o aluno está no curso: 1, 2 ou 3
+ *              `disciplinas.modulo`, `matriculas.modulo`, `grupos.modulo`
+ *
+ *   SEMESTRE   período do calendário: "2026/1", "2026/2"
+ *              `cronogramas.semestre` e `turmas.entrada` (quando a turma começou)
  */
 
-/** Quantidade de semestres que um curso do CAV tem. */
-export const SEMESTRES_DO_CURSO = 3;
+/** Quantidade de módulos que um curso do CAV tem. */
+export const MODULOS_DO_CURSO = 3;
 
 /** Segunda a sexta, no padrão de `Date.getDay()`. */
 export const DIAS_LETIVOS = [1, 2, 3, 4, 5] as const;
@@ -47,7 +50,7 @@ function deSemestres(total: number): string {
 }
 
 /**
- * Em qual semestre do curso uma turma está numa data qualquer.
+ * Em qual módulo do curso uma turma está numa data qualquer.
  *
  * Retorna 1, 2 ou 3 enquanto o curso corre; acima de 3 significa concluído;
  * zero ou negativo significa que a turma ainda não começou. Retorna `null`
@@ -58,7 +61,7 @@ function deSemestres(total: number): string {
  * real vive em `cronogramas`, então os dois podem discordar em julho.
  * Ver P11 no plano de ajustes.
  */
-export function semestreDoCurso(entrada: string, hoje: Date = new Date()): number | null {
+export function moduloAtual(entrada: string, hoje: Date = new Date()): number | null {
   const inicio = lerSemestre(entrada);
   if (!inicio) return null;
   const semestreAtual = hoje.getMonth() < 6 ? 1 : 2;
@@ -66,14 +69,17 @@ export function semestreDoCurso(entrada: string, hoje: Date = new Date()): numbe
 }
 
 /**
- * Rótulo curto: "2º semestre".
- * @param sufixo texto acrescentado ao número, ex.: " do curso"
+ * Rótulo curto: "Módulo 2".
+ *
+ * Já dizia "2º semestre", que colidia com o semestre do calendário — na mesma
+ * tela apareciam "2º semestre" (o módulo) e "2026/2" (o período), e não havia
+ * como saber qual era qual.
  */
-export function rotuloSemestreDoCurso(n: number | null, sufixo = ""): string {
+export function rotuloModulo(n: number | null): string {
   if (n === null) return "";
   if (n <= 0) return "Ainda não iniciou";
-  if (n > SEMESTRES_DO_CURSO) return sufixo ? "Curso concluído" : "Concluído";
-  return `${n}º semestre${sufixo}`;
+  if (n > MODULOS_DO_CURSO) return "Curso concluído";
+  return `Módulo ${n}`;
 }
 
 /**
@@ -82,11 +88,11 @@ export function rotuloSemestreDoCurso(n: number | null, sufixo = ""): string {
  * Turma que entrou em 2025/2, disciplina do 2º semestre do curso → 2026/1.
  * Devolve "" se a entrada for inválida.
  */
-export function semestreLetivo(entrada: string, semestreDoCursoAlvo: number): string {
+export function semestreLetivo(entrada: string, moduloAlvo: number): string {
   const inicio = lerSemestre(entrada);
   if (!inicio) return "";
-  if (!Number.isInteger(semestreDoCursoAlvo) || semestreDoCursoAlvo < 1) return "";
-  return deSemestres(emSemestres(inicio.ano, inicio.semestre) + (semestreDoCursoAlvo - 1));
+  if (!Number.isInteger(moduloAlvo) || moduloAlvo < 1) return "";
+  return deSemestres(emSemestres(inicio.ano, inicio.semestre) + (moduloAlvo - 1));
 }
 
 /**
