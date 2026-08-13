@@ -466,8 +466,8 @@ Cada fase só começa quando a anterior estiver revisada. O documento é atualiz
 | ~~**6**~~ | ~~Reorganização do admin~~ — resolveu `P13` e `P1`, e de quebra o `P20` | ✅ **CONCLUÍDA** |
 | ~~**7**~~ | ~~Cronograma editável + recálculo seguro~~ | ✅ **CONCLUÍDA** |
 | ~~**8**~~ | ~~Grupos, notas e banca (`D18`–`D21`)~~ | ✅ **CONCLUÍDA** |
-| **9** | Fechamento de semestre e progressão por aluno (`P15`,`D24`–`D26`,`D29`) | ⚠️ **modelo e regras prontos** (`src/lib/aprovacao.ts`, 124 testes); **falta a tela** |
-| **10** | Relatórios (`D27`) | fase 9 |
+| ~~**9**~~ | ~~Fechamento de módulo e progressão por aluno (`P15`,`D24`–`D26`,`D29`)~~ | ✅ **CONCLUÍDA** — aba **Fechamento**, passo 6 |
+| **10** | Relatórios (`D27`) | ← próxima |
 | **11** | Limpezas (`P6`,`P10`,`P11`,`P12`,`P16`) | — |
 | ~~**11-B**~~ | ~~Admin por concessão explícita + `P9` investigado~~ | ✅ **CONCLUÍDA** |
 | ~~**12**~~ | ~~Acesso do professor por e-mail (`P21`)~~ | ✅ **CONCLUÍDA** — migração aplicada em 13/08/2026 |
@@ -567,6 +567,19 @@ CAV. "Semestre" fica valendo só para o calendário. `turmas.semestre` vira
 Escola, como passo 1**. É a primeira coisa a fazer todo semestre — sem ela a
 disciplina não sabe quantas aulas tem. Sala está no Sistema porque é
 infraestrutura; o calendário muda todo semestre, então não é configuração.
+
+**`D49` — o fechamento é aluno por aluno, nunca em lote.** A tela
+(`Escola → Fechamento`) mostra o cálculo e o motivo; quem encerra é o
+coordenador. Decidir contra o cálculo é permitido — pede confirmação dizendo o
+que o sistema concluiu, e grava isso na observação da matrícula.
+
+> Duas armadilhas que a implementação evita, e que valem para quem mexer
+> depois: **a lista de alunos sai de `matriculas`, não da view de desempenho** —
+> aluno sem nenhuma nota lançada não aparece em `vw_desempenho_aluno`, e sumir
+> da tela de fechamento seria o pior desfecho (ninguém decide sobre quem não
+> vê). E **as pendências da turma são deduplicadas**: uma banca não lançada
+> afeta todas as disciplinas de todos os alunos, e sem isso a lista repetiria a
+> mesma frase dezenas de vezes.
 
 **`D48` — feriados deixam de ser digitados à mão.** `src/lib/feriados.ts`
 calcula os nacionais (fixos e móveis, via Páscoa), o aniversário de São
