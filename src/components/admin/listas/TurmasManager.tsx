@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { moduloAtual, rotuloModulo } from "@/lib/calendario-escolar";
+import { useSemestreVigente } from "@/hooks/useSemestreVigente";
 import { buscarAlunosDaTurma, matricularAlunos, encerrarMatricula } from "@/lib/matriculas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,8 +35,8 @@ interface Aluno {
 const CURSOS = ["Animação", "Cine/TV"];
 const TURNOS = ["Manhã", "Noite"];
 
-const rotuloDoModulo = (entrada: string) =>
-  rotuloModulo(moduloAtual(entrada));
+const rotuloDoModulo = (entrada: string, semestreAtual: string | null) =>
+  rotuloModulo(moduloAtual(entrada, semestreAtual));
 
 // A cor sai do NÚMERO do módulo, não de procurar "1º" no texto do rótulo.
 // Enquanto o rótulo era "1º semestre do curso", casar por texto funcionava; ao
@@ -67,6 +68,7 @@ interface CandidatoRevisao {
 
 function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) {
   const supabase = createClient();
+  const { semestre: semestreAtual } = useSemestreVigente();
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
@@ -135,7 +137,7 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
     }
 
     const { erro } = await matricularAlunos(
-      supabase, turma.id, turma.entrada, criados.map(c => c.id),
+      supabase, turma.id, turma.entrada, criados.map(c => c.id), semestreAtual,
     );
     if (erro) showMsg("erro", `Alunos criados, mas houve falha ao matricular: ${erro}`);
     else {
@@ -211,7 +213,7 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
     }
 
     const { erro } = await matricularAlunos(
-      supabase, turma.id, turma.entrada, criados.map(c => c.id),
+      supabase, turma.id, turma.entrada, criados.map(c => c.id), semestreAtual,
     );
     if (erro) showMsg("erro", `Alunos criados, mas houve falha ao matricular: ${erro}`);
     else {
@@ -313,7 +315,7 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
         <div className="space-y-3 bg-gray-50 rounded-xl p-4">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-gray-700">Adicionar alunos</p>
-            {rotuloDoModulo(turma.entrada) === "Módulo 1" && (
+            {rotuloDoModulo(turma.entrada, semestreAtual) === "Módulo 1" && (
               <Button size="sm" variant="outline" onClick={handleAbrirRevisao} disabled={carregandoRevisao}>
                 {carregandoRevisao ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Download className="h-3.5 w-3.5 mr-1" />}
                 Importar do Processo Seletivo
@@ -455,6 +457,7 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
 // ── TurmasManager principal ───────────────────────────────────────────────────
 export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: string, nome: string) => void }) {
   const supabase = createClient();
+  const { semestre: semestreAtual } = useSemestreVigente();
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
@@ -630,8 +633,8 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
             const ORDEM_ROTULO = ["Módulo 1", "Módulo 2", "Módulo 3", "Ainda não iniciou", "Curso concluído"];
             const ORDEM_TURNO = ["Manhã", "Noite"];
             const sorted = [...lista].sort((a, b) => {
-              const sA = ORDEM_ROTULO.indexOf(rotuloDoModulo(a.entrada));
-              const sB = ORDEM_ROTULO.indexOf(rotuloDoModulo(b.entrada));
+              const sA = ORDEM_ROTULO.indexOf(rotuloDoModulo(a.entrada, semestreAtual));
+              const sB = ORDEM_ROTULO.indexOf(rotuloDoModulo(b.entrada, semestreAtual));
               if (sA !== sB) return sA - sB;
               return ORDEM_TURNO.indexOf(a.turno) - ORDEM_TURNO.indexOf(b.turno);
             });
@@ -640,8 +643,8 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
             // número acompanha o rótulo, porque é dele que sai a cor.
             const grupos: Record<string, { modulo: number | null; turmas: Turma[] }> = {};
             sorted.forEach(t => {
-              const rotulo = rotuloDoModulo(t.entrada);
-              if (!grupos[rotulo]) grupos[rotulo] = { modulo: moduloAtual(t.entrada), turmas: [] };
+              const rotulo = rotuloDoModulo(t.entrada, semestreAtual);
+              if (!grupos[rotulo]) grupos[rotulo] = { modulo: moduloAtual(t.entrada, semestreAtual), turmas: [] };
               grupos[rotulo].turmas.push(t);
             });
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { moduloAtual, rotuloModulo } from "@/lib/calendario-escolar";
+import { useSemestreVigente } from "@/hooks/useSemestreVigente";
 import { PRESENCA_MINIMA } from "@/lib/aprovacao";
 import { buscarAlunosDaTurma } from "@/lib/matriculas";
 import {
@@ -17,8 +18,8 @@ interface Turma { id: string; nome: string; entrada: string; curso: string; turn
 
 type Relatorio = "frequencia" | "diario";
 
-const labelTurma = (t: Turma) =>
-  `${t.curso} · ${t.turno} · ${rotuloModulo(moduloAtual(t.entrada))} (entrada ${t.entrada})`;
+const labelTurma = (t: Turma, semestreAtual: string | null) =>
+  `${t.curso} · ${t.turno} · ${rotuloModulo(moduloAtual(t.entrada, semestreAtual))} (entrada ${t.entrada})`;
 
 const formatarData = (iso: string | null) => {
   if (!iso) return "—";
@@ -35,6 +36,7 @@ const formatarData = (iso: string | null) => {
  */
 export default function RelatoriosManager() {
   const supabase = createClient();
+  const { semestre: semestreAtual } = useSemestreVigente();
 
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [turmaSel, setTurmaSel] = useState("");
@@ -59,7 +61,7 @@ export default function RelatoriosManager() {
       supabase.from("aulas")
         .select("id, numero, data_aula, conteudo_ministrado, disciplina:disciplinas(id, nome), professor:professores(nome)")
         .eq("turma_id", turmaSel)
-        .eq("chamada_aberta", true)   // true = FINALIZADA (nome legado, P6)
+        .eq("chamada_finalizada", true)   // true = FINALIZADA (nome legado, P6)
         .order("numero"),
       supabase.from("aulas").select("id", { count: "exact", head: true }).eq("turma_id", turmaSel),
     ]);
@@ -131,7 +133,7 @@ export default function RelatoriosManager() {
             <SelectValue placeholder="Selecione uma turma..." />
           </SelectTrigger>
           <SelectContent>
-            {turmas.map(t => <SelectItem key={t.id} value={t.id}>{labelTurma(t)}</SelectItem>)}
+            {turmas.map(t => <SelectItem key={t.id} value={t.id}>{labelTurma(t, semestreAtual)}</SelectItem>)}
           </SelectContent>
         </Select>
 

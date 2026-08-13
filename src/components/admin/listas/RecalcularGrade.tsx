@@ -22,7 +22,7 @@ interface AulaDaGrade {
   id: string;
   numero: number;
   data_aula: string | null;
-  chamada_aberta: boolean;
+  chamada_finalizada: boolean;
   turma: { id: string; turno: string; entrada: string };
   professor: { id: string; nome: string } | null;
 }

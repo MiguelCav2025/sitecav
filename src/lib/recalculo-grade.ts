@@ -7,7 +7,7 @@ export interface AulaExistente {
   numero: number;
   data_aula: string | null;
   /** ATENÇÃO: true significa chamada FINALIZADA (nome legado, ver P6). */
-  chamada_aberta: boolean;
+  chamada_finalizada: boolean;
 }
 
 export interface PlanoRecalculo {
@@ -74,7 +74,7 @@ export function planejarRecalculoDaGrade(
       plano.criar.push({ numero, data_aula: novaData });
       continue;
     }
-    if (existente.chamada_aberta) {
+    if (existente.chamada_finalizada) {
       plano.preservadas.push({ id: existente.id, numero });
       continue;
     }
@@ -87,7 +87,7 @@ export function planejarRecalculoDaGrade(
   for (const aula of aulas) {
     if (aula.numero <= totalAulas) continue;
 
-    if (aula.chamada_aberta) {
+    if (aula.chamada_finalizada) {
       plano.preservadas.push({ id: aula.id, numero: aula.numero });
       plano.avisos.push(
         `A aula ${aula.numero} passa do novo total, mas já teve a chamada fechada — ela é mantida.`,

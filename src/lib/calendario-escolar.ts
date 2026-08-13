@@ -49,23 +49,54 @@ function deSemestres(total: number): string {
   return `${Math.floor(total / 2)}/${(total % 2) + 1}`;
 }
 
+/** Um semestre letivo cadastrado em `cronogramas`. */
+export interface PeriodoDoSemestre {
+  semestre: string;
+  data_inicio: string;
+  data_fim: string;
+}
+
 /**
- * Em qual módulo do curso uma turma está numa data qualquer.
+ * Qual semestre letivo está valendo hoje.
+ *
+ * Vale o semestre que **já começou** e é o mais recente — não o que contém a
+ * data de hoje. A diferença aparece no intervalo entre um semestre e outro: em
+ * janeiro, com 2026/2 terminado em dezembro e 2027/1 ainda por começar, o aluno
+ * continua onde estava. Ele só avança quando o novo semestre efetivamente
+ * começa (`P11`, corrigido em 13/08/2026).
+ *
+ * Retorna `null` se nenhum semestre começou — aí não há resposta a dar, e
+ * inventar uma seria pior do que dizer que falta cadastrar o calendário.
+ */
+export function semestreVigente(
+  periodos: readonly PeriodoDoSemestre[],
+  hoje: string,
+): string | null {
+  const jaComecados = periodos
+    .filter(p => p.semestre && p.data_inicio && p.data_inicio <= hoje)
+    .sort((a, b) => b.data_inicio.localeCompare(a.data_inicio));
+
+  return jaComecados[0]?.semestre ?? null;
+}
+
+/**
+ * Em qual módulo do curso uma turma está, dado o semestre letivo vigente.
  *
  * Retorna 1, 2 ou 3 enquanto o curso corre; acima de 3 significa concluído;
  * zero ou negativo significa que a turma ainda não começou. Retorna `null`
- * quando a entrada é inválida — distinguir os dois casos importa, porque
- * "ainda não começou" é uma resposta legítima e "não sei" não é.
+ * quando falta informação — distinguir os casos importa, porque "ainda não
+ * começou" é uma resposta legítima e "não sei" não é.
  *
- * ATENÇÃO: a virada de semestre está fixada em 1º de julho. O calendário letivo
- * real vive em `cronogramas`, então os dois podem discordar em julho.
- * Ver P11 no plano de ajustes.
+ * A virada era fixada em 1º de julho, escrita no código. Estava errada: o
+ * semestre começa no dia que a coordenação cadastrou no calendário letivo, e
+ * este ano ele começou em 3 de agosto. Entre julho e agosto o sistema
+ * adiantava a turma inteira de módulo, calado.
  */
-export function moduloAtual(entrada: string, hoje: Date = new Date()): number | null {
+export function moduloAtual(entrada: string, semestreAtual: string | null): number | null {
   const inicio = lerSemestre(entrada);
-  if (!inicio) return null;
-  const semestreAtual = hoje.getMonth() < 6 ? 1 : 2;
-  return emSemestres(hoje.getFullYear(), semestreAtual) - emSemestres(inicio.ano, inicio.semestre) + 1;
+  const atual = semestreAtual ? lerSemestre(semestreAtual) : null;
+  if (!inicio || !atual) return null;
+  return emSemestres(atual.ano, atual.semestre) - emSemestres(inicio.ano, inicio.semestre) + 1;
 }
 
 /**

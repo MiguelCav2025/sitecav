@@ -11,6 +11,7 @@ import {
   AlertCircle, AlertTriangle, CheckCircle, Loader2, Plus, Trash2, UserPlus, Users, X,
 } from "lucide-react";
 import { moduloAtual, MODULOS_DO_CURSO } from "@/lib/calendario-escolar";
+import { useSemestreVigente } from "@/hooks/useSemestreVigente";
 import { buscarAlunosDaTurma } from "@/lib/matriculas";
 import {
   avaliarModulo,
@@ -66,6 +67,7 @@ const SITUACAO_ESTILO: Record<Situacao, { rotulo: string; classe: string }> = {
  */
 export default function GruposEBancaManager() {
   const supabase = createClient();
+  const { semestre: semestreVigenteAtual } = useSemestreVigente();
 
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [turmaId, setTurmaId] = useState("");
@@ -93,7 +95,7 @@ export default function GruposEBancaManager() {
   const escolherTurma = (id: string) => {
     setTurmaId(id);
     const t = turmas.find(x => x.id === id);
-    const atual = t ? moduloAtual(t.entrada) : null;
+    const atual = t ? moduloAtual(t.entrada, semestreVigenteAtual) : null;
     if (atual !== null && atual >= 1 && atual <= MODULOS_DO_CURSO) setModulo(String(atual));
   };
 

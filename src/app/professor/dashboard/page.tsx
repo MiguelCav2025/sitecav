@@ -9,6 +9,7 @@ import {
   Loader2, GraduationCap, Users, ArrowLeft, ClipboardList
 } from "lucide-react";
 import { moduloAtual, rotuloModulo } from "@/lib/calendario-escolar";
+import { useSemestreVigente } from "@/hooks/useSemestreVigente";
 import LancarNotas from "@/components/professor/LancarNotas";
 import { buscarAlunosDaTurma } from "@/lib/matriculas";
 
@@ -17,7 +18,7 @@ interface Disciplina { id: string; nome: string; emoji: string | null; }
 interface Aula {
   id: string;
   numero: number;
-  chamada_aberta: boolean;
+  chamada_finalizada: boolean;
   data_aula: string | null;
   conteudo_ministrado: string | null;
   turma: Turma;
@@ -31,12 +32,8 @@ interface Aluno { id: string; nome: string; }
 interface Presenca { aluno_id: string; presente: boolean; }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-const semDocurso = (semestreEntrada: string) =>
-  rotuloModulo(moduloAtual(semestreEntrada));
-
-function labelTurma(turma: Turma): string {
-  return `${semDocurso(turma.entrada)} · ${turma.curso} ${turma.turno}`;
-}
+const rotuloDaTurma = (turma: Turma, semestreAtual: string | null) =>
+  `${rotuloModulo(moduloAtual(turma.entrada, semestreAtual))} · ${turma.curso} ${turma.turno}`;
 
 function formatarData(iso: string | null): string {
   if (!iso) return "Sem data definida";
@@ -94,6 +91,7 @@ function AppHeader({
 export default function ProfessorDashboard() {
   const supabase = createClient();
   const router = useRouter();
+  const { semestre: semestreAtual } = useSemestreVigente();
 
   const [nomeProfessor, setNomeProfessor] = useState("");
   const [professorId, setProfessorId] = useState("");
@@ -131,7 +129,7 @@ export default function ProfessorDashboard() {
 
       const { data: aulasData } = await supabase
         .from("aulas")
-        .select("id, numero, chamada_aberta, data_aula, conteudo_ministrado, turma:turmas(id, nome, turno, entrada, curso), disciplina:disciplinas(id, nome, emoji)")
+        .select("id, numero, chamada_finalizada, data_aula, conteudo_ministrado, turma:turmas(id, nome, turno, entrada, curso), disciplina:disciplinas(id, nome, emoji)")
         .eq("professor_id", prof.id)
         .order("numero", { ascending: true });
 
@@ -170,7 +168,7 @@ export default function ProfessorDashboard() {
   // ── Abrir chamada ─────────────────────────────────────────────────────────────
   const abrirChamada = async (aula: Aula) => {
     // D22 — aula fechada é definitiva e não se abre mais.
-    if (aula.chamada_aberta) return;
+    if (aula.chamada_finalizada) return;
 
     setCarregandoChamada(true);
     setTela({ tipo: "chamada", aula });
@@ -252,7 +250,7 @@ export default function ProfessorDashboard() {
     // sobrescrita. O momento real do fechamento vai em `chamada_fechada_em`.
     const { error } = await supabase.from("aulas")
       .update({
-        chamada_aberta: true,
+        chamada_finalizada: true,
         chamada_fechada_em: new Date().toISOString(),
         conteudo_ministrado: texto,
       })
@@ -267,7 +265,7 @@ export default function ProfessorDashboard() {
     setChamadaFinalizada(true);
     setFinalizando(false);
     setTodasAulas(prev => prev.map(a =>
-      a.id === aula.id ? { ...a, chamada_aberta: true, conteudo_ministrado: texto } : a
+      a.id === aula.id ? { ...a, chamada_finalizada: true, conteudo_ministrado: texto } : a
     ));
   };
 
@@ -290,7 +288,7 @@ export default function ProfessorDashboard() {
       <div className="min-h-screen bg-blue-900 flex flex-col">
         <AppHeader
           titulo={`${aula.disciplina?.nome ?? "Aula"} — Aula ${aula.numero}`}
-          subtitulo={labelTurma(aula.turma)}
+          subtitulo={rotuloDaTurma(aula.turma, semestreAtual)}
           onVoltar={() => {
             if (tela.tipo === "chamada")
               setTela({ tipo: "aulas", disciplinaId: aula.disciplina!.id, disciplinaNome: aula.disciplina!.nome, turma: aula.turma });
@@ -404,7 +402,7 @@ export default function ProfessorDashboard() {
       <div className="min-h-screen bg-blue-900 flex flex-col">
         <AppHeader
           titulo={`Notas — ${disciplinaNome}`}
-          subtitulo={labelTurma(turma)}
+          subtitulo={rotuloDaTurma(turma, semestreAtual)}
           onVoltar={() => setTela({ tipo: "aulas", disciplinaId, disciplinaNome, turma })}
           onSair={handleSair}
         />
@@ -419,13 +417,13 @@ export default function ProfessorDashboard() {
   if (tela.tipo === "aulas") {
     const { disciplinaId, disciplinaNome, turma } = tela;
     const aulas = aulasDaTurma(disciplinaId, turma.id);
-    const feitas = aulas.filter(a => a.chamada_aberta).length;
+    const feitas = aulas.filter(a => a.chamada_finalizada).length;
 
     return (
       <div className="min-h-screen bg-slate-100 flex flex-col">
         <AppHeader
           titulo={disciplinaNome}
-          subtitulo={labelTurma(turma)}
+          subtitulo={rotuloDaTurma(turma, semestreAtual)}
           onVoltar={() => setTela({ tipo: "turmas", disciplinaId, disciplinaNome })}
           onSair={handleSair}
         />
@@ -461,7 +459,7 @@ export default function ProfessorDashboard() {
           <p className="text-xs text-gray-400 font-medium px-1 mb-1 pt-2">Selecione a aula para abrir a chamada</p>
           {aulas.map(aula => {
             // D22 — chamada fechada é definitiva: o card vira registro, não botão.
-            const fechada = aula.chamada_aberta;
+            const fechada = aula.chamada_finalizada;
             return (
               <button
                 key={aula.id}
@@ -520,7 +518,7 @@ export default function ProfessorDashboard() {
         <div className="flex-1 px-4 py-6 space-y-3 max-w-lg mx-auto w-full">
           {turmas.map(turma => {
             const aulasT = aulasDaTurma(disciplinaId, turma.id);
-            const feitas = aulasT.filter(a => a.chamada_aberta).length;
+            const feitas = aulasT.filter(a => a.chamada_finalizada).length;
             const pct = aulasT.length ? Math.round((feitas / aulasT.length) * 100) : 0;
             return (
               <button
@@ -533,7 +531,7 @@ export default function ProfessorDashboard() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-gray-900 font-semibold">{turma.curso} {turma.turno}</p>
-                  <p className="text-gray-400 text-xs mt-0.5">{semDocurso(turma.entrada)}</p>
+                  <p className="text-gray-400 text-xs mt-0.5">{rotuloModulo(moduloAtual(turma.entrada, semestreAtual))}</p>
                   <div className="mt-2 flex items-center gap-2">
                     <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                       <div className="h-1.5 bg-green-500 rounded-full" style={{ width: `${pct}%` }} />
@@ -568,7 +566,7 @@ export default function ProfessorDashboard() {
         ) : (
           disciplinas.map(disc => {
             const todasAulasDaDisc = todasAulas.filter(a => a.disciplina?.id === disc.id);
-            const feitas = todasAulasDaDisc.filter(a => a.chamada_aberta).length;
+            const feitas = todasAulasDaDisc.filter(a => a.chamada_finalizada).length;
             const turmas = turmasDaDisciplina(disc.id);
             const pct = todasAulasDaDisc.length ? Math.round((feitas / todasAulasDaDisc.length) * 100) : 0;
             return (

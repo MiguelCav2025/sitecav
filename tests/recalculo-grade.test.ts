@@ -22,7 +22,7 @@ function aulasEmDia(quantas: number, fechadasAte = 0): AulaExistente[] {
     id: `aula-${i + 1}`,
     numero: i + 1,
     data_aula: SEGUNDAS[i] ?? null,
-    chamada_aberta: i + 1 <= fechadasAte,
+    chamada_finalizada: i + 1 <= fechadasAte,
   }));
 }
 
@@ -149,8 +149,8 @@ describe("entradas invalidas", () => {
 
   test("buraco na numeracao e preenchido", () => {
     const comBuraco: AulaExistente[] = [
-      { id: "a1", numero: 1, data_aula: "2026-02-02", chamada_aberta: false },
-      { id: "a3", numero: 3, data_aula: "2026-02-16", chamada_aberta: false },
+      { id: "a1", numero: 1, data_aula: "2026-02-02", chamada_finalizada: false },
+      { id: "a3", numero: 3, data_aula: "2026-02-16", chamada_finalizada: false },
     ];
     const plano = planejarRecalculoDaGrade(comBuraco, {
       periodo: PERIODO, diaDaSemana: SEGUNDA, totalAulas: 3,

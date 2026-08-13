@@ -304,7 +304,7 @@ for (const celula of grade.itens) {
       numero: i + 1,
       professor_id: idPorProfessor.get(normalizar(celula.professor)) ?? null,
       data_aula: data,
-      chamada_aberta: false,
+      chamada_finalizada: false,
     })));
     totalAulas += datas.length;
   }

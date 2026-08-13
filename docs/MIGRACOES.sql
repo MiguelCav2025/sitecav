@@ -2003,35 +2003,117 @@ drop table if exists public.professor_turmas;
 
 
 -- ============================================================================
--- FASE 16 — `chamada_aberta` tem o nome invertido  (P6)  — PREPARADA, NAO PRONTA
+-- FASE 16 — `chamada_aberta` passa a se chamar `chamada_finalizada`  (P6)
 -- ----------------------------------------------------------------------------
--- `chamada_aberta = true` significa chamada FINALIZADA. O nome diz o oposto do
--- que a coluna guarda, e ja precisou de comentario em cinco arquivos para nao
--- enganar quem le. Um dia engana.
+-- `chamada_aberta = true` significava chamada FINALIZADA. O nome dizia o oposto
+-- do que a coluna guarda, e ja precisava de comentario em cinco arquivos para
+-- nao enganar quem le.
 --
--- POR QUE ESTA FASE NAO ESTA ESCRITA AINDA
+-- As cinco funcoes abaixo sao o texto REAL que estava no banco em 13/08/2026,
+-- extraido de pg_proc.prosrc — nao a lembranca do que foi criado. So o nome da
+-- coluna muda; a regra de cada uma fica identica.
 --
--- A coluna aparece em pelo menos quatro funcoes plpgsql (a que impede reabrir
--- chamada, a que trava a troca de professor, a que protege a exclusao de
--- disciplina e a que autoriza a escrita de presenca), numa constraint CHECK,
--- numa policy de RLS e na view de desempenho. Constraint, policy e view o
--- Postgres reescreve sozinho; corpo de funcao, nao.
+-- Constraint CHECK, policy de RLS e a view o Postgres reescreve sozinho no
+-- rename. Corpo de funcao, nao — por isso as cinco entram aqui.
 --
--- Reescrever essas funcoes a partir do que esta neste arquivo seria apostar
--- que nenhuma delas mudou desde que foi criada. Se eu errar uma, o que quebra
--- e a chamada — o unico fluxo que o professor usa todo dia.
---
--- RODE ISTO E ME MANDE O RESULTADO, que eu escrevo a fase com o texto real:
---
--- select p.proname, p.prosrc
---   from pg_proc p
+-- >>> ORDEM: rode ISTO e so depois eu subo o codigo. O inverso derruba a
+-- chamada do professor, que e o fluxo mais usado do sistema. <<<
+-- ============================================================================
+
+-- 16.1 — o rename, idempotente
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'aulas'
+                and column_name = 'chamada_aberta') then
+    alter table public.aulas rename column chamada_aberta to chamada_finalizada;
+  end if;
+end $$;
+
+comment on column public.aulas.chamada_finalizada is
+  'true = chamada fechada, definitiva. Chamava-se chamada_aberta e queria dizer o oposto (P6).';
+
+-- 16.2 — as cinco funcoes, com a regra intacta
+create or replace function public.aula_ainda_aberta(p_aula uuid)
+returns boolean language sql security definer stable
+set search_path = public as $$
+  select exists (select 1 from public.aulas a
+    where a.id = p_aula and a.chamada_finalizada = false);
+$$;
+
+create or replace function public.bloqueia_presenca_apos_fechamento()
+returns trigger
+language plpgsql
+as $$
+declare v_fechada boolean;
+begin
+  select a.chamada_finalizada into v_fechada
+    from public.aulas a
+   where a.id = coalesce(new.aula_id, old.aula_id);
+  if coalesce(v_fechada, false) then
+    raise exception 'Chamada ja finalizada. As presencas desta aula nao podem mais ser alteradas.'
+      using errcode = 'check_violation';
+  end if;
+  return coalesce(new, old);
+end;
+$$;
+
+create or replace function public.bloqueia_reabertura_chamada()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.chamada_finalizada and not new.chamada_finalizada then
+    raise exception 'Chamada finalizada nao pode ser reaberta.'
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$$;
+
+create or replace function public.bloqueia_troca_professor_aula_fechada()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.chamada_finalizada
+     and new.professor_id is distinct from old.professor_id then
+    raise exception 'Aula ja fechada: o professor responsavel nao pode ser alterado.'
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$$;
+
+create or replace function public.bloqueia_exclusao_disciplina_com_historico()
+returns trigger
+language plpgsql
+as $$
+declare v_fechadas integer;
+begin
+  select count(*) into v_fechadas
+    from public.aulas a
+   where a.disciplina_id = old.id and a.chamada_finalizada;
+  if v_fechadas > 0 then
+    raise exception 'Esta disciplina tem % aula(s) com chamada fechada. Desative em vez de excluir.', v_fechadas
+      using errcode = 'check_violation';
+  end if;
+  return old;
+end;
+$$;
+
+-- 16.3 — conferencia: as duas devem voltar VAZIAS
+-- select p.proname from pg_proc p
 --   join pg_namespace n on n.oid = p.pronamespace
 --   join pg_language  l on l.oid = p.prolang
---  where n.nspname = 'public'
---    and p.prokind in ('f', 'p')
---    and l.lanname in ('plpgsql', 'sql')
---    and p.prosrc ~* 'chamada_aberta'
---  order by 1;
+--  where n.nspname='public' and p.prokind in ('f','p')
+--    and l.lanname in ('plpgsql','sql') and p.prosrc ~* 'chamada_aberta';
+--
+-- select column_name from information_schema.columns
+--  where table_schema='public' and table_name='aulas' and column_name='chamada_aberta';
+
+-- ROLLBACK: renomear de volta E recriar as cinco funcoes com o nome antigo.
+--   alter table public.aulas rename column chamada_finalizada to chamada_aberta;
 
 
 -- ============================================================================

@@ -8,6 +8,7 @@ import {
   contarDiasLetivos,
   gerarDatasAulas,
 } from "@/lib/calendario-escolar";
+import { useSemestreVigente } from "@/hooks/useSemestreVigente";
 import RecalcularGrade from "./RecalcularGrade";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,7 +71,7 @@ interface Cronograma {
 interface AulaDaDisciplina {
   id: string;
   numero: number;
-  chamada_aberta: boolean;
+  chamada_finalizada: boolean;
   data_aula: string | null;
   turma: { id: string; turno: string; entrada: string };
   // A consulta pede professores(id, nome); o tipo declarava so o nome, o que
@@ -100,8 +101,8 @@ const badgeSem = (s: number) => {
 
 // As regras de calendário vivem em @/lib/calendario-escolar, com testes.
 // Estavam duplicadas aqui e em outros três componentes.
-const calcularSemestreDoCurso = (semestreEntrada: string) =>
-  moduloAtual(semestreEntrada) ?? 0;
+const moduloDaTurma = (entrada: string, semestreAtual: string | null) =>
+  moduloAtual(entrada, semestreAtual) ?? 0;
 
 const semestreLetivoParaTurma = semestreLetivo;
 
@@ -142,7 +143,7 @@ function AulasDaDisciplinaModal({
   const carregarAulas = () => {
     supabase
       .from("aulas")
-      .select("id, numero, chamada_aberta, data_aula, turma:turmas(id, turno, entrada), professor:professores(id, nome)")
+      .select("id, numero, chamada_finalizada, data_aula, turma:turmas(id, turno, entrada), professor:professores(id, nome)")
       .eq("disciplina_id", disciplina.id)
       .order("numero")
       .then(({ data }) => {
@@ -174,7 +175,7 @@ function AulasDaDisciplinaModal({
       .update({ professor_id: pid })
       .eq("disciplina_id", disciplina.id)
       .eq("turma_id", turmaId)
-      .eq("chamada_aberta", false);
+      .eq("chamada_finalizada", false);
 
     if (error) {
       setSalvandoProf(prev => ({ ...prev, [turmaId]: false }));
@@ -200,7 +201,7 @@ function AulasDaDisciplinaModal({
     porTurma[a.turma.id].aulas.push(a);
   });
 
-  const totalFeitas = aulas.filter(a => a.chamada_aberta).length;
+  const totalFeitas = aulas.filter(a => a.chamada_finalizada).length;
 
   return (
     <DialogContent className="!max-w-3xl max-h-[85vh] flex flex-col">
@@ -309,8 +310,8 @@ function AulasDaDisciplinaModal({
                           />
                         </td>
                         <td className="px-3 py-2">
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${a.chamada_aberta ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                            {a.chamada_aberta ? "Feita" : "Pendente"}
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${a.chamada_finalizada ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                            {a.chamada_finalizada ? "Feita" : "Pendente"}
                           </span>
                         </td>
                       </tr>
@@ -423,6 +424,7 @@ function DisciplinaCard({
 
 export default function DisciplinasManager() {
   const supabase = createClient();
+  const { semestre: semestreAtual } = useSemestreVigente();
 
   const [disciplinas, setDisciplinas] = useState<Disciplina[]>([]);
   const [turmas, setTurmas] = useState<Turma[]>([]);
@@ -452,7 +454,7 @@ export default function DisciplinasManager() {
 
   const turmasAfetadas = turmas.filter(t => {
     if (!form.curso || !form.modulo) return false;
-    return t.curso === form.curso && calcularSemestreDoCurso(t.entrada) === parseInt(form.modulo);
+    return t.curso === form.curso && moduloDaTurma(t.entrada, semestreAtual) === parseInt(form.modulo);
   });
 
   // Calcula quantas aulas o cronograma oferece para o dia selecionado (usa a primeira turma afetada como referência)

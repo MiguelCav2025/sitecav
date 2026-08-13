@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { moduloAtual, rotuloModulo } from "@/lib/calendario-escolar";
+import { useSemestreVigente } from "@/hooks/useSemestreVigente";
 import { NOTA_MINIMA, PRESENCA_MINIMA, type Situacao } from "@/lib/aprovacao";
 import { encerrarMatricula } from "@/lib/matriculas";
 import {
@@ -39,6 +40,7 @@ const ESTILO: Record<Situacao, { cor: string; rotulo: string; Icone: typeof Chec
  */
 export default function FechamentoManager() {
   const supabase = createClient();
+  const { semestre: semestreAtual } = useSemestreVigente();
 
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [turmaId, setTurmaId] = useState("");
@@ -59,7 +61,7 @@ export default function FechamentoManager() {
   }, [supabase]);
 
   const turma = turmas.find(t => t.id === turmaId) ?? null;
-  const modulo = turma ? moduloAtual(turma.entrada) : null;
+  const modulo = turma ? moduloAtual(turma.entrada, semestreAtual) : null;
 
   const carregar = useCallback(async () => {
     if (!turmaId) { setAlunos([]); return; }
@@ -157,7 +159,7 @@ export default function FechamentoManager() {
             <SelectContent>
               {turmas.map(t => (
                 <SelectItem key={t.id} value={t.id}>
-                  {t.curso} · {t.turno} · entrada {t.entrada} — {rotuloModulo(moduloAtual(t.entrada))}
+                  {t.curso} · {t.turno} · entrada {t.entrada} — {rotuloModulo(moduloAtual(t.entrada, semestreAtual))}
                 </SelectItem>
               ))}
             </SelectContent>

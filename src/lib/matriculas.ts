@@ -65,25 +65,29 @@ export async function buscarAlunosDaTurma(
 }
 
 /**
- * Em que semestre do curso uma turma está hoje, limitado à duração do curso.
- * Usado ao matricular alguém numa turma já em andamento.
+ * Em que módulo uma turma está, limitado à duração do curso.
+ *
+ * Sem semestre vigente cai em 1: matricular alguém é operação que não pode
+ * travar por falta de calendário, e o módulo de uma matrícula é corrigível
+ * depois. Errar para o começo do curso é o erro menos danoso.
  */
-export function moduloAtualDaTurma(entrada: string): number {
-  const n = moduloAtual(entrada);
+export function moduloAtualDaTurma(entrada: string, semestreAtual: string | null): number {
+  const n = moduloAtual(entrada, semestreAtual);
   if (n === null) return 1;
   return Math.min(MODULOS_DO_CURSO, Math.max(1, n));
 }
 
-/** Matricula alunos numa turma, no semestre em que ela está. */
+/** Matricula alunos numa turma, no módulo em que ela está. */
 export async function matricularAlunos(
   supabase: SupabaseClient,
   turmaId: string,
   entradaDaTurma: string,
   alunoIds: string[],
+  semestreAtual: string | null,
 ): Promise<{ erro: string | null }> {
   if (alunoIds.length === 0) return { erro: null };
 
-  const modulo = moduloAtualDaTurma(entradaDaTurma);
+  const modulo = moduloAtualDaTurma(entradaDaTurma, semestreAtual);
   const { error } = await supabase.from("matriculas").insert(
     alunoIds.map(aluno_id => ({
       aluno_id,

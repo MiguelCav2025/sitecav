@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   lerSemestre,
   moduloAtual,
+  semestreVigente,
   rotuloModulo,
   semestreLetivo,
   contarDiasLetivos,
@@ -11,6 +12,14 @@ import {
 
 // Data fixa para os testes não dependerem de quando rodam
 const em = (iso: string) => new Date(`${iso}T12:00:00`);
+
+/** O calendário real do CAV: 2026/2 começou em 3 de agosto, não em julho. */
+const CALENDARIO = [
+  { semestre: "2025/1", data_inicio: "2025-03-10", data_fim: "2025-06-27" },
+  { semestre: "2025/2", data_inicio: "2025-08-04", data_fim: "2025-12-12" },
+  { semestre: "2026/1", data_inicio: "2026-03-09", data_fim: "2026-06-26" },
+  { semestre: "2026/2", data_inicio: "2026-08-03", data_fim: "2026-12-14" },
+];
 
 describe("lerSemestre", () => {
   test("aceita o formato ano/semestre", () => {
@@ -25,33 +34,75 @@ describe("lerSemestre", () => {
   });
 });
 
-describe("modulo", () => {
-  test("avanca a cada seis meses a partir da entrada", () => {
-    assert.equal(moduloAtual("2025/1", em("2025-03-10")), 1);
-    assert.equal(moduloAtual("2025/1", em("2025-08-10")), 2);
-    assert.equal(moduloAtual("2025/1", em("2026-03-10")), 3);
+describe("semestreVigente", () => {
+  test("vale o semestre que ja comecou", () => {
+    assert.equal(semestreVigente(CALENDARIO, "2026-08-03"), "2026/2");
+    assert.equal(semestreVigente(CALENDARIO, "2026-10-01"), "2026/2");
+  });
+
+  test("NAO vira em 1 de julho — vira no dia cadastrado", () => {
+    // Era aqui que o sistema errava: de 01/07 a 02/08 ele ja contava 2026/2 e
+    // adiantava a turma inteira de modulo, sem que nada tivesse comecado.
+    assert.equal(semestreVigente(CALENDARIO, "2026-07-01"), "2026/1");
+    assert.equal(semestreVigente(CALENDARIO, "2026-07-31"), "2026/1");
+    assert.equal(semestreVigente(CALENDARIO, "2026-08-02"), "2026/1");
+    assert.equal(semestreVigente(CALENDARIO, "2026-08-03"), "2026/2");
+  });
+
+  test("no intervalo entre semestres, o aluno fica onde estava", () => {
+    // 2026/2 acabou em 14/12 e 2027/1 nao existe ainda: ninguem avancou.
+    assert.equal(semestreVigente(CALENDARIO, "2026-12-20"), "2026/2");
+    assert.equal(semestreVigente(CALENDARIO, "2027-01-15"), "2026/2");
+  });
+
+  test("antes de tudo comecar, nao ha resposta a dar", () => {
+    assert.equal(semestreVigente(CALENDARIO, "2025-01-01"), null);
+    assert.equal(semestreVigente([], "2026-08-03"), null);
+  });
+
+  test("ignora periodo sem data ou sem nome", () => {
+    const sujo = [
+      { semestre: "", data_inicio: "2026-01-01", data_fim: "2026-06-01" },
+      { semestre: "2026/1", data_inicio: "", data_fim: "" },
+      ...CALENDARIO,
+    ];
+    assert.equal(semestreVigente(sujo, "2026-08-03"), "2026/2");
+  });
+});
+
+describe("moduloAtual", () => {
+  test("avanca um modulo a cada semestre letivo", () => {
+    assert.equal(moduloAtual("2025/1", "2025/1"), 1);
+    assert.equal(moduloAtual("2025/1", "2025/2"), 2);
+    assert.equal(moduloAtual("2025/1", "2026/1"), 3);
   });
 
   test("passa de 3 quando a turma ja concluiu", () => {
-    assert.equal(moduloAtual("2025/1", em("2026-08-10")), 4);
+    assert.equal(moduloAtual("2025/1", "2026/2"), 4);
   });
 
   test("fica negativo para turma que ainda nao comecou", () => {
-    assert.equal(moduloAtual("2026/1", em("2025-03-10")), -1);
+    assert.equal(moduloAtual("2026/1", "2025/1"), -1);
   });
 
-  test("a virada e em 1 de julho", () => {
-    assert.equal(moduloAtual("2025/1", em("2025-06-30")), 1);
-    assert.equal(moduloAtual("2025/1", em("2025-07-01")), 2);
+  test("no calendario real do CAV, quem entrou em 2026/2 esta no modulo 1", () => {
+    const hoje = semestreVigente(CALENDARIO, "2026-08-13");
+    assert.equal(moduloAtual("2026/2", hoje), 1);
+    assert.equal(moduloAtual("2026/1", hoje), 2);
+    assert.equal(moduloAtual("2025/2", hoje), 3);
+  });
+
+  test("sem calendario cadastrado, responde null em vez de chutar", () => {
+    assert.equal(moduloAtual("2026/2", null), null);
   });
 
   test("entrada invalida devolve null, nao zero", () => {
     // Zero e uma resposta legitima: a turma comeca no semestre que vem.
     // Confundir os dois casos foi o que fez uma tela mostrar turma futura
-    // como se estivesse no 1o semestre.
-    assert.equal(moduloAtual("", em("2025-03-10")), null);
-    assert.equal(moduloAtual("lixo", em("2025-03-10")), null);
-    assert.equal(moduloAtual("2025/2", em("2025-03-10")), 0);
+    // como se estivesse no 1o modulo.
+    assert.equal(moduloAtual("", "2025/1"), null);
+    assert.equal(moduloAtual("lixo", "2025/1"), null);
+    assert.equal(moduloAtual("2025/2", "2025/1"), 0);
   });
 });
 
