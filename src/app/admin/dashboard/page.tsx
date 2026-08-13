@@ -27,6 +27,7 @@ const TurmasManager = dynamic(() => import('@/components/admin/listas/TurmasMana
 const DisciplinasManager = dynamic(() => import('@/components/admin/listas/DisciplinasManager'), { ssr: false });
 const ProfessoresManager = dynamic(() => import('@/components/admin/listas/ProfessoresManager'), { ssr: false });
 const GruposEBancaManager = dynamic(() => import('@/components/admin/listas/GruposEBancaManager'), { ssr: false });
+const FechamentoManager = dynamic(() => import('@/components/admin/listas/FechamentoManager'), { ssr: false });
 const RelatoriosManager = dynamic(() => import('@/components/admin/RelatoriosManager'), { ssr: false });
 
 // ── Sistema ───────────────────────────────────────────────────────────────────
@@ -61,6 +62,7 @@ function ConteudoSecao({ secao }: { secao: string }) {
     case "disciplinas": return <DisciplinasManager />;
     case "professores": return <ProfessoresManager />;
     case "grupos": return <GruposEBancaManager />;
+    case "fechamento": return <FechamentoManager />;
     case "relatorios": return <RelatoriosManager />;
 
     case "admin": return <AdminManager />;
