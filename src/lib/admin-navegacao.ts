@@ -59,7 +59,7 @@ export const AREAS: AreaAdmin[] = [
     secoes: [
       { passo: 1, value: "cronograma",  label: "Calendário letivo", ajuda: "Início, fim e feriados do semestre", icone: CalendarDays },
       { passo: 2, value: "turmas",      label: "Turmas",      ajuda: "Turmas e os alunos de cada uma",       icone: GraduationCap },
-      { passo: 3, value: "disciplinas", label: "Disciplinas", ajuda: "Matérias, aulas e professor de cada",  icone: BookMarked },
+      { passo: 3, value: "disciplinas", label: "Disciplinas", ajuda: "Matérias, sala, professor e aulas",   icone: BookMarked },
       { passo: 4, value: "professores", label: "Professores", ajuda: "Contas de acesso ao app",              icone: UserCheck },
       { passo: 5, value: "grupos",      label: "Notas e Banca", ajuda: "Grupos da banca e situação do aluno", icone: Award },
       { passo: 6, value: "fechamento",  label: "Fechamento",  ajuda: "Aprovar ou reter, ao fim do módulo",   icone: Scale },

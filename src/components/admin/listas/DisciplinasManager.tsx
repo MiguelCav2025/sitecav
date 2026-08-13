@@ -9,6 +9,7 @@ import {
   gerarDatasAulas,
 } from "@/lib/calendario-escolar";
 import { useSemestreVigente } from "@/hooks/useSemestreVigente";
+import { emojiDaDisciplina } from "@/lib/emoji-disciplina";
 import RecalcularGrade from "./RecalcularGrade";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -333,6 +334,7 @@ function DisciplinaCard({
   disciplina,
   professores,
   sala,
+  professor,
   onVerAulas,
   onExcluir,
   onChangeDia,
@@ -342,6 +344,9 @@ function DisciplinaCard({
   professores: Professor[];
   /** Nome da sala já resolvido — o card só recebe o id da sala, não a lista. */
   sala: string | null;
+  /** Quem leciona. Vem das aulas, não da disciplina: o mesmo nome pode ter
+      professor diferente na turma da manhã e na da noite. */
+  professor: { nome: string; varios: boolean } | null;
   onVerAulas: () => void;
   onExcluir: () => void;
   onChangeDia: (dia: number | null) => void;
@@ -360,7 +365,7 @@ function DisciplinaCard({
               className="text-xl w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100"
               title="Trocar emoji"
             >
-              {disciplina.emoji ?? "📚"}
+              {emojiDaDisciplina(disciplina.nome, disciplina.emoji)}
             </button>
             {emojiAberto && (
               <div className="absolute left-0 top-8 z-20 bg-white border border-gray-200 rounded-xl p-2 shadow-lg flex flex-wrap gap-1 w-52">
@@ -386,14 +391,22 @@ function DisciplinaCard({
           <Trash2 className="h-3.5 w-3.5" />
         </button>
       </div>
-      {/* A sala era escolhida no formulário e depois sumia: o card não a
-          mostrava, então não havia como conferir a grade sem reabrir cada
-          disciplina. */}
-      <p className="text-xs text-gray-400 mb-2 truncate" title={sala ?? undefined}>
+      {/* Sala e professor no card: são as duas perguntas que se faz olhando uma
+          grade — onde é, e com quem. Antes exigiam abrir cada disciplina. */}
+      <p className="text-xs text-gray-400 mb-1 truncate" title={sala ?? undefined}>
         {disciplina.total_aulas} aulas
         {sala
           ? <> · <span className="text-gray-500">{sala}</span></>
           : <> · <span className="text-amber-600">sem sala</span></>}
+      </p>
+      <p className="text-xs mb-2 truncate flex items-center gap-1" title={professor?.nome}>
+        <UserCheck className="h-3 w-3 shrink-0 text-gray-300" />
+        {professor
+          ? <span className="text-gray-500">
+              {professor.nome}
+              {professor.varios && <span className="text-gray-400"> e outro</span>}
+            </span>
+          : <span className="text-amber-600">sem professor</span>}
       </p>
       <div className="flex items-center gap-1 justify-between">
         <button
@@ -431,6 +444,8 @@ export default function DisciplinasManager() {
   const [professores, setProfessores] = useState<Professor[]>([]);
   const [cronogramas, setCronogramas] = useState<Cronograma[]>([]);
   const [salas, setSalas] = useState<Sala[]>([]);
+  const [professorPorDisciplina, setProfessorPorDisciplina] =
+    useState<Record<string, { nome: string; varios: boolean }>>({});
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
@@ -483,6 +498,29 @@ export default function DisciplinasManager() {
     setProfessores(ps ?? []);
     setCronogramas(crons ?? []);
     setSalas((sls ?? []) as Sala[]);
+
+    // Quem leciona cada disciplina vem das AULAS, não da disciplina: a mesma
+    // matéria pode ter professor diferente na turma da manhã e na da noite.
+    // Quando forem dois, o card mostra um e avisa "e outro".
+    const { data: aulas } = await supabase
+      .from("aulas")
+      .select("disciplina_id, professor:professores(nome)");
+
+    const nomesPorDisciplina = new Map<string, Set<string>>();
+    for (const a of ((aulas ?? []) as unknown as
+      { disciplina_id: string; professor: { nome: string } | null }[])) {
+      if (!a.professor) continue;
+      if (!nomesPorDisciplina.has(a.disciplina_id)) nomesPorDisciplina.set(a.disciplina_id, new Set());
+      nomesPorDisciplina.get(a.disciplina_id)!.add(a.professor.nome);
+    }
+    setProfessorPorDisciplina(
+      Object.fromEntries(
+        [...nomesPorDisciplina].map(([id, nomes]) => {
+          const lista = [...nomes].sort((a, b) => a.localeCompare(b, "pt-BR"));
+          return [id, { nome: lista[0], varios: lista.length > 1 }];
+        }),
+      ),
+    );
     setLoading(false);
   }, []);
 
@@ -656,7 +694,12 @@ export default function DisciplinasManager() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-gray-700">Sala</Label>
+              <Label className="text-gray-700">
+                Sala
+                <span className="ml-2 text-xs font-normal text-gray-400">
+                  criar e renomear em Sistema → Salas
+                </span>
+              </Label>
               <Select
                 value={form.sala_id || "none"}
                 onValueChange={v => setForm(f => ({ ...f, sala_id: v === "none" ? "" : v }))}
@@ -791,8 +834,23 @@ export default function DisciplinasManager() {
             const temAlguma = [1, 2, 3].some(sem => porCursoSemestre[curso][sem].length > 0);
             if (!temAlguma) return null;
             return (
-              <div key={curso} className="space-y-5">
+              <div key={curso} className="space-y-3">
                 <p className="text-white font-bold text-lg border-b border-white/20 pb-2">{curso}</p>
+
+                {/* Os dias da semana aparecem UMA vez por curso. Repeti-los em
+                    cada módulo dobrava a altura da grade sem dizer nada novo:
+                    a coluna da terça é a terça nos três módulos. */}
+                <div className="grid grid-cols-5 gap-2 sticky top-0 z-10">
+                  {DIAS.map(dia => (
+                    <div
+                      key={dia.value}
+                      className="flex items-center justify-center gap-1.5 rounded-lg bg-blue-950/80 backdrop-blur py-1.5 text-xs font-semibold text-white/80"
+                    >
+                      <Calendar className="h-3 w-3" />
+                      {dia.label}
+                    </div>
+                  ))}
+                </div>
 
                 {[1, 2, 3].map(sem => {
                   const discs = porCursoSemestre[curso][sem];
@@ -821,11 +879,6 @@ export default function DisciplinasManager() {
                       <div className="grid grid-cols-5 gap-2">
                         {DIAS.map(dia => (
                           <div key={dia.value} className="space-y-1.5">
-                            {/* Cabeçalho do dia */}
-                            <div className={`text-center text-xs font-semibold py-1.5 rounded-lg ${cores.header} ${cores.badge.split(" ")[1]}`}>
-                              <Calendar className="h-3 w-3 mx-auto mb-0.5" />
-                              {dia.label}
-                            </div>
                             {/* Disciplinas do dia */}
                             {porDia[dia.value].length === 0 ? (
                               <div className="border-2 border-dashed border-white/10 rounded-xl h-16 flex items-center justify-center">
@@ -838,6 +891,7 @@ export default function DisciplinasManager() {
                                   disciplina={d}
                                   professores={professores}
                                   sala={salas.find(s => s.id === d.sala_id)?.nome ?? null}
+                                  professor={professorPorDisciplina[d.id] ?? null}
                                   onVerAulas={() => setDisciplinaSelecionada(d)}
                                   onExcluir={() => handleExcluir(d.id, d.nome)}
                                   onChangeDia={dia => handleChangeDia(d.id, dia)}
@@ -862,6 +916,7 @@ export default function DisciplinasManager() {
                                   disciplina={d}
                                   professores={professores}
                                   sala={salas.find(s => s.id === d.sala_id)?.nome ?? null}
+                                  professor={professorPorDisciplina[d.id] ?? null}
                                   onVerAulas={() => setDisciplinaSelecionada(d)}
                                   onExcluir={() => handleExcluir(d.id, d.nome)}
                                   onChangeDia={dia => handleChangeDia(d.id, dia)}
