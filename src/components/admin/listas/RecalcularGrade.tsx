@@ -142,7 +142,6 @@ export default function RecalcularGrade({
               numero: c.numero,
               data_aula: c.data_aula,
               professor_id: item.professorId,
-              semana: Math.ceil(c.numero / 3),
             })),
           );
           if (error) throw new Error(`Ao criar aulas de ${item.rotulo}: ${error.message}`);

@@ -28,6 +28,10 @@
 --   Fase 14 ... [x] aplicada e verificada em 13/08/2026 (modulo != semestre)
 --                   Colunas conferidas, funcao e view reescritas, dados
 --                   intactos: 38/47/28 matriculas por modulo, como antes.
+--   Fase 15 ... [ ] NAO APLICADA — limpezas (semana, descricao, professor_turmas).
+--                   Rodar DEPOIS do deploy que parou de escrever nelas.
+--   Fase 16 ... [ ] PREPARADA, nao escrita — renomear chamada_aberta.
+--                   Precisa do corpo real das funcoes: ver a consulta na fase.
 --
 -- COMO RODAR: um bloco de cada vez (FASE 1, depois FASE 2), conferindo o
 -- resultado entre eles. O editor do Supabase executa a selecao inteira como
@@ -1965,6 +1969,69 @@ comment on view public.vw_desempenho_aluno is
 --   alter table public.grupos      rename column modulo to semestre_do_curso;
 --   alter table public.matriculas  rename column modulo to semestre_do_curso;
 --   alter table public.disciplinas rename column modulo to semestre_do_curso;
+
+
+-- ============================================================================
+-- FASE 15 — limpezas  (P12, P16, P22)
+-- ----------------------------------------------------------------------------
+-- Rodar DEPOIS do deploy do codigo que parou de escrever nessas colunas.
+-- Cada comando e independente: se um falhar, nao derruba os outros.
+-- ============================================================================
+
+-- 15.1 (P22) — `aulas.semana` guardava `numero / 3`, arredondado para cima.
+-- Como a disciplina encontra a turma UMA vez por semana, a aula 12 e a semana
+-- 12: dividir por 3 nao significava nada. O valor era buscado pela tela do
+-- professor e nunca exibido — uma conta errada esperando alguem confiar nela.
+alter table public.aulas drop column if exists semana;
+
+-- 15.2 (P16) — `descricao` era preenchida pelo coordenador. Como o diario de
+-- sala e responsabilidade exclusiva do professor (D5), a coluna ficou sem dono.
+-- O conteudo da aula vive em `conteudo_ministrado`.
+alter table public.aulas drop column if exists descricao;
+
+-- 15.3 (P12) — `professor_turmas` era o vinculo professor↔turma de antes da
+-- fase 2. Hoje quem leciona o que esta em `aulas.professor_id`, que e por
+-- turma E disciplina. A tabela ficou orfa: nenhuma linha do codigo a le.
+-- CONFIRME antes de apagar, se quiser guardar o historico:
+--   select count(*) from public.professor_turmas;
+drop table if exists public.professor_turmas;
+
+-- 15.4 — conferencia
+-- select column_name from information_schema.columns
+--  where table_schema='public' and table_name='aulas' order by ordinal_position;
+--   nao deve aparecer `semana` nem `descricao`.
+
+
+-- ============================================================================
+-- FASE 16 — `chamada_aberta` tem o nome invertido  (P6)  — PREPARADA, NAO PRONTA
+-- ----------------------------------------------------------------------------
+-- `chamada_aberta = true` significa chamada FINALIZADA. O nome diz o oposto do
+-- que a coluna guarda, e ja precisou de comentario em cinco arquivos para nao
+-- enganar quem le. Um dia engana.
+--
+-- POR QUE ESTA FASE NAO ESTA ESCRITA AINDA
+--
+-- A coluna aparece em pelo menos quatro funcoes plpgsql (a que impede reabrir
+-- chamada, a que trava a troca de professor, a que protege a exclusao de
+-- disciplina e a que autoriza a escrita de presenca), numa constraint CHECK,
+-- numa policy de RLS e na view de desempenho. Constraint, policy e view o
+-- Postgres reescreve sozinho; corpo de funcao, nao.
+--
+-- Reescrever essas funcoes a partir do que esta neste arquivo seria apostar
+-- que nenhuma delas mudou desde que foi criada. Se eu errar uma, o que quebra
+-- e a chamada — o unico fluxo que o professor usa todo dia.
+--
+-- RODE ISTO E ME MANDE O RESULTADO, que eu escrevo a fase com o texto real:
+--
+-- select p.proname, p.prosrc
+--   from pg_proc p
+--   join pg_namespace n on n.oid = p.pronamespace
+--   join pg_language  l on l.oid = p.prolang
+--  where n.nspname = 'public'
+--    and p.prokind in ('f', 'p')
+--    and l.lanname in ('plpgsql', 'sql')
+--    and p.prosrc ~* 'chamada_aberta'
+--  order by 1;
 
 
 -- ============================================================================

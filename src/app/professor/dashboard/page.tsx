@@ -17,7 +17,6 @@ interface Disciplina { id: string; nome: string; emoji: string | null; }
 interface Aula {
   id: string;
   numero: number;
-  semana: number | null;
   chamada_aberta: boolean;
   data_aula: string | null;
   conteudo_ministrado: string | null;
@@ -132,7 +131,7 @@ export default function ProfessorDashboard() {
 
       const { data: aulasData } = await supabase
         .from("aulas")
-        .select("id, numero, semana, chamada_aberta, data_aula, conteudo_ministrado, turma:turmas(id, nome, turno, entrada, curso), disciplina:disciplinas(id, nome, emoji)")
+        .select("id, numero, chamada_aberta, data_aula, conteudo_ministrado, turma:turmas(id, nome, turno, entrada, curso), disciplina:disciplinas(id, nome, emoji)")
         .eq("professor_id", prof.id)
         .order("numero", { ascending: true });
 

@@ -303,7 +303,6 @@ for (const celula of grade.itens) {
       disciplina_id: disc.id,
       numero: i + 1,
       professor_id: idPorProfessor.get(normalizar(celula.professor)) ?? null,
-      semana: Math.ceil((i + 1) / 3),
       data_aula: data,
       chamada_aberta: false,
     })));

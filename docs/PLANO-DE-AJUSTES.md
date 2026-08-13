@@ -467,8 +467,8 @@ Cada fase só começa quando a anterior estiver revisada. O documento é atualiz
 | ~~**7**~~ | ~~Cronograma editável + recálculo seguro~~ | ✅ **CONCLUÍDA** |
 | ~~**8**~~ | ~~Grupos, notas e banca (`D18`–`D21`)~~ | ✅ **CONCLUÍDA** |
 | ~~**9**~~ | ~~Fechamento de módulo e progressão por aluno (`P15`,`D24`–`D26`,`D29`)~~ | ✅ **CONCLUÍDA** — aba **Fechamento**, passo 6 |
-| **10** | Relatórios (`D27`) | ← próxima |
-| **11** | Limpezas (`P6`,`P10`,`P11`,`P12`,`P16`) | — |
+| ~~**10**~~ | ~~Relatórios (`D27`)~~ | ✅ **CONCLUÍDA** — frequência por disciplina + diário de sala |
+| **11** | Limpezas — **Fase 15** escrita (`P12`,`P16`,`P22`); **`P6` preparado**, ver Fase 16 | falta aplicar o SQL |
 | ~~**11-B**~~ | ~~Admin por concessão explícita + `P9` investigado~~ | ✅ **CONCLUÍDA** |
 | ~~**12**~~ | ~~Acesso do professor por e-mail (`P21`)~~ | ✅ **CONCLUÍDA** — migração aplicada em 13/08/2026 |
 | ~~**IMP**~~ | ~~Importação das planilhas reais~~ | ✅ **aplicada em 13/08/2026** — ver `N23` |

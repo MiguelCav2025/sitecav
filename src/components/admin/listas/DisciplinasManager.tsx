@@ -544,7 +544,9 @@ export default function DisciplinasManager() {
           disciplina_id: novaDisc.id,
           numero: i,
           professor_id: professorId || null,
-          semana: Math.ceil(i / 3),
+          // `semana` saiu: guardava `numero ÷ 3`, e como a disciplina encontra a
+          // turma uma vez por semana, a aula 12 É a semana 12. A conta era
+          // errada e o valor não era lido em lugar nenhum (P22).
           data_aula: datas[i - 1] ?? null,
         });
       }
