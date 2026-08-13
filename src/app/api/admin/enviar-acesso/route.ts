@@ -27,11 +27,20 @@ export async function POST(request: Request) {
   if (errorResponse) return errorResponse;
 
   let professorId: unknown;
+  let canal: unknown;
   try {
-    ({ professorId } = await request.json());
+    ({ professorId, canal } = await request.json());
   } catch {
     return NextResponse.json({ error: "Corpo inválido." }, { status: 400 });
   }
+
+  // "link" devolve o endereço para a coordenação copiar e mandar pelo caminho
+  // que já usa com o professor — WhatsApp, e-mail pessoal, o que for. Não
+  // depende de domínio verificado nem de entrega de e-mail, que é o que hoje
+  // trava o acesso de todo mundo. "email" continua existindo para quando houver
+  // domínio. O link é de uso único e expira, o que é o que o torna aceitável
+  // num aplicativo de mensagem.
+  const porLink = canal !== "email";
 
   if (typeof professorId !== "string" || !professorId) {
     return NextResponse.json({ error: "Professor não informado." }, { status: 400 });
@@ -129,21 +138,33 @@ export async function POST(request: Request) {
     }
   }
 
-  const { erro: erroEmail } = await enviarEmailDeAcesso({
-    para: email,
-    nome: professor.nome,
-    link: montarLinkDeConfirmacao(origem, gerado.properties.hashed_token, decisao.tipoDeLink),
-    tipo: decisao.tipoDeEmail,
-    validadeEmHoras: decisao.validadeEmHoras,
-  });
+  const link = montarLinkDeConfirmacao(origem, gerado.properties.hashed_token, decisao.tipoDeLink);
 
-  if (erroEmail) {
-    return NextResponse.json({ error: `Falha no envio do e-mail: ${erroEmail}` }, { status: 502 });
+  if (!porLink) {
+    const { erro: erroEmail } = await enviarEmailDeAcesso({
+      para: email,
+      nome: professor.nome,
+      link,
+      tipo: decisao.tipoDeEmail,
+      validadeEmHoras: decisao.validadeEmHoras,
+    });
+
+    if (erroEmail) {
+      return NextResponse.json({ error: `Falha no envio do e-mail: ${erroEmail}` }, { status: 502 });
+    }
   }
 
-  // Registrado só depois do envio confirmado, para a tela não mentir.
+  // Registrado só depois de o link existir de fato, para a tela não mentir.
   const enviadoEm = new Date().toISOString();
   await admin.from("professores").update({ acesso_enviado_em: enviadoEm }).eq("id", professor.id);
 
-  return NextResponse.json({ ok: true, email, enviadoEm, tipo: decisao.tipoDeEmail });
+  return NextResponse.json({
+    ok: true,
+    email,
+    enviadoEm,
+    tipo: decisao.tipoDeEmail,
+    validadeEmHoras: decisao.validadeEmHoras,
+    // Só volta quando a coordenação vai entregar o link com as próprias mãos.
+    link: porLink ? link : undefined,
+  });
 }

@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Plus, Trash2, Loader2, CheckCircle, AlertCircle, UserCheck, Pencil, X, Check,
-  Power, Send, ShieldCheck,
+  Power, Send, ShieldCheck, Copy,
 } from "lucide-react";
 
 interface Professor {
@@ -34,8 +34,11 @@ export default function ProfessoresManager() {
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
   const [form, setForm] = useState({ nome: "", email: "" });
 
-  /** id do professor cujo convite está sendo enviado agora */
+  /** id do professor cujo convite está sendo gerado agora */
   const [enviando, setEnviando] = useState<string | null>(null);
+  const [linkGerado, setLinkGerado] = useState<
+    { professor: string; link: string; horas: number; copiou: boolean } | null
+  >(null);
 
   // edição inline
   const [editando, setEditando] = useState<string | null>(null);
@@ -97,7 +100,7 @@ export default function ProfessoresManager() {
   const handleEnviarAcesso = async (p: Professor) => {
     const reenvio = p.acesso_enviado_em !== null;
     if (reenvio && !confirm(
-      `Enviar um novo link para ${p.nome} (${p.email})?\n\n` +
+      `Gerar um novo link para ${p.nome}?\n\n` +
       `O link anterior deixa de valer. A senha atual continua funcionando até ele criar uma nova.`
     )) return;
 
@@ -106,16 +109,24 @@ export default function ProfessoresManager() {
       const res = await fetch("/api/admin/enviar-acesso", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ professorId: p.id }),
+        body: JSON.stringify({ professorId: p.id, canal: "link" }),
       });
       const json = await res.json();
-      if (!res.ok) showMsg("erro", json.error ?? "Não foi possível enviar o acesso.");
-      else {
-        showMsg("ok", `Link enviado para ${json.email}. O professor cria a senha dele ao clicar.`);
-        fetchDados();
-      }
+      if (!res.ok) { showMsg("erro", json.error ?? "Não foi possível gerar o acesso."); setEnviando(null); return; }
+
+      // Copiar sem sair da tela: o coordenador cola direto na conversa que já
+      // tem com o professor. O clipboard falha em contexto não seguro e em
+      // alguns navegadores — por isso o link também aparece para copiar à mão.
+      let copiou = false;
+      try {
+        await navigator.clipboard.writeText(json.link);
+        copiou = true;
+      } catch { /* mostrado abaixo, para copiar manualmente */ }
+
+      setLinkGerado({ professor: p.nome, link: json.link, horas: json.validadeEmHoras, copiou });
+      fetchDados();
     } catch {
-      showMsg("erro", "Erro de rede ao enviar o acesso.");
+      showMsg("erro", "Erro de rede ao gerar o acesso.");
     }
     setEnviando(null);
   };
@@ -217,13 +228,17 @@ export default function ProfessoresManager() {
         <div className="space-y-1">
           <p className="text-sm font-semibold text-gray-800">Como o professor entra</p>
           <p className="text-sm text-gray-600">
-            Cadastre o professor, preencha o e-mail e clique em <strong>Enviar acesso</strong>.
-            Ele recebe um link, cria a própria senha e passa a entrar com e-mail e senha —
-            no computador ou no celular, pelo app.
+            Cadastre o professor, preencha o e-mail e clique em <strong>Gerar link de acesso</strong>.
+            O link é copiado na hora — mande por WhatsApp, e-mail pessoal, como preferir.
+            Ele clica, cria a própria senha, e passa a entrar com e-mail e senha.
           </p>
           <p className="text-sm text-gray-600">
             Nenhuma senha é definida aqui, e ninguém além do professor chega a conhecê-la.
-            Se ele esquecer, perder o e-mail ou trocar de endereço, é só enviar de novo.
+            Se ele esquecer ou trocar de endereço, é só gerar outro — o anterior deixa de valer.
+          </p>
+          <p className="text-xs text-gray-500">
+            O e-mail é o <strong>login</strong> dele, não precisa receber nada. Por isso o
+            link funciona mesmo antes de termos um domínio de envio configurado.
           </p>
           {semEmail > 0 && (
             <p className="text-xs text-amber-700 flex items-center gap-1 mt-2">
@@ -235,6 +250,60 @@ export default function ProfessoresManager() {
           )}
         </div>
       </div>
+
+      {linkGerado && (
+        <div className="rounded-xl border border-blue-300 bg-white p-4 shadow-sm space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-gray-800">
+                Link de acesso de {linkGerado.professor}
+                {linkGerado.copiou && <span className="ml-2 text-green-600">· copiado</span>}
+              </p>
+              <p className="text-xs text-gray-500">
+                Vale {linkGerado.horas}h e só pode ser usado uma vez. Mande direto para ele.
+              </p>
+            </div>
+            <button onClick={() => setLinkGerado(null)} className="text-gray-400 hover:text-gray-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <input
+            readOnly
+            value={linkGerado.link}
+            onFocus={e => e.currentTarget.select()}
+            className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-700"
+          />
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                navigator.clipboard.writeText(linkGerado.link)
+                  .then(() => setLinkGerado({ ...linkGerado, copiou: true }))
+                  .catch(() => showMsg("erro", "Não consegui copiar — selecione o texto acima e copie à mão."));
+              }}
+            >
+              <Copy className="h-4 w-4 mr-1" /> Copiar de novo
+            </Button>
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(
+                `Olá! Seu acesso ao sistema do CAV: ${linkGerado.link}\n\nO link vale ${linkGerado.horas}h e só pode ser usado uma vez. Ao abrir, você cria sua própria senha.`,
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded-lg border border-green-300 bg-green-50 px-3 py-1.5 text-sm text-green-800 hover:bg-green-100"
+            >
+              <Send className="h-4 w-4" /> Abrir no WhatsApp
+            </a>
+          </div>
+
+          <p className="text-xs text-amber-700">
+            Trate como senha: quem tiver o link entra como {linkGerado.professor} até ele ser usado.
+            Mande na conversa direta, não em grupo.
+          </p>
+        </div>
+      )}
 
       <Card>
         <CardHeader>

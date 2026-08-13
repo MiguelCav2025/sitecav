@@ -22,6 +22,7 @@ export default function AlterarSenhaPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [verificando, setVerificando] = useState(true);
+  const [senhaDefinida, setSenhaDefinida] = useState(false);
 
   useEffect(() => {
     const verificar = async () => {
@@ -70,10 +71,48 @@ export default function AlterarSenhaPage() {
       return;
     }
 
-    router.push("/professor/dashboard");
+    // Só agora convida a instalar. Instalar ANTES da senha estranha o professor:
+    // no iPhone o app na tela inicial tem armazenamento separado do Safari, e
+    // abri-lo antes de existir senha cairia numa tela de login sem saída. O
+    // convite em modal resolve o que você notou — o cartão embaixo passa batido.
+    setSenhaDefinida(true);
+    setLoading(false);
   };
 
   if (verificando) return null;
+
+  if (senhaDefinida) {
+    return (
+      <div className="flex items-start justify-center min-h-screen bg-blue-900 p-6 pt-12">
+        <Card className="mx-auto w-full max-w-md p-6 space-y-4">
+          <div className="flex flex-col items-center text-center gap-2">
+            <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center">
+              <CheckCircle className="h-7 w-7 text-green-600" />
+            </div>
+            <CardTitle className="text-xl">Senha criada, {nome}!</CardTitle>
+            <CardDescription>
+              É com ela que você entra a partir de agora. Antes de começar, deixe o CAV
+              na tela do celular — é um toque para abrir a chamada.
+            </CardDescription>
+          </div>
+
+          <InstalarApp />
+
+          <Button
+            variant="orange"
+            className="w-full font-semibold"
+            onClick={() => router.push("/professor/dashboard")}
+          >
+            Ir para minhas aulas
+          </Button>
+
+          <p className="text-center text-xs text-gray-400">
+            Dá para instalar depois, pelo menu do navegador.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-start justify-center min-h-screen bg-blue-900 p-8 pt-16">
@@ -133,11 +172,6 @@ export default function AlterarSenhaPage() {
               {loading ? "Salvando..." : "Definir senha e entrar"}
             </Button>
           </form>
-
-          {/* D28 — o primeiro acesso também ensina a instalar o app */}
-          <div className="mt-6 border-t border-gray-100 pt-5">
-            <InstalarApp />
-          </div>
         </CardContent>
       </Card>
     </div>
