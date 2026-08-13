@@ -140,6 +140,74 @@ describe("montarDiario", () => {
   });
 });
 
+describe("abono de falta", () => {
+  const aluno = [{ id: "a1", nome: "Bruno" }];
+  const dez = Array.from({ length: 10 }, (_, i) => aula(`x${i}`, "Roteiro", i + 1));
+  const presencaEm = (n: number) => dez.slice(0, n).map(a => presente(a.id, "a1"));
+
+  it("nao mexe na frequencia oficial — a falta aconteceu", () => {
+    // 6 de 10 = 60%. Com 2 abonos o oficial continua 60%.
+    const [l] = frequenciaPorDisciplina(aluno, dez, presencaEm(6), [
+      { aula_id: "x6", aluno_id: "a1" }, { aula_id: "x7", aluno_id: "a1" },
+    ]);
+    assert.equal(l.percentual, 60);
+    assert.equal(l.faltas, 4);
+    assert.equal(l.faltasAbonadas, 2);
+  });
+
+  it("mostra em separado quanto daria se o abono valesse", () => {
+    const [l] = frequenciaPorDisciplina(aluno, dez, presencaEm(6), [
+      { aula_id: "x6", aluno_id: "a1" }, { aula_id: "x7", aluno_id: "a1" },
+    ]);
+    assert.equal(l.percentualComAbono, 80);
+    assert.equal(l.salvoPeloAbono, true, "60% -> 80%: cruza o minimo");
+  });
+
+  it("nao marca como salvo quem ja passava sem abono", () => {
+    const [l] = frequenciaPorDisciplina(aluno, dez, presencaEm(9), [{ aula_id: "x9", aluno_id: "a1" }]);
+    assert.equal(l.abaixoDoMinimo, false);
+    assert.equal(l.salvoPeloAbono, false);
+  });
+
+  it("nem quem continua abaixo mesmo com o abono", () => {
+    const [l] = frequenciaPorDisciplina(aluno, dez, presencaEm(3), [{ aula_id: "x3", aluno_id: "a1" }]);
+    assert.equal(l.percentualComAbono, 40);
+    assert.equal(l.salvoPeloAbono, false);
+  });
+
+  it("abonar aula em que o aluno esteve presente nao soma duas vezes", () => {
+    // Somar seria contar a mesma aula duas vezes e passar dos 100%.
+    const [l] = frequenciaPorDisciplina(aluno, dez, presencaEm(10), [{ aula_id: "x0", aluno_id: "a1" }]);
+    assert.equal(l.percentual, 100);
+    assert.equal(l.percentualComAbono, 100);
+    assert.equal(l.faltasAbonadas, 0);
+  });
+
+  it("abono de um aluno nao vale para outro", () => {
+    const dois = [{ id: "a1", nome: "Bruno" }, { id: "a2", nome: "Ana" }];
+    const linhas = frequenciaPorDisciplina(dois, dez, presencaEm(6), [{ aula_id: "x6", aluno_id: "a1" }]);
+    assert.equal(linhas.find(l => l.aluno === "Bruno")!.faltasAbonadas, 1);
+    assert.equal(linhas.find(l => l.aluno === "Ana")!.faltasAbonadas, 0);
+  });
+
+  it("sem abono nenhum, o comportamento e o de antes", () => {
+    const [l] = frequenciaPorDisciplina(aluno, dez, presencaEm(6));
+    assert.equal(l.percentual, l.percentualComAbono);
+    assert.equal(l.faltasAbonadas, 0);
+    assert.equal(l.salvoPeloAbono, false);
+  });
+
+  it("o resumo separa quem depende do abono", () => {
+    const r = resumirFrequencia(
+      frequenciaPorDisciplina(aluno, dez, presencaEm(6), [
+        { aula_id: "x6", aluno_id: "a1" }, { aula_id: "x7", aluno_id: "a1" },
+      ]),
+    );
+    assert.deepEqual(r.nomesEmRisco, ["Bruno"]);
+    assert.deepEqual(r.nomesSalvosPeloAbono, ["Bruno"]);
+  });
+});
+
 describe("aulasPendentesDeChamada", () => {
   const HOJE = "2026-08-13";
   const comStatus = (a: AulaFechada, finalizada: boolean) => ({ ...a, finalizada });

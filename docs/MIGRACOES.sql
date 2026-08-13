@@ -2121,6 +2121,54 @@ $$;
 
 
 -- ============================================================================
+-- FASE 17 — abono de falta  (D51)
+-- ----------------------------------------------------------------------------
+-- O aluno pode pedir abono a prefeitura e receber. Se o sistema nao souber
+-- disso, ele mostra 66,7% e sugere reter alguem cuja falta foi perdoada — e o
+-- coordenador teria que lembrar de cabeca, no meio de trinta alunos.
+--
+-- O abono NAO edita a chamada. Chamada fechada e definitiva (D22), e o
+-- atestado quase sempre chega depois; alterar a presenca apagaria o que o
+-- professor viu naquele dia. O abono e um ato posterior, da coordenacao, com
+-- dono e data — e a falta continua no historico, porque ela aconteceu.
+-- ============================================================================
+
+create table if not exists public.abonos (
+  id           uuid primary key default gen_random_uuid(),
+  aluno_id     uuid not null references public.alunos(id) on delete cascade,
+  aula_id      uuid not null references public.aulas(id)  on delete cascade,
+  motivo       text not null check (char_length(btrim(motivo)) >= 3),
+  -- Quem concedeu. Fica NULL se o admin sair, sem apagar o abono.
+  concedido_por uuid references public.administradores(id) on delete set null,
+  created_at   timestamptz not null default now(),
+  -- Uma falta so pode ser abonada uma vez.
+  constraint abono_unico unique (aluno_id, aula_id)
+);
+
+comment on table public.abonos is
+  'Falta perdoada pela coordenacao. Nao altera a presenca: a falta continua registrada, e o abono aparece ao lado dela no fechamento (D51).';
+
+create index if not exists idx_abonos_aluno on public.abonos(aluno_id);
+create index if not exists idx_abonos_aula  on public.abonos(aula_id);
+
+alter table public.abonos enable row level security;
+
+-- Só a coordenação conhece e concede abono. O professor não vê nem cria: o
+-- que ele registra é o que aconteceu na aula, e isso ja esta fechado.
+drop policy if exists abonos_admin on public.abonos;
+create policy abonos_admin on public.abonos
+  for all to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+-- 17.1 — conferencia
+-- select count(*) from public.abonos;
+
+-- ROLLBACK
+--   drop table if exists public.abonos;
+
+
+-- ============================================================================
 -- LIMPEZAS — rodar SEPARADO das fases funcionais
 -- ----------------------------------------------------------------------------
 -- Rodar cada comando ISOLADAMENTE. Se um falhar, ele nao derruba os outros.

@@ -38,6 +38,12 @@ export interface AlunoSimples {
   nome: string;
 }
 
+/** Falta perdoada pela coordenação. Não altera a presença — anda ao lado dela. */
+export interface Abono {
+  aula_id: string;
+  aluno_id: string;
+}
+
 export interface LinhaFrequencia {
   alunoId: string;
   aluno: string;
@@ -46,9 +52,15 @@ export interface LinhaFrequencia {
   aulasDadas: number;
   presencas: number;
   faltas: number;
+  /** Quantas dessas faltas foram abonadas pela coordenação. */
+  faltasAbonadas: number;
   /** Null quando nenhuma chamada foi fechada — não é zero, é "não se sabe". */
   percentual: number | null;
+  /** O mesmo cálculo contando as faltas abonadas como presença. */
+  percentualComAbono: number | null;
   abaixoDoMinimo: boolean;
+  /** Passaria dos 70% se o abono valesse. É o caso que exige olho humano. */
+  salvoPeloAbono: boolean;
 }
 
 /**
@@ -61,6 +73,7 @@ export function frequenciaPorDisciplina(
   alunos: readonly AlunoSimples[],
   aulas: readonly AulaFechada[],
   presencas: readonly RegistroPresenca[],
+  abonos: readonly Abono[] = [],
 ): LinhaFrequencia[] {
   const porDisciplina = new Map<string, { nome: string; aulaIds: Set<string> }>();
   for (const a of aulas) {
@@ -77,18 +90,33 @@ export function frequenciaPorDisciplina(
     presentesPorAluno.get(p.aluno_id)!.add(p.aula_id);
   }
 
+  const abonadasPorAluno = new Map<string, Set<string>>();
+  for (const a of abonos) {
+    if (!abonadasPorAluno.has(a.aluno_id)) abonadasPorAluno.set(a.aluno_id, new Set());
+    abonadasPorAluno.get(a.aluno_id)!.add(a.aula_id);
+  }
+
   const linhas: LinhaFrequencia[] = [];
   for (const aluno of alunos) {
     const presentes = presentesPorAluno.get(aluno.id) ?? new Set<string>();
+    const abonadas = abonadasPorAluno.get(aluno.id) ?? new Set<string>();
 
     for (const [disciplinaId, d] of porDisciplina) {
       const aulasDadas = d.aulaIds.size;
       if (aulasDadas === 0) continue;
 
       let comparecimentos = 0;
-      for (const aulaId of d.aulaIds) if (presentes.has(aulaId)) comparecimentos++;
+      let abonos = 0;
+      for (const aulaId of d.aulaIds) {
+        if (presentes.has(aulaId)) comparecimentos++;
+        // Abono só conta onde houve falta: abonar quem esteve presente seria
+        // somar duas vezes a mesma aula e passar dos 100%.
+        else if (abonadas.has(aulaId)) abonos++;
+      }
 
       const percentual = arredondar((comparecimentos * 100) / aulasDadas);
+      const percentualComAbono = arredondar(((comparecimentos + abonos) * 100) / aulasDadas);
+
       linhas.push({
         alunoId: aluno.id,
         aluno: aluno.nome,
@@ -97,8 +125,12 @@ export function frequenciaPorDisciplina(
         aulasDadas,
         presencas: comparecimentos,
         faltas: aulasDadas - comparecimentos,
+        faltasAbonadas: abonos,
         percentual,
+        percentualComAbono,
         abaixoDoMinimo: percentual < PRESENCA_MINIMA,
+        salvoPeloAbono:
+          percentual < PRESENCA_MINIMA && percentualComAbono >= PRESENCA_MINIMA,
       });
     }
   }
@@ -117,17 +149,26 @@ export interface ResumoDeFrequencia {
   emRisco: number;
   /** Nome dos alunos em risco, uma vez cada. */
   nomesEmRisco: string[];
+  /** Alunos que só ficam acima do mínimo se o abono contar. */
+  nomesSalvosPeloAbono: string[];
 }
 
 export function resumirFrequencia(linhas: readonly LinhaFrequencia[]): ResumoDeFrequencia {
   const emRisco = new Map<string, string>();
-  for (const l of linhas) if (l.abaixoDoMinimo) emRisco.set(l.alunoId, l.aluno);
+  const salvos = new Map<string, string>();
+  for (const l of linhas) {
+    if (l.abaixoDoMinimo) emRisco.set(l.alunoId, l.aluno);
+    if (l.salvoPeloAbono) salvos.set(l.alunoId, l.aluno);
+  }
+  const ordenar = (m: Map<string, string>) =>
+    [...m.values()].sort((a, b) => a.localeCompare(b, "pt-BR"));
 
   return {
     alunos: new Set(linhas.map(l => l.alunoId)).size,
     disciplinas: new Set(linhas.map(l => l.disciplinaId)).size,
     emRisco: emRisco.size,
-    nomesEmRisco: [...emRisco.values()].sort((a, b) => a.localeCompare(b, "pt-BR")),
+    nomesEmRisco: ordenar(emRisco),
+    nomesSalvosPeloAbono: ordenar(salvos),
   };
 }
 
