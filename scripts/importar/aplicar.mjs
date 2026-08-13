@@ -234,9 +234,13 @@ await inserir("cronogramas", [CRONOGRAMA]);
 console.log(`  ${SEMESTRE}: ${CRONOGRAMA.data_inicio} a ${CRONOGRAMA.data_fim}`);
 
 titulo("4. PROFESSORES");
-const profsCriados = await inserir("professores", professores.map(nome => ({ nome, email: "", ativo: true })));
+// E-mail nulo, não vazio: é assim que a aba Professores reconhece "falta
+// preencher" e desabilita o envio do acesso. String vazia passaria por
+// endereço preenchido e o botão ficaria ativo, mandando convite para lugar
+// nenhum. Exige a Fase 12 aplicada — antes dela a coluna é obrigatória.
+const profsCriados = await inserir("professores", professores.map(nome => ({ nome, email: null, ativo: true })));
 const idPorProfessor = new Map(profsCriados.map(p => [normalizar(p.nome), p.id]));
-console.log(`  ${profsCriados.length} criados, todos sem login (a coordenação define os acessos)`);
+console.log(`  ${profsCriados.length} criados, sem login e sem e-mail — a coordenação preenche e envia o acesso`);
 
 titulo("5. TURMAS");
 const turmasCriadas = await inserir("turmas", [...turmas.values()].map(t => ({
