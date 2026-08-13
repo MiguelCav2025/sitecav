@@ -1806,13 +1806,36 @@ update public.disciplinas d
 -- resultados_processo.semestre. Essas tres falam do semestre do CALENDARIO —
 -- exatamente o significado que fica valendo.
 
--- 14.1 — o modulo passa a se chamar modulo
-alter table public.disciplinas rename column semestre_do_curso to modulo;
-alter table public.matriculas  rename column semestre_do_curso to modulo;
-alter table public.grupos      rename column semestre_do_curso to modulo;
+-- 14.1 e 14.2 — os renames, em bloco idempotente.
+-- `alter ... rename` nao aceita "if exists" para a coluna de origem: rodar duas
+-- vezes estoura com "column does not exist" e derruba a transacao inteira,
+-- levando junto a funcao e a view que vem depois. Daqui, rodar de novo e inocuo.
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'disciplinas'
+                and column_name = 'semestre_do_curso') then
+    alter table public.disciplinas rename column semestre_do_curso to modulo;
+  end if;
 
--- 14.2 — o que a turma guarda e a ENTRADA dela, nao "o semestre dela"
-alter table public.turmas rename column semestre to entrada;
+  if exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'matriculas'
+                and column_name = 'semestre_do_curso') then
+    alter table public.matriculas rename column semestre_do_curso to modulo;
+  end if;
+
+  if exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'grupos'
+                and column_name = 'semestre_do_curso') then
+    alter table public.grupos rename column semestre_do_curso to modulo;
+  end if;
+
+  if exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'turmas'
+                and column_name = 'semestre') then
+    alter table public.turmas rename column semestre to entrada;
+  end if;
+end $$;
 
 comment on column public.turmas.entrada is
   'Semestre do calendario em que a turma comecou (ex.: 2026/2). E dele que se calcula o modulo atual.';
