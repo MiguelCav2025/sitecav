@@ -544,6 +544,42 @@ Montada em [`docs/MIGRACOES.sql`](MIGRACOES.sql), por fase, revisada antes de ap
 
 ---
 
+## 11-B. Fase 14 — uma palavra, um significado (`D46`)
+
+"Semestre" queria dizer três coisas ao mesmo tempo:
+
+| Onde | Guarda | Exemplo | O que é |
+|---|---|---|---|
+| `cronogramas.semestre` | período do calendário | `2026/2` | ✅ correto |
+| `turmas.semestre` | **entrada** da turma | `2026/2` | quando o grupo começou |
+| `disciplinas.semestre_do_curso` | **módulo** | `1`,`2`,`3` | posição no curso |
+| `matriculas.semestre_do_curso` | **módulo** | `1`,`2`,`3` | idem |
+
+O sintoma: a turma **"Animação Noite 2026/2" está no módulo 1**. O `2026/2` é a
+entrada, mas qualquer um lê o "2" como "2º semestre". Os 38 alunos do módulo 1
+estão todos em turmas cujo nome termina em `2026/2`.
+
+**`D46`** — 1º/2º/3º passa a se chamar **módulo**, palavra dos documentos do
+CAV. "Semestre" fica valendo só para o calendário. `turmas.semestre` vira
+`entrada`, que é o que ela sempre guardou.
+
+**`D47`** — a aba `Cronograma` vira **`Calendário letivo`** e **continua na
+Escola, como passo 1**. É a primeira coisa a fazer todo semestre — sem ela a
+disciplina não sabe quantas aulas tem. Sala está no Sistema porque é
+infraestrutura; o calendário muda todo semestre, então não é configuração.
+
+**`D48` — feriados deixam de ser digitados à mão.** `src/lib/feriados.ts`
+calcula os nacionais (fixos e móveis, via Páscoa), o aniversário de São
+Bernardo e os pontos facultativos, para qualquer ano. A tela **sugere**; quem
+confirma é a coordenação. Feriado que cai em fim de semana não é listado — não
+tira aula de ninguém, e marcá-lo bagunçaria a contagem.
+
+> Validação: rodando sobre 03/08–14/12/2026, o módulo devolve exatamente os
+> **6 feriados** que o coordenador informou, e não conhece o 21/08 — que é
+> emenda da escola, corretamente tratada como personalizada.
+
+---
+
 ## 11. Fase 12 — como o professor entra (`P21`)
 
 O sistema tinha uma senha provisória **fixa e escrita na própria tela do admin**

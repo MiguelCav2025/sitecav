@@ -24,8 +24,10 @@
 --   Fase 11 ... [x] aplicada em 12/08/2026 (admin por concessao explicita)
 --   Fase 11-B . [x] aplicada em 12/08/2026 (triggers liberam auth.uid() nulo)
 --   Fase 12 ... [x] aplicada em 13/08/2026 (acesso do professor por e-mail)
---   Fase 13 ... [ ] NAO APLICADA — total de aulas da disciplina (N24).
---                   Urgente: com o valor errado, "Recalcular grade" apaga 99 aulas.
+--   Fase 13 ... [x] aplicada em 13/08/2026 (total de aulas veio para 17/19/18/18/17)
+--   Fase 14 ... [ ] NAO APLICADA — renomeia semestre_do_curso -> modulo e
+--                   turmas.semestre -> entrada. LEIA A ORDEM no bloco da fase:
+--                   rode 14.0 primeiro e me mande o resultado.
 --
 -- COMO RODAR: um bloco de cada vez (FASE 1, depois FASE 2), conferindo o
 -- resultado entre eles. O editor do Supabase executa a selecao inteira como
@@ -1737,6 +1739,81 @@ update public.disciplinas d
 
 -- ROLLBACK (volta ao numero fixo — so faz sentido se a decisao mudar)
 --   update public.disciplinas set total_aulas = 16;
+
+
+-- ============================================================================
+-- FASE 14 — uma palavra, um significado  (D46)
+-- ----------------------------------------------------------------------------
+-- "Semestre" queria dizer tres coisas ao mesmo tempo:
+--
+--   cronogramas.semestre         2026/2   o periodo do calendario  (CORRETO)
+--   turmas.semestre              2026/2   quando a turma ENTROU
+--   disciplinas.semestre_do_curso  1|2|3  o MODULO do curso
+--   matriculas.semestre_do_curso   1|2|3  idem
+--
+-- O sintoma: a turma "Animacao Noite 2026/2" esta no modulo 1. O 2026/2 e a
+-- entrada, mas qualquer um le o "2" como "2o semestre". Os 38 alunos do
+-- modulo 1 estao todos em turmas cujo nome termina em 2026/2.
+--
+-- Decisao do coordenador: 1o/2o/3o passa a se chamar MODULO, que e a palavra
+-- dos documentos do CAV. "Semestre" fica valendo so para o calendario.
+--
+-- >>> ORDEM DE APLICACAO — LEIA ANTES <<<
+-- Renomear coluna quebra o site ate o deploy novo subir (~2 min na Vercel).
+-- Rode 14.0 primeiro e me mande o resultado. Depois eu subo o codigo, e so
+-- entao rode 14.1 a 14.3. Nenhum professor tem acesso ainda, entao a janela
+-- so afeta o painel, e so voce esta nele.
+-- ============================================================================
+
+-- 14.0 — PRE-CHECAGEM: quem mais fala esses nomes?
+-- O Postgres atualiza sozinho views, policies, indices e constraints, porque
+-- guarda a arvore analisada. O corpo de funcao PL/pgSQL, nao: e texto puro, e
+-- uma funcao que cite a coluna velha quebra CALADA depois do rename.
+-- Se isto voltar alguma linha, me mande antes de seguir.
+--
+-- select p.proname as funcao
+--   from pg_proc p
+--   join pg_namespace n on n.oid = p.pronamespace
+--  where n.nspname = 'public'
+--    and pg_get_functiondef(p.oid) ~* '(semestre_do_curso|semestre)';
+--
+-- select table_name, column_name
+--   from information_schema.columns
+--  where table_schema = 'public'
+--    and column_name in ('semestre', 'semestre_do_curso')
+--  order by table_name;
+
+-- 14.1 — o modulo passa a se chamar modulo
+alter table public.disciplinas rename column semestre_do_curso to modulo;
+alter table public.matriculas  rename column semestre_do_curso to modulo;
+
+-- 14.2 — o que a turma guarda e a ENTRADA dela, nao "o semestre dela"
+alter table public.turmas rename column semestre to entrada;
+
+comment on column public.turmas.entrada is
+  'Semestre do calendario em que a turma comecou (ex.: 2026/2). E dele que se calcula o modulo atual.';
+comment on column public.disciplinas.modulo is
+  'Posicao no curso: 1, 2 ou 3. Nao confundir com o semestre do calendario.';
+comment on column public.matriculas.modulo is
+  'Em que modulo o aluno estava nesta matricula.';
+
+-- 14.3 — conferencia: as tres colunas novas devem aparecer, e nenhuma velha
+-- select table_name, column_name
+--   from information_schema.columns
+--  where table_schema = 'public'
+--    and column_name in ('modulo', 'entrada', 'semestre', 'semestre_do_curso')
+--  order by table_name, column_name;
+--
+-- esperado:
+--   cronogramas  semestre   <- este continua, e esta certo
+--   disciplinas  modulo
+--   matriculas   modulo
+--   turmas       entrada
+
+-- ROLLBACK
+--   alter table public.turmas rename column entrada to semestre;
+--   alter table public.matriculas  rename column modulo to semestre_do_curso;
+--   alter table public.disciplinas rename column modulo to semestre_do_curso;
 
 
 -- ============================================================================
