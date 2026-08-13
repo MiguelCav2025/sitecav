@@ -1771,11 +1771,18 @@ update public.disciplinas d
 -- uma funcao que cite a coluna velha quebra CALADA depois do rename.
 -- Se isto voltar alguma linha, me mande antes de seguir.
 --
--- select p.proname as funcao
+-- Le `prosrc` (o corpo em texto) e nao `pg_get_functiondef`, que estoura com
+-- "array_agg is an aggregate function" ao topar numa agregacao do schema.
+--
+-- select p.proname as funcao, l.lanname as linguagem
 --   from pg_proc p
 --   join pg_namespace n on n.oid = p.pronamespace
+--   join pg_language  l on l.oid = p.prolang
 --  where n.nspname = 'public'
---    and pg_get_functiondef(p.oid) ~* '(semestre_do_curso|semestre)';
+--    and p.prokind in ('f', 'p')          -- funcao ou procedure, nunca agregacao
+--    and l.lanname in ('plpgsql', 'sql')  -- so as que tem corpo em texto
+--    and p.prosrc ~* '(semestre_do_curso|semestre)'
+--  order by 1;
 --
 -- select table_name, column_name
 --   from information_schema.columns
