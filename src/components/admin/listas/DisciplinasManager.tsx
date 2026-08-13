@@ -846,7 +846,7 @@ export default function DisciplinasManager() {
                   {DIAS.map(dia => (
                     <div
                       key={dia.value}
-                      className="text-center text-xs font-semibold py-1.5 rounded-lg bg-white text-gray-600 shadow-sm"
+                      className="text-center text-xs font-semibold py-1.5 rounded-lg bg-white/10 text-white/75 border border-white/10"
                     >
                       <Calendar className="h-3 w-3 mx-auto mb-0.5" />
                       {dia.label}
