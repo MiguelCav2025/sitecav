@@ -1,115 +1,132 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { moduloAtual } from "@/lib/calendario-escolar";
+import { moduloAtual, rotuloModulo } from "@/lib/calendario-escolar";
+import { PRESENCA_MINIMA } from "@/lib/aprovacao";
 import { buscarAlunosDaTurma } from "@/lib/matriculas";
+import {
+  frequenciaPorDisciplina, resumirFrequencia, montarDiario, limparParaCSV,
+  type AulaFechada, type LinhaFrequencia, type LinhaDoDiario, type RegistroPresenca,
+} from "@/lib/relatorios";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Download, BarChart3, Users, BookOpen, AlertCircle } from "lucide-react";
+import { Loader2, Download, BarChart3, Users, BookOpen, AlertCircle, CheckCircle } from "lucide-react";
 
 interface Turma { id: string; nome: string; entrada: string; curso: string; turno: string; }
-interface Aluno { id: string; nome: string; }
-interface Aula { id: string; numero: number; chamada_aberta: boolean; }
-interface LinhaRelatorio { aluno: string; total_aulas: number; presentes: number; ausentes: number; percentual: number; }
 
-const ROMANOS = ["I", "II", "III", "IV", "V", "VI"];
+type Relatorio = "frequencia" | "diario";
 
-// O piso em 1 é comportamento herdado: uma turma que ainda não começou aparece
-// no relatório como se estivesse no 1º semestre. Mantido para não alterar a
-// saída dos relatórios sem decisão. Ver P10 no plano de ajustes.
-const moduloDaTurma = (entrada: string) =>
-  Math.max(1, moduloAtual(entrada) ?? 1);
+const labelTurma = (t: Turma) =>
+  `${t.curso} · ${t.turno} · ${rotuloModulo(moduloAtual(t.entrada))} (entrada ${t.entrada})`;
 
-function labelTurma(t: Turma): string {
-  const sem = moduloDaTurma(t.entrada);
-  const romano = ROMANOS[sem - 1] ?? `${sem}°`;
-  return `${t.curso} ${romano} · ${t.turno}`;
-}
+const formatarData = (iso: string | null) => {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+};
 
+/**
+ * Relatórios de presença e diário de sala.
+ *
+ * A frequência aqui é **por disciplina**, não a média da turma: a regra do CAV
+ * exige 70% em cada matéria (D38), e a média escondia justamente o aluno que
+ * some de uma disciplina e comparece nas outras.
+ */
 export default function RelatoriosManager() {
   const supabase = createClient();
+
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [turmaSel, setTurmaSel] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [relatorio, setRelatorio] = useState<LinhaRelatorio[]>([]);
-  const [aulaSel, setAulaSel] = useState("");
-  const [aulas, setAulas] = useState<Aula[]>([]);
-  const [relatorioAula, setRelatorioAula] = useState<{ nome: string; presente: boolean }[]>([]);
+  const [relatorio, setRelatorio] = useState<Relatorio>("frequencia");
+  const [carregando, setCarregando] = useState(false);
+
+  const [frequencia, setFrequencia] = useState<LinhaFrequencia[]>([]);
+  const [diario, setDiario] = useState<LinhaDoDiario[]>([]);
+  const [totalAulasDaTurma, setTotalAulasDaTurma] = useState(0);
 
   useEffect(() => {
-    supabase.from("turmas").select("id, nome, entrada, curso, turno").order("nome").then(({ data }) => setTurmas(data ?? []));
-  }, []);
+    supabase.from("turmas").select("id, nome, entrada, curso, turno").order("nome")
+      .then(({ data }) => setTurmas((data ?? []) as Turma[]));
+  }, [supabase]);
 
-  useEffect(() => {
-    if (!turmaSel) { setAulas([]); setAulaSel(""); setRelatorio([]); setRelatorioAula([]); return; }
-    supabase.from("aulas").select("id, numero, chamada_aberta").eq("turma_id", turmaSel)
-      .eq("chamada_aberta", true).order("numero")
-      .then(({ data }) => setAulas(data ?? []));
-  }, [turmaSel]);
+  const carregar = useCallback(async () => {
+    if (!turmaSel) { setFrequencia([]); setDiario([]); return; }
+    setCarregando(true);
 
-  const gerarRelatorioPorTurma = async () => {
-    if (!turmaSel) return;
-    setLoading(true);
-    const { alunos: alunosData } = await buscarAlunosDaTurma(supabase, turmaSel);
-    const { data: aulasData } = await supabase.from("aulas").select("id").eq("turma_id", turmaSel).eq("chamada_aberta", true);
-    const aulaIds = (aulasData ?? []).map((a: { id: string }) => a.id);
-    const totalAulas = aulaIds.length;
+    const [{ alunos }, { data: aulasData }, { count }] = await Promise.all([
+      buscarAlunosDaTurma(supabase, turmaSel),
+      supabase.from("aulas")
+        .select("id, numero, data_aula, conteudo_ministrado, disciplina:disciplinas(id, nome), professor:professores(nome)")
+        .eq("turma_id", turmaSel)
+        .eq("chamada_aberta", true)   // true = FINALIZADA (nome legado, P6)
+        .order("numero"),
+      supabase.from("aulas").select("id", { count: "exact", head: true }).eq("turma_id", turmaSel),
+    ]);
 
-    if (totalAulas === 0) { setRelatorio([]); setLoading(false); return; }
+    const aulas: AulaFechada[] = ((aulasData ?? []) as unknown as {
+      id: string; numero: number; data_aula: string | null; conteudo_ministrado: string | null;
+      disciplina: { id: string; nome: string } | null; professor: { nome: string } | null;
+    }[])
+      .filter(a => a.disciplina)
+      .map(a => ({
+        id: a.id,
+        disciplina_id: a.disciplina!.id,
+        disciplina: a.disciplina!.nome,
+        numero: a.numero,
+        data_aula: a.data_aula,
+        conteudo_ministrado: a.conteudo_ministrado,
+        professor: a.professor?.nome ?? null,
+      }));
 
-    const { data: presData } = await supabase.from("presencas").select("aluno_id, presente").in("aula_id", aulaIds);
+    let presencas: RegistroPresenca[] = [];
+    if (aulas.length > 0) {
+      const { data } = await supabase.from("presencas")
+        .select("aula_id, aluno_id, presente")
+        .in("aula_id", aulas.map(a => a.id));
+      presencas = (data ?? []) as RegistroPresenca[];
+    }
 
-    const linhas: LinhaRelatorio[] = (alunosData ?? []).map((a: Aluno) => {
-      const minhas = (presData ?? []).filter((p: { aluno_id: string; presente: boolean }) => p.aluno_id === a.id);
-      const presentes = minhas.filter((p: { presente: boolean }) => p.presente).length;
-      const ausentes = totalAulas - presentes;
-      const percentual = totalAulas > 0 ? Math.round((presentes / totalAulas) * 100) : 0;
-      return { aluno: a.nome, total_aulas: totalAulas, presentes, ausentes, percentual };
-    });
+    setFrequencia(frequenciaPorDisciplina(alunos, aulas, presencas));
+    setDiario(montarDiario(aulas));
+    setTotalAulasDaTurma(count ?? 0);
+    setCarregando(false);
+  }, [supabase, turmaSel]);
 
-    setRelatorio(linhas.sort((a, b) => b.percentual - a.percentual));
-    setLoading(false);
-  };
+  useEffect(() => { carregar(); }, [carregar]);
 
-  const gerarRelatorioPorAula = async () => {
-    if (!aulaSel) return;
-    setLoading(true);
-    const { alunos: alunosData } = await buscarAlunosDaTurma(supabase, turmaSel);
-    const { data: presData } = await supabase.from("presencas").select("aluno_id, presente").eq("aula_id", aulaSel);
-
-    const mapa = Object.fromEntries((presData ?? []).map((p: { aluno_id: string; presente: boolean }) => [p.aluno_id, p.presente]));
-    setRelatorioAula((alunosData ?? []).map((a: Aluno) => ({ nome: a.nome, presente: mapa[a.id] ?? false })));
-    setLoading(false);
-  };
-
-  const downloadCSV = (dados: Record<string, unknown>[], nome: string) => {
-    if (dados.length === 0) return;
-    const cabecalho = Object.keys(dados[0]).join(";");
-    const linhas = dados.map(d => Object.values(d).join(";"));
-    const csv = [cabecalho, ...linhas].join("\n");
-    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
+  const baixarCSV = (linhas: Record<string, unknown>[], nome: string) => {
+    if (linhas.length === 0) return;
+    const cabecalho = Object.keys(linhas[0]).join(";");
+    const corpo = linhas.map(l => Object.values(l).join(";"));
+    // BOM para o Excel abrir os acentos corretamente.
+    const blob = new Blob(["﻿" + [cabecalho, ...corpo].join("\n")], { type: "text/csv;charset=utf-8;" });
     const a = document.createElement("a");
-    a.href = url; a.download = `${nome}.csv`; a.click();
+    a.href = URL.createObjectURL(blob);
+    a.download = `${nome}.csv`;
+    a.click();
   };
 
-  const nomeTurma = turmas.find(t => t.id === turmaSel)?.nome ?? "";
+  const turma = turmas.find(t => t.id === turmaSel);
+  const resumo = resumirFrequencia(frequencia);
+  const semConteudo = diario.filter(d => d.semConteudo).length;
+  const aulasFechadas = diario.length;
 
   return (
     <div className="space-y-6">
-      {/* Cabeçalho */}
       <div>
         <h2 className="text-xl font-bold text-white flex items-center gap-2">
-          <BarChart3 className="h-5 w-5 text-orange-400" /> Relatórios de Presença
+          <BarChart3 className="h-5 w-5 text-orange-400" /> Relatórios
         </h2>
-        <p className="text-sm text-blue-200 mt-1">Visualize e exporte os dados de frequência por aluno ou por aula.</p>
+        <p className="text-sm text-blue-200 mt-1">
+          Frequência por disciplina e o que foi dado em cada aula. Só entram aulas com a
+          chamada já finalizada.
+        </p>
       </div>
 
-      {/* Seleção de turma */}
-      <div className="bg-white rounded-xl p-4 shadow-sm space-y-2">
+      <div className="bg-white rounded-xl p-4 shadow-sm space-y-3">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Turma</p>
-        <Select value={turmaSel} onValueChange={v => { setTurmaSel(v); setRelatorio([]); setRelatorioAula([]); setAulaSel(""); }}>
+        <Select value={turmaSel} onValueChange={setTurmaSel}>
           <SelectTrigger className="w-full text-gray-800">
             <SelectValue placeholder="Selecione uma turma..." />
           </SelectTrigger>
@@ -117,140 +134,166 @@ export default function RelatoriosManager() {
             {turmas.map(t => <SelectItem key={t.id} value={t.id}>{labelTurma(t)}</SelectItem>)}
           </SelectContent>
         </Select>
+
+        {turmaSel && (
+          <div className="flex gap-2 pt-1">
+            {([["frequencia", "Frequência", Users], ["diario", "Diário de sala", BookOpen]] as const).map(([v, rot, Icone]) => (
+              <button
+                key={v}
+                onClick={() => setRelatorio(v)}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                  relatorio === v
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+              >
+                <Icone className="h-4 w-4" /> {rot}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {turmaSel && (
-        <div className="grid md:grid-cols-2 gap-4">
-
-          {/* ── Frequência por Aluno ── */}
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-blue-500" />
-                <p className="font-semibold text-gray-800 text-sm">Frequência por Aluno</p>
-              </div>
-              {relatorio.length > 0 && (
-                <button
-                  onClick={() => downloadCSV(relatorio as unknown as Record<string, unknown>[], `frequencia-${nomeTurma}`)}
-                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
-                >
-                  <Download className="h-3.5 w-3.5" /> CSV
-                </button>
-              )}
+      {carregando ? (
+        <div className="flex items-center gap-2 text-white/60 py-4">
+          <Loader2 className="h-4 w-4 animate-spin" /> Carregando...
+        </div>
+      ) : !turmaSel ? null : aulasFechadas === 0 ? (
+        <div className="bg-white rounded-xl p-6 shadow-sm text-center space-y-1">
+          <p className="text-gray-700 font-medium">Nenhuma chamada finalizada nesta turma.</p>
+          <p className="text-sm text-gray-500">
+            {totalAulasDaTurma > 0
+              ? `A turma tem ${totalAulasDaTurma} aulas na grade, mas nenhuma teve a chamada fechada ainda. Não há frequência a medir.`
+              : "A turma ainda não tem aulas na grade."}
+          </p>
+        </div>
+      ) : relatorio === "frequencia" ? (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold text-gray-800 text-sm">Frequência por disciplina</p>
+              <p className="text-xs text-gray-500">
+                {resumo.alunos} aluno(s) × {resumo.disciplinas} disciplina(s) com chamada fechada.
+                Mínimo exigido: {PRESENCA_MINIMA}% <strong>em cada matéria</strong>.
+              </p>
             </div>
-
-            <div className="p-4 space-y-3">
-              <Button onClick={gerarRelatorioPorTurma} disabled={loading} size="sm" className="w-full">
-                {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                Gerar Relatório
-              </Button>
-
-              {relatorio.length > 0 ? (
-                <div className="overflow-hidden rounded-xl border border-gray-100">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50 border-b border-gray-100">
-                      <tr>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Aluno</th>
-                        <th className="px-3 py-2 text-center text-xs font-semibold text-green-600">✅</th>
-                        <th className="px-3 py-2 text-center text-xs font-semibold text-red-400">❌</th>
-                        <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500">%</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {relatorio.map((r, i) => (
-                        <tr key={i} className={r.percentual < 75 ? "bg-red-50" : "hover:bg-gray-50"}>
-                          <td className="px-3 py-2 text-gray-800 font-medium text-xs">{r.aluno}</td>
-                          <td className="px-3 py-2 text-center text-green-600 font-semibold">{r.presentes}</td>
-                          <td className="px-3 py-2 text-center text-red-500 font-semibold">{r.ausentes}</td>
-                          <td className="px-3 py-2 text-center">
-                            <span className={`font-bold text-sm ${r.percentual < 75 ? "text-red-600" : "text-gray-700"}`}>
-                              {r.percentual}%
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <p className="text-xs text-gray-400 px-3 py-2 border-t border-gray-50 flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3 text-red-400" /> Vermelho = frequência abaixo de 75%
-                  </p>
-                </div>
-              ) : (
-                <p className="text-xs text-gray-400 italic text-center py-2">Clique em "Gerar Relatório" para visualizar.</p>
+            <button
+              onClick={() => baixarCSV(
+                frequencia.map(l => ({
+                  aluno: l.aluno, disciplina: l.disciplina, aulas_dadas: l.aulasDadas,
+                  presencas: l.presencas, faltas: l.faltas, percentual: l.percentual,
+                  situacao: l.abaixoDoMinimo ? "abaixo do minimo" : "ok",
+                })),
+                `frequencia-${turma?.curso}-${turma?.turno}`.replace(/[^\w-]/g, "_"),
               )}
-            </div>
+              className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium shrink-0"
+            >
+              <Download className="h-3.5 w-3.5" /> CSV
+            </button>
           </div>
 
-          {/* ── Presença por Aula ── */}
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <BookOpen className="h-4 w-4 text-orange-500" />
-                <p className="font-semibold text-gray-800 text-sm">Presença por Aula</p>
-              </div>
-              {relatorioAula.length > 0 && (
-                <button
-                  onClick={() => downloadCSV(relatorioAula as unknown as Record<string, unknown>[], `chamada-aula-${aulaSel}`)}
-                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
-                >
-                  <Download className="h-3.5 w-3.5" /> CSV
-                </button>
-              )}
+          {resumo.emRisco > 0 ? (
+            <div className="px-4 py-2 bg-red-50 border-b border-red-100 text-xs text-red-800">
+              <strong>{resumo.emRisco} aluno(s) abaixo de {PRESENCA_MINIMA}%</strong> em ao menos uma
+              disciplina: {resumo.nomesEmRisco.join(", ")}.
             </div>
-
-            <div className="p-4 space-y-3">
-              {aulas.length === 0 ? (
-                <p className="text-xs text-gray-400 italic text-center py-2">Nenhuma chamada finalizada nesta turma.</p>
-              ) : (
-                <>
-                  <Select value={aulaSel} onValueChange={v => { setAulaSel(v); setRelatorioAula([]); }}>
-                    <SelectTrigger className="w-full text-gray-800">
-                      <SelectValue placeholder="Selecione a aula..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {aulas.map(a => <SelectItem key={a.id} value={a.id}>Aula {a.numero}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-
-                  <Button onClick={gerarRelatorioPorAula} disabled={loading || !aulaSel} size="sm" className="w-full">
-                    {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                    Gerar Relatório
-                  </Button>
-                </>
-              )}
-
-              {relatorioAula.length > 0 && (
-                <div className="overflow-hidden rounded-xl border border-gray-100">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50 border-b border-gray-100">
-                      <tr>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Aluno</th>
-                        <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {relatorioAula.map((r, i) => (
-                        <tr key={i} className="hover:bg-gray-50">
-                          <td className="px-3 py-2 text-gray-800 text-xs font-medium">{r.nome}</td>
-                          <td className="px-3 py-2 text-center">
-                            {r.presente
-                              ? <span className="text-green-700 font-semibold text-xs bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">Presente</span>
-                              : <span className="text-red-600 font-semibold text-xs bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">Ausente</span>
-                            }
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div className="px-3 py-2 border-t border-gray-50 flex gap-3 text-xs text-gray-400">
-                    <span className="text-green-600 font-semibold">{relatorioAula.filter(r => r.presente).length} presentes</span>
-                    <span className="text-red-500 font-semibold">{relatorioAula.filter(r => !r.presente).length} ausentes</span>
-                  </div>
-                </div>
-              )}
+          ) : (
+            <div className="px-4 py-2 bg-green-50 border-b border-green-100 text-xs text-green-800 flex items-center gap-1">
+              <CheckCircle className="h-3.5 w-3.5" /> Ninguém abaixo do mínimo até aqui.
             </div>
+          )}
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Aluno</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Disciplina</th>
+                  <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500">Aulas</th>
+                  <th className="px-3 py-2 text-center text-xs font-semibold text-green-600">Presenças</th>
+                  <th className="px-3 py-2 text-center text-xs font-semibold text-red-400">Faltas</th>
+                  <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500">%</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {frequencia.map(l => (
+                  <tr key={`${l.alunoId}-${l.disciplinaId}`} className={l.abaixoDoMinimo ? "bg-red-50" : "hover:bg-gray-50"}>
+                    <td className="px-3 py-2 text-xs font-medium text-gray-800">{l.aluno}</td>
+                    <td className="px-3 py-2 text-xs text-gray-600">{l.disciplina}</td>
+                    <td className="px-3 py-2 text-center text-xs text-gray-500">{l.aulasDadas}</td>
+                    <td className="px-3 py-2 text-center font-semibold text-green-600">{l.presencas}</td>
+                    <td className="px-3 py-2 text-center font-semibold text-red-500">{l.faltas}</td>
+                    <td className="px-3 py-2 text-center">
+                      <span className={`text-sm font-bold ${l.abaixoDoMinimo ? "text-red-600" : "text-gray-700"}`}>
+                        {l.percentual}%
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
+          <p className="text-xs text-gray-400 px-3 py-2 border-t flex items-center gap-1">
+            <AlertCircle className="h-3 w-3 text-red-400" />
+            Vermelho = abaixo de {PRESENCA_MINIMA}%, o mesmo corte que retém o aluno na disciplina.
+          </p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold text-gray-800 text-sm">Diário de sala</p>
+              <p className="text-xs text-gray-500">
+                O que foi dado em cada aula já fechada. Quem escreve é o professor.
+              </p>
+            </div>
+            <button
+              onClick={() => baixarCSV(
+                diario.map(d => ({
+                  disciplina: d.disciplina, aula: d.numero, data: formatarData(d.data),
+                  professor: limparParaCSV(d.professor), conteudo: limparParaCSV(d.conteudo),
+                })),
+                `diario-${turma?.curso}-${turma?.turno}`.replace(/[^\w-]/g, "_"),
+              )}
+              className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium shrink-0"
+            >
+              <Download className="h-3.5 w-3.5" /> CSV
+            </button>
+          </div>
+
+          {semConteudo > 0 && (
+            <div className="px-4 py-2 bg-amber-50 border-b border-amber-100 text-xs text-amber-800">
+              <strong>{semConteudo} de {aulasFechadas} aulas</strong> foram fechadas sem registrar o
+              conteúdo. Vale cobrar antes que o semestre acabe e ninguém mais lembre.
+            </div>
+          )}
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Disciplina</th>
+                  <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500">Aula</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Data</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Professor</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Conteúdo</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {diario.map(d => (
+                  <tr key={`${d.disciplina}-${d.numero}`} className={d.semConteudo ? "bg-amber-50/60" : "hover:bg-gray-50"}>
+                    <td className="px-3 py-2 text-xs text-gray-700">{d.disciplina}</td>
+                    <td className="px-3 py-2 text-center text-xs text-gray-500">{d.numero}</td>
+                    <td className="px-3 py-2 text-xs text-gray-500">{formatarData(d.data)}</td>
+                    <td className="px-3 py-2 text-xs text-gray-500">{d.professor ?? "—"}</td>
+                    <td className="px-3 py-2 text-xs text-gray-700">
+                      {d.conteudo ?? <span className="text-amber-700 italic">não registrado</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
