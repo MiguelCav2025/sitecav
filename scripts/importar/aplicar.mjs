@@ -170,9 +170,9 @@ titulo("SERÁ APAGADO");
 item("presenças, notas, grupos, matrículas, aulas, disciplinas, turmas, alunos e professores");
 item(`e ${comLogin.length} conta(s) de login de professor no Auth`);
 console.log("");
-item("Apagar a linha do professor sem apagar a conta dele criaria um buraco:");
-item("a regra do sistema é «admin = quem está autenticado e não é professor»,");
-item("então a conta órfã viraria administradora no próximo login.");
+item("Apagar a linha do professor sem apagar a conta dele deixa a conta órfã.");
+item("Isso já foi grave — a regra antiga promovia órfã a administradora. Hoje");
+item("ser admin é concessão explícita, mas a conta órfã ainda entra no sistema.");
 
 titulo("NÃO SERÁ TOCADO");
 item("conteúdo do site, salas, contas de administrador e cronograma de outros semestres");

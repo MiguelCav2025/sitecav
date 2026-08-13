@@ -470,7 +470,29 @@ Cada fase só começa quando a anterior estiver revisada. O documento é atualiz
 | **10** | Relatórios (`D27`) | fase 9 |
 | **11** | Limpezas (`P6`,`P10`,`P11`,`P12`,`P16`) | — |
 | ~~**11-B**~~ | ~~Admin por concessão explícita + `P9` investigado~~ | ✅ **CONCLUÍDA** |
-| ~~**12**~~ | ~~Acesso do professor por e-mail (`P17`)~~ | ✅ **código pronto** — falta aplicar a migração |
+| ~~**12**~~ | ~~Acesso do professor por e-mail (`P21`)~~ | ✅ **CONCLUÍDA** — migração aplicada em 13/08/2026 |
+| ~~**IMP**~~ | ~~Importação das planilhas reais~~ | ✅ **aplicada em 13/08/2026** — ver `N23` |
+
+### Estado do banco após a importação (13/08/2026)
+
+| | | |
+|---|---|---|
+| alunos | 113 | todos com e-mail |
+| turmas | 11 | falta `Animação Manhã 2026/2` — não existe nas planilhas |
+| matrículas | 113 | 38 no módulo 1, 47 no 2, 28 no 3 — bate com as turmas |
+| disciplinas | 30 | |
+| professores | 18 | **sem e-mail e sem login**, à espera dos endereços reais |
+| aulas | 979 | todas com data, professor e disciplina; nenhuma chamada fechada |
+| **presenças** | **0** | ⚠️ ver `N23` |
+
+> **N23 ❓ — as presenças das planilhas não foram importadas.** O leitor
+> (`scripts/importar/fontes.mjs`) usa as planilhas para tirar nomes, turmas e
+> as **datas** das aulas, mas nunca lê as marcações de presença da grade.
+> **101 aulas já aconteceram** (03/08 a 13/08) e estão no sistema como se
+> ninguém tivesse feito chamada. Duas saídas: importar essas marcações, ou os
+> professores refazerem a chamada dessas aulas no app. **Decisão do
+> coordenador.** Enquanto não se resolver, qualquer cálculo de frequência dá
+> 0% para todo mundo nesse período.
 
 > A fase 2 subiu de posição porque a função `is_admin()` e todo o RLS consultam a tabela `professores`. Reestruturar depois obrigaria a refazer as policies.
 
@@ -497,7 +519,7 @@ Montada em [`docs/MIGRACOES.sql`](MIGRACOES.sql), por fase, revisada antes de ap
 
 ---
 
-## 11. Fase 12 — como o professor entra (`P17`)
+## 11. Fase 12 — como o professor entra (`P21`)
 
 O sistema tinha uma senha provisória **fixa e escrita na própria tela do admin**
 (`Cav@2026`). Quem abrisse o painel — ou o código-fonte no navegador — sabia a
