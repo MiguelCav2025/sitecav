@@ -12,6 +12,7 @@ import {
 } from "@/lib/fechamento";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useConfirmacao } from "@/components/ui/confirmar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertCircle, CheckCircle, ChevronDown, ChevronRight, Loader2, Scale, XCircle, HelpCircle,
@@ -53,6 +54,7 @@ const ESTILO: Record<Situacao, { cor: string; rotulo: string; Icone: typeof Chec
 export default function FechamentoManager() {
   const supabase = createClient();
   const { semestre: semestreAtual } = useSemestreVigente();
+  const { confirmar, dialogo } = useConfirmacao();
 
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [turmaId, setTurmaId] = useState("");
@@ -129,15 +131,57 @@ export default function FechamentoManager() {
     const sugerida = situacaoSugerida(a.avaliacao);
     const contraria = sugerida !== null && sugerida !== situacao;
 
-    const texto = contraria
-      ? `${a.nome} está como ${ESTILO[a.avaliacao.situacao].rotulo.toUpperCase()} pelas notas e frequência, ` +
-        `e você vai encerrar como ${situacao.toUpperCase()}.\n\nConfirma?`
-      : a.avaliacao.situacao === "indefinido"
-        ? `Ainda falta lançar coisas para ${a.nome}:\n\n${a.avaliacao.pendencias.join("\n")}\n\n` +
-          `Encerrar como ${situacao.toUpperCase()} mesmo assim?`
-        : `Encerrar a matrícula de ${a.nome} como ${situacao.toUpperCase()}?`;
+    const rotulo = situacao === "aprovado" ? "Aprovar" : "Reter";
+    const abonos = abonosPorAluno.get(a.alunoId) ?? 0;
 
-    if (!confirm(texto)) return;
+    const ok = await confirmar({
+      titulo: `${rotulo} ${a.nome}?`,
+      perigo: contraria || a.avaliacao.situacao === "indefinido",
+      rotuloConfirmar: `${rotulo} ${a.nome.split(" ")[0]}`,
+      descricao: (
+        <>
+          {contraria && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-amber-900">
+              Pelas notas e frequência ele está como{" "}
+              <strong>{ESTILO[a.avaliacao.situacao].rotulo.toLowerCase()}</strong>, e você vai
+              encerrar como <strong>{situacao}</strong>. A decisão é sua e fica registrada com
+              o cálculo do sistema ao lado.
+            </p>
+          )}
+
+          {a.avaliacao.situacao === "indefinido" && (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-2">
+              <p className="font-medium text-gray-700">Ainda falta lançar:</p>
+              <ul className="mt-1 space-y-0.5">
+                {a.avaliacao.pendencias.map(p => (
+                  <li key={p} className="flex gap-1.5"><span className="text-gray-400">•</span>{p}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {abonos > 0 && (
+            <p className="text-amber-800">
+              Ele tem <strong>{abonos} falta(s) abonada(s)</strong> que não entram na frequência
+              calculada. Vale conferir no relatório antes de decidir.
+            </p>
+          )}
+
+          <p>
+            A matrícula é encerrada com a data de hoje e sai da lista de decidir. Dá para
+            desfazer depois, em <strong>Já decididos</strong>.
+          </p>
+
+          {situacao === "retido" && (
+            <p>
+              Ele passa a aparecer em <strong>Aguardando rematrícula</strong>: refaz o mesmo
+              módulo na turma que começou um semestre depois desta — não nesta, que vai avançar.
+            </p>
+          )}
+        </>
+      ),
+    });
+    if (!ok) return;
 
     setDecidindo(a.matriculaId);
     const observacao = contraria || a.avaliacao.situacao === "indefinido"
@@ -153,11 +197,22 @@ export default function FechamentoManager() {
   };
 
   const desfazer = async (d: Decidido) => {
-    if (!confirm(
-      `Desfazer a decisão sobre ${d.nome}?\n\n` +
-      `A matrícula volta a "cursando" e ele reaparece na lista para decidir de novo. ` +
-      `A data e a observação do encerramento são apagadas.`
-    )) return;
+    const ok = await confirmar({
+      titulo: `Desfazer a decisão sobre ${d.nome}?`,
+      rotuloConfirmar: "Desfazer",
+      descricao: (
+        <>
+          <p>
+            A matrícula volta a <strong>cursando</strong> e ele reaparece na lista de decidir.
+          </p>
+          <p>
+            A data do encerramento e a observação são apagadas — inclusive o registro de que a
+            decisão contrariou o cálculo, se foi o caso.
+          </p>
+        </>
+      ),
+    });
+    if (!ok) return;
 
     setDecidindo(d.matriculaId);
     const { erro } = await reabrirMatricula(supabase, d.matriculaId);
@@ -173,6 +228,7 @@ export default function FechamentoManager() {
 
   return (
     <div className="space-y-6">
+      {dialogo}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3">
         <Scale className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
         <div className="text-sm text-blue-800 space-y-1">

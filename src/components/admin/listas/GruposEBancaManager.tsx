@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useConfirmacao } from "@/components/ui/confirmar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,6 +70,7 @@ const SITUACAO_ESTILO: Record<Situacao, { rotulo: string; classe: string }> = {
 export default function GruposEBancaManager() {
   const supabase = createClient();
   const { semestre: semestreVigenteAtual } = useSemestreVigente();
+  const { confirmar, dialogo } = useConfirmacao();
 
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [turmaId, setTurmaId] = useState("");
@@ -141,7 +143,18 @@ export default function GruposEBancaManager() {
   };
 
   const excluirGrupo = async (g: Grupo) => {
-    if (!confirm(`Excluir o grupo "${g.nome}"? Os integrantes ficam sem grupo.`)) return;
+    const ok = await confirmar({
+      titulo: `Excluir o grupo "${g.nome}"?`,
+      perigo: true,
+      rotuloConfirmar: "Excluir grupo",
+      descricao: (
+        <>
+          <p>Os integrantes ficam <strong>sem grupo</strong>, e a nota da banca que ele tinha se perde.</p>
+          <p>Sem grupo não há nota de banca, então a situação deles volta a ficar pendente no fechamento.</p>
+        </>
+      ),
+    });
+    if (!ok) return;
     const { error } = await supabase.from("grupos").delete().eq("id", g.id);
     if (error) return aviso("erro", `Erro ao excluir: ${error.message}`);
     carregar();
@@ -178,6 +191,7 @@ export default function GruposEBancaManager() {
 
   return (
     <div className="space-y-6">
+      {dialogo}
       {msg && (
         <div className={`flex items-center gap-2 rounded-lg p-3 text-sm ${
           msg.tipo === "ok"

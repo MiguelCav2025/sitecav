@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Confirmacao } from "@/components/ui/confirmar";
+import { Confirmacao, useConfirmacao } from "@/components/ui/confirmar";
 import {
   Plus, Trash2, Loader2, CheckCircle, AlertCircle, UserCheck, Pencil, X, Check,
   Power, Send, ShieldCheck, Copy, Link2,
@@ -29,6 +29,7 @@ const formatarData = (iso: string) =>
 
 export default function ProfessoresManager() {
   const supabase = createClient();
+  const { confirmar, dialogo } = useConfirmacao();
   const [professores, setProfessores] = useState<Professor[]>([]);
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
@@ -150,10 +151,22 @@ export default function ProfessoresManager() {
    */
   const handleAlternarAtivo = async (p: Professor) => {
     const desativando = p.ativo;
-    if (desativando && !confirm(
-      `Desativar ${p.nome}? Ele deixa de aparecer para novas atribuições e perde o acesso ao app, ` +
-      `mas o histórico de aulas dele é preservado.`
-    )) return;
+    if (desativando) {
+      const ok = await confirmar({
+        titulo: `Desativar ${p.nome}?`,
+        rotuloConfirmar: "Desativar",
+        descricao: (
+          <>
+            <p>Ele perde o acesso ao app e some da lista de quem pode receber novas aulas.</p>
+            <p>
+              <strong>O histórico fica inteiro</strong>: as aulas que ele deu continuam com o
+              nome dele, e os diários também. Reativar depois é um clique.
+            </p>
+          </>
+        ),
+      });
+      if (!ok) return;
+    }
 
     const { error } = await supabase
       .from("professores")
@@ -170,10 +183,21 @@ export default function ProfessoresManager() {
    * uma aula — a FK está como RESTRICT justamente para proteger o histórico.
    */
   const handleExcluir = async (p: Professor) => {
-    if (!confirm(
-      `Excluir ${p.nome} definitivamente? Isto só é possível se ele nunca teve aula atribuída. ` +
-      `Se já lecionou, use Desativar.`
-    )) return;
+    const ok = await confirmar({
+      titulo: `Excluir ${p.nome} definitivamente?`,
+      perigo: true,
+      rotuloConfirmar: "Excluir",
+      descricao: (
+        <>
+          <p>O cadastro e a conta de acesso dele somem. Não há como desfazer.</p>
+          <p>
+            Só funciona para quem <strong>nunca teve aula atribuída</strong> — o banco recusa
+            se houver histórico. Se ele já lecionou, o caminho é <strong>Desativar</strong>.
+          </p>
+        </>
+      ),
+    });
+    if (!ok) return;
 
     const { error } = await supabase.from("professores").delete().eq("id", p.id);
 
@@ -234,6 +258,7 @@ export default function ProfessoresManager() {
 
   return (
     <div className="space-y-6">
+      {dialogo}
       <Confirmacao
         aberto={confirmandoNovoLink !== null}
         titulo={confirmandoNovoLink?.senha_alterada ? "Redefinir a senha?" : "Gerar um novo link?"}

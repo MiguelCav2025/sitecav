@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useConfirmacao } from "@/components/ui/confirmar";
 import { moduloAtual, rotuloModulo } from "@/lib/calendario-escolar";
 import { useSemestreVigente } from "@/hooks/useSemestreVigente";
 import { PRESENCA_MINIMA } from "@/lib/aprovacao";
@@ -47,6 +48,7 @@ const formatarData = (iso: string | null) => {
 export default function RelatoriosManager() {
   const supabase = createClient();
   const { semestre: semestreAtual } = useSemestreVigente();
+  const { confirmar, dialogo } = useConfirmacao();
 
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [turmaSel, setTurmaSel] = useState("");
@@ -162,7 +164,17 @@ export default function RelatoriosManager() {
   };
 
   const removerAbono = async (alunoId: string, aulaId: string) => {
-    if (!confirm("Remover este abono? A falta volta a contar integralmente.")) return;
+    const ok = await confirmar({
+      titulo: "Remover este abono?",
+      rotuloConfirmar: "Remover abono",
+      descricao: (
+        <>
+          <p>A falta volta a contar integralmente na frequência.</p>
+          <p className="text-gray-500">O motivo registrado e a data de quem concedeu se perdem.</p>
+        </>
+      ),
+    });
+    if (!ok) return;
     setAbonando(aulaId);
     const { error } = await supabase.from("abonos").delete()
       .eq("aluno_id", alunoId).eq("aula_id", aulaId);
@@ -193,6 +205,7 @@ export default function RelatoriosManager() {
 
   return (
     <div className="space-y-6">
+      {dialogo}
       <div>
         <h2 className="text-xl font-bold text-white flex items-center gap-2">
           <BarChart3 className="h-5 w-5 text-orange-400" /> Relatórios

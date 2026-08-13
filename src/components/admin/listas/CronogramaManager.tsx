@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { contarDiasLetivos } from "@/lib/calendario-escolar";
+import { useConfirmacao } from "@/components/ui/confirmar";
 import { conciliarFeriados, type TipoDeFeriado } from "@/lib/feriados";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,7 @@ const contarOcorrencias = (inicio: string, fim: string, feriados: string[]) =>
 
 export default function CronogramaManager() {
   const supabase = createClient();
+  const { confirmar, dialogo } = useConfirmacao();
   const [cronogramas, setCronogramas] = useState<Cronograma[]>([]);
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
@@ -91,7 +93,18 @@ export default function CronogramaManager() {
   };
 
   const handleExcluir = async (id: string, semestre: string) => {
-    if (!confirm(`Excluir cronograma ${semestre}?`)) return;
+    const ok = await confirmar({
+      titulo: `Excluir o calendário de ${semestre}?`,
+      perigo: true,
+      rotuloConfirmar: "Excluir calendário",
+      descricao: (
+        <>
+          <p>Somem as datas de início e fim e todos os feriados marcados.</p>
+          <p><strong>As aulas já geradas continuam com as datas que têm.</strong> Mas sem o calendário, criar disciplina nova neste semestre deixa de saber quantas aulas cabem.</p>
+        </>
+      ),
+    });
+    if (!ok) return;
     await supabase.from("cronogramas").delete().eq("id", id);
     fetch();
   };
@@ -148,6 +161,7 @@ export default function CronogramaManager() {
 
   return (
     <div className="space-y-6">
+      {dialogo}
 
       {/* Info */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3">

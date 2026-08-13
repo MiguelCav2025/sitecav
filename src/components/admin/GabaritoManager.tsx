@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useConfirmacao } from "@/components/ui/confirmar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,6 +27,7 @@ const SEM_CURSO = "todos";
 
 export default function GabaritoManager() {
   const supabase = createClient();
+  const { confirmar, dialogo } = useConfirmacao();
 
   const [gabaritos, setGabaritos] = useState<Gabarito[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,7 +114,18 @@ export default function GabaritoManager() {
   };
 
   const handleExcluir = async (g: Gabarito) => {
-    if (!confirm(`Excluir o gabarito de ${g.semestre}? As respostas cadastradas vão junto.`)) return;
+    const ok = await confirmar({
+      titulo: `Excluir o gabarito de ${g.semestre}?`,
+      perigo: true,
+      rotuloConfirmar: "Excluir gabarito",
+      descricao: (
+        <>
+          <p><strong>Todas as respostas cadastradas vão junto.</strong> Não há como desfazer.</p>
+          <p className="text-gray-500">Se a intenção é só tirar do ar, desative em vez de excluir.</p>
+        </>
+      ),
+    });
+    if (!ok) return;
     const { error } = await supabase.from("gabaritos").delete().eq("id", g.id);
     if (error) return showMsg("erro", `Erro ao excluir: ${error.message}`);
     if (selecionado?.id === g.id) { setSelecionado(null); setItens([]); }
@@ -156,6 +169,7 @@ export default function GabaritoManager() {
 
   return (
     <div className="space-y-6">
+      {dialogo}
       {msg && (
         <div className={`flex items-center gap-2 rounded-lg p-3 text-sm ${
           msg.tipo === "ok"

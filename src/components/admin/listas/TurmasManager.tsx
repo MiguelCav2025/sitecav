@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useConfirmacao } from "@/components/ui/confirmar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Plus, Trash2, Users, Loader2, CheckCircle, AlertCircle, Info, GraduationCap, Download, X, ChevronDown, ChevronUp } from "lucide-react";
@@ -69,6 +70,7 @@ interface CandidatoRevisao {
 function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) {
   const supabase = createClient();
   const { semestre: semestreAtual } = useSemestreVigente();
+  const { confirmar, dialogo } = useConfirmacao();
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
@@ -149,9 +151,28 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
   };
 
   const handleExcluir = async (a: Aluno) => {
-    if (!confirm(
-      `Remover ${a.nome} desta turma? O histórico de presenças e notas dele é preservado.`
-    )) return;
+    const ok = await confirmar({
+      titulo: `Remover ${a.nome} desta turma?`,
+      perigo: true,
+      rotuloConfirmar: "Remover da turma",
+      descricao: (
+        <>
+          <p>
+            A matrícula dele nesta turma é encerrada como <strong>desistente</strong>, e ele
+            some da chamada a partir de agora.
+          </p>
+          <p>
+            <strong>Nada do histórico é apagado</strong>: as presenças e notas até hoje
+            continuam, porque estão presas às aulas, não à turma.
+          </p>
+          <p className="text-gray-500">
+            Se ele foi reprovado, o caminho certo é a aba <strong>Fechamento</strong> — lá a
+            situação fica registrada como retido, não como desistência.
+          </p>
+        </>
+      ),
+    });
+    if (!ok) return;
 
     // Sair da turma é encerrar a matrícula, não apagar a pessoa (D26).
     const { erro } = await encerrarMatricula(supabase, a.matriculaId, "desistente");
@@ -226,6 +247,7 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
 
   return (
     <DialogContent className="!max-w-4xl w-[95vw] max-h-[85vh] flex flex-col">
+      {dialogo}
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <Users className="h-5 w-5 text-blue-600" />
@@ -458,6 +480,7 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
 export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: string, nome: string) => void }) {
   const supabase = createClient();
   const { semestre: semestreAtual } = useSemestreVigente();
+  const { confirmar, dialogo } = useConfirmacao();
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
@@ -509,9 +532,30 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
     setTimeout(() => setMsg(null), 4000);
   };
 
-  const handleExcluir = async (id: string) => {
-    if (!confirm("Excluir turma? Os alunos vinculados perderão o vínculo.")) return;
-    await supabase.from("turmas").delete().eq("id", id);
+  const handleExcluir = async (t: Turma) => {
+    const ok = await confirmar({
+      titulo: `Excluir a turma ${t.nome}?`,
+      perigo: true,
+      rotuloConfirmar: "Excluir turma",
+      descricao: (
+        <>
+          <p>
+            Vão junto as <strong>matrículas</strong>, as <strong>aulas</strong> e as{" "}
+            <strong>presenças e notas</strong> desta turma. O diário do que já foi dado deixa
+            de existir.
+          </p>
+          <p className="text-red-700">Não há como desfazer.</p>
+          <p className="text-gray-500">
+            Se a turma apenas terminou, o caminho é o <strong>Fechamento</strong>: os alunos
+            são encerrados um a um e todo o histórico continua consultável nos relatórios.
+          </p>
+        </>
+      ),
+    });
+    if (!ok) return;
+
+    const { error } = await supabase.from("turmas").delete().eq("id", t.id);
+    if (error) return setMsg({ tipo: "erro", texto: `Não foi possível excluir: ${error.message}` });
     fetchTurmas();
   };
 
@@ -522,6 +566,7 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
 
   return (
     <div className="space-y-6">
+      {dialogo}
       {/* Conceito */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3">
         <Info className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
@@ -681,7 +726,7 @@ export default function TurmasManager({ onSelectTurma }: { onSelectTurma?: (id: 
                               </p>
                             </div>
                             <button
-                              onClick={e => { e.stopPropagation(); handleExcluir(t.id); }}
+                              onClick={e => { e.stopPropagation(); handleExcluir(t); }}
                               className="text-red-300 hover:text-red-600 p-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
                             >
                               <Trash2 className="h-4 w-4" />

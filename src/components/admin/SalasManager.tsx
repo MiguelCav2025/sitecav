@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useConfirmacao } from "@/components/ui/confirmar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +28,7 @@ interface Sala {
  */
 export default function SalasManager() {
   const supabase = createClient();
+  const { confirmar, dialogo } = useConfirmacao();
   const [salas, setSalas] = useState<Sala[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
@@ -94,7 +96,18 @@ export default function SalasManager() {
       return aviso("erro",
         `"${s.nome}" está em ${s.emUso} disciplina(s). Desative em vez de excluir.`);
     }
-    if (!confirm(`Excluir a sala "${s.nome}"?`)) return;
+    const ok = await confirmar({
+      titulo: `Excluir a sala "${s.nome}"?`,
+      perigo: true,
+      rotuloConfirmar: "Excluir sala",
+      descricao: (
+        <>
+          <p>As disciplinas que aconteciam nela ficam <strong>sem sala</strong>, e passam a aparecer em âmbar na grade.</p>
+          <p className="text-gray-500">Se a sala só saiu de uso, desative em vez de excluir — assim o histórico continua legível.</p>
+        </>
+      ),
+    });
+    if (!ok) return;
     const { error } = await supabase.from("salas").delete().eq("id", s.id);
     if (error) return aviso("erro", `Erro ao excluir: ${error.message}`);
     carregar();
@@ -102,6 +115,7 @@ export default function SalasManager() {
 
   return (
     <div className="space-y-6">
+      {dialogo}
       {msg && (
         <div className={`flex items-center gap-2 rounded-lg p-3 text-sm ${
           msg.tipo === "ok"

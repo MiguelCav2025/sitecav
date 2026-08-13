@@ -12,6 +12,7 @@ import { moduloAtual, rotuloModulo } from "@/lib/calendario-escolar";
 import { useSemestreVigente } from "@/hooks/useSemestreVigente";
 import LancarNotas from "@/components/professor/LancarNotas";
 import { buscarAlunosDaTurma } from "@/lib/matriculas";
+import { useConfirmacao } from "@/components/ui/confirmar";
 
 interface Turma { id: string; nome: string; turno: string; entrada: string; curso: string; }
 interface Disciplina { id: string; nome: string; emoji: string | null; }
@@ -95,6 +96,7 @@ export default function ProfessorDashboard() {
   const supabase = createClient();
   const router = useRouter();
   const { semestre: semestreAtual } = useSemestreVigente();
+  const { confirmar, dialogo } = useConfirmacao();
 
   const [nomeProfessor, setNomeProfessor] = useState("");
   const [professorId, setProfessorId] = useState("");
@@ -230,7 +232,18 @@ export default function ProfessorDashboard() {
       setErro(`Descreva o conteúdo da aula com pelo menos ${MIN_CONTEUDO} caracteres.`);
       return;
     }
-    if (!confirm("Fechar a chamada? Depois de fechada não é possível reabrir nem corrigir.")) return;
+    const ok = await confirmar({
+      titulo: "Fechar a chamada desta aula?",
+      perigo: true,
+      rotuloConfirmar: "Fechar chamada",
+      descricao: (
+        <>
+          <p>Depois de fechada, <strong>não dá para reabrir nem corrigir</strong> — nem por você, nem pela coordenação.</p>
+          <p>Confira as presenças e o que você escreveu no diário antes de confirmar.</p>
+        </>
+      ),
+    });
+    if (!ok) return;
 
     setErro(null);
     setFinalizando(true);
@@ -289,6 +302,9 @@ export default function ProfessorDashboard() {
 
     return (
       <div className="min-h-screen bg-blue-900 flex flex-col">
+        {/* O diálogo mora aqui porque é esta a tela que confirma o fechamento
+            da chamada — a única ação irreversível do app do professor. */}
+        {dialogo}
         <AppHeader
           titulo={`${aula.disciplina?.nome ?? "Aula"} — Aula ${aula.numero}`}
           subtitulo={rotuloDaTurma(aula.turma, semestreAtual)}

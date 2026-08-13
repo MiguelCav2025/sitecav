@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { useConfirmacao } from "@/components/ui/confirmar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,8 @@ interface Administrador {
  */
 export default function AdminManager() {
   const supabase = createClient();
+  // `confirmar` já é o campo de confirmação de senha nesta tela.
+  const { confirmar: pedirConfirmacao, dialogo } = useConfirmacao();
 
   const [administradores, setAdministradores] = useState<Administrador[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -93,7 +96,18 @@ export default function AdminManager() {
     if (a.user_id === meuUserId) {
       return aviso("erro", "Você não pode remover o próprio acesso. Peça a outro administrador.");
     }
-    if (!confirm(`Remover ${a.nome} da lista de administradores? A conta de login continua existindo.`)) return;
+    const ok = await pedirConfirmacao({
+      titulo: `Remover ${a.nome} do painel?`,
+      perigo: true,
+      rotuloConfirmar: "Remover acesso",
+      descricao: (
+        <>
+          <p>Ele deixa de administrar o sistema imediatamente.</p>
+          <p><strong>A conta de login continua existindo</strong> — só perde o poder de admin. Para devolver, é preciso cadastrá-lo de novo aqui.</p>
+        </>
+      ),
+    });
+    if (!ok) return;
 
     const { error } = await supabase.from("administradores").delete().eq("id", a.id);
     if (error) return aviso("erro", error.message);
@@ -105,6 +119,7 @@ export default function AdminManager() {
 
   return (
     <div className="grid gap-6">
+      {dialogo}
       {msg && (
         <div className={`flex items-center gap-2 rounded-lg p-3 text-sm ${
           msg.tipo === "ok"

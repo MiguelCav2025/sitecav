@@ -10,6 +10,7 @@ import {
 } from "@/lib/calendario-escolar";
 import { useSemestreVigente } from "@/hooks/useSemestreVigente";
 import { emojiDaDisciplina } from "@/lib/emoji-disciplina";
+import { useConfirmacao } from "@/components/ui/confirmar";
 import RecalcularGrade from "./RecalcularGrade";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -445,6 +446,7 @@ function DisciplinaCard({
 export default function DisciplinasManager() {
   const supabase = createClient();
   const { semestre: semestreAtual } = useSemestreVigente();
+  const { confirmar, dialogo } = useConfirmacao();
 
   const [disciplinas, setDisciplinas] = useState<Disciplina[]>([]);
   const [turmas, setTurmas] = useState<Turma[]>([]);
@@ -615,7 +617,19 @@ export default function DisciplinasManager() {
   };
 
   const handleExcluir = async (id: string, nome: string) => {
-    if (!confirm(`Excluir "${nome}"? Todas as aulas e presenças vinculadas serão removidas.`)) return;
+    const ok = await confirmar({
+      titulo: `Excluir "${nome}"?`,
+      perigo: true,
+      rotuloConfirmar: "Excluir disciplina",
+      descricao: (
+        <>
+          <p>Vão junto <strong>todas as aulas</strong> dela, em todas as turmas, e <strong>as presenças e o diário</strong> de cada uma.</p>
+          <p className="text-red-700">Não há como desfazer.</p>
+          <p className="text-gray-500">O banco recusa se alguma chamada já estiver fechada — nesse caso, desative a disciplina em vez de excluir.</p>
+        </>
+      ),
+    });
+    if (!ok) return;
     await supabase.from("aulas").delete().eq("disciplina_id", id);
     await supabase.from("disciplinas").delete().eq("id", id);
     fetchDados();
@@ -642,6 +656,7 @@ export default function DisciplinasManager() {
 
   return (
     <div className="space-y-6">
+      {dialogo}
 
       {/* Criar disciplina — accordion fechado por default */}
       <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
