@@ -164,6 +164,44 @@ export function montarDiario(aulas: readonly AulaFechada[]): LinhaDoDiario[] {
     );
 }
 
+export interface AulaPendente {
+  disciplina: string;
+  numero: number;
+  data: string;
+  professor: string | null;
+  /** Há quantos dias a aula aconteceu sem a chamada ser feita. */
+  diasAtras: number;
+}
+
+/**
+ * Aulas cuja data já passou e a chamada não foi feita.
+ *
+ * Esta é a pendência de verdade. A primeira versão deste relatório contava
+ * "aula fechada sem conteúdo escrito", número que é sempre zero: o banco tem
+ * uma constraint que impede fechar a chamada sem 30 caracteres de diário. Eu
+ * contava uma coisa que não pode acontecer, enquanto a que acontece — o
+ * professor simplesmente não fez a chamada — ficava invisível.
+ */
+export function aulasPendentesDeChamada(
+  aulas: readonly (AulaFechada & { finalizada: boolean })[],
+  hoje: string,
+): AulaPendente[] {
+  const emDias = (iso: string) =>
+    Math.round((Date.parse(hoje) - Date.parse(iso)) / 86_400_000);
+
+  return aulas
+    .filter(a => !a.finalizada && a.data_aula !== null && a.data_aula <= hoje)
+    .map(a => ({
+      disciplina: a.disciplina,
+      numero: a.numero,
+      data: a.data_aula as string,
+      professor: a.professor,
+      diasAtras: emDias(a.data_aula as string),
+    }))
+    // A mais antiga primeiro: é a que corre risco de ninguém mais lembrar.
+    .sort((x, y) => x.data.localeCompare(y.data) || x.disciplina.localeCompare(y.disciplina, "pt-BR"));
+}
+
 /** Texto pronto para CSV: sem ponto e vírgula nem quebra de linha soltos. */
 export function limparParaCSV(valor: string | null): string {
   if (!valor) return "";

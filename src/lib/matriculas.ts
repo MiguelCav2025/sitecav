@@ -64,6 +64,55 @@ export async function buscarAlunosDaTurma(
   return { alunos, erro: null };
 }
 
+export interface MatriculaDaTurma extends AlunoDaTurma {
+  situacao: SituacaoMatricula;
+}
+
+/**
+ * TODOS que passaram por esta turma, encerrados ou não.
+ *
+ * Serve aos relatórios e ao fechamento. A `buscarAlunosDaTurma` filtra por
+ * `cursando`, o que está certo para a chamada — aluno encerrado não é chamado.
+ * Mas usar o mesmo filtro no relatório fazia a turma sumir da tela no instante
+ * em que o módulo era fechado, justamente quando ela mais interessa relatar.
+ *
+ * Aluno com duas matrículas na mesma turma (repetência) aparece uma vez só:
+ * as presenças estão nas mesmas aulas, então duplicá-lo duplicaria as linhas.
+ */
+export async function buscarMatriculasDaTurma(
+  supabase: SupabaseClient,
+  turmaId: string,
+): Promise<{ matriculas: MatriculaDaTurma[]; erro: string | null }> {
+  const { data, error } = await supabase
+    .from("matriculas")
+    .select("id, modulo, situacao, aluno:alunos(id, nome, email, ativo)")
+    .eq("turma_id", turmaId);
+
+  if (error) return { matriculas: [], erro: error.message };
+
+  const porAluno = new Map<string, MatriculaDaTurma>();
+  for (const m of (data ?? []) as unknown as (LinhaMatricula & { situacao: SituacaoMatricula })[]) {
+    if (!m.aluno) continue;
+    // A matrícula em andamento tem precedência sobre uma antiga encerrada.
+    const jaTem = porAluno.get(m.aluno.id);
+    if (jaTem && jaTem.situacao === "cursando") continue;
+
+    porAluno.set(m.aluno.id, {
+      id: m.aluno.id,
+      nome: m.aluno.nome,
+      email: m.aluno.email,
+      matriculaId: m.id,
+      modulo: m.modulo,
+      situacao: m.situacao,
+    });
+  }
+
+  return {
+    matriculas: [...porAluno.values()].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
+    erro: null,
+  };
+}
+
 /**
  * Em que módulo uma turma está, limitado à duração do curso.
  *

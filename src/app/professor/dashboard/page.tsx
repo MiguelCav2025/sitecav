@@ -62,7 +62,10 @@ function AppHeader({
   onSair: () => void;
 }) {
   return (
-    <header className="bg-blue-950 border-b border-white/10 px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
+    // `safe-top` empurra o cabeçalho para baixo do relógio e do notch. Sem
+    // isso o título nasce atrás deles no iPhone, e o botão Sair fica no canto
+    // arredondado, difícil de acertar.
+    <header className="bg-blue-950 border-b border-white/10 px-4 py-3 flex items-center gap-3 sticky top-0 z-10 safe-top">
       {onVoltar ? (
         <button onClick={onVoltar} className="text-white/70 hover:text-white p-1 -ml-1">
           <ArrowLeft className="h-5 w-5" />

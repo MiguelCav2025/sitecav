@@ -4,6 +4,7 @@ import {
   frequenciaPorDisciplina,
   resumirFrequencia,
   montarDiario,
+  aulasPendentesDeChamada,
   limparParaCSV,
   type AulaFechada,
   type RegistroPresenca,
@@ -136,6 +137,64 @@ describe("montarDiario", () => {
       linhas.map(l => `${l.disciplina}${l.numero}`),
       ["Desenho1", "Roteiro1", "Roteiro2"],
     );
+  });
+});
+
+describe("aulasPendentesDeChamada", () => {
+  const HOJE = "2026-08-13";
+  const comStatus = (a: AulaFechada, finalizada: boolean) => ({ ...a, finalizada });
+
+  it("acusa a aula que ja passou e nao teve chamada", () => {
+    const p = aulasPendentesDeChamada(
+      [comStatus(aula("r1", "Roteiro", 1, { data_aula: "2026-08-03" }), false)],
+      HOJE,
+    );
+    assert.equal(p.length, 1);
+    assert.equal(p[0].diasAtras, 10);
+  });
+
+  it("ignora aula futura — ainda nao aconteceu", () => {
+    const p = aulasPendentesDeChamada(
+      [comStatus(aula("r1", "Roteiro", 1, { data_aula: "2026-09-01" }), false)],
+      HOJE,
+    );
+    assert.deepEqual(p, []);
+  });
+
+  it("ignora aula ja fechada", () => {
+    const p = aulasPendentesDeChamada(
+      [comStatus(aula("r1", "Roteiro", 1, { data_aula: "2026-08-03" }), true)],
+      HOJE,
+    );
+    assert.deepEqual(p, []);
+  });
+
+  it("aula de hoje ja conta como pendente", () => {
+    const p = aulasPendentesDeChamada(
+      [comStatus(aula("r1", "Roteiro", 1, { data_aula: HOJE }), false)],
+      HOJE,
+    );
+    assert.equal(p.length, 1);
+    assert.equal(p[0].diasAtras, 0);
+  });
+
+  it("aula sem data nao vira pendencia", () => {
+    const p = aulasPendentesDeChamada(
+      [comStatus(aula("r1", "Roteiro", 1, { data_aula: null }), false)],
+      HOJE,
+    );
+    assert.deepEqual(p, []);
+  });
+
+  it("a mais antiga vem primeiro — e a que ninguem vai lembrar", () => {
+    const p = aulasPendentesDeChamada(
+      [
+        comStatus(aula("r2", "Roteiro", 2, { data_aula: "2026-08-10" }), false),
+        comStatus(aula("r1", "Roteiro", 1, { data_aula: "2026-08-03" }), false),
+      ],
+      HOJE,
+    );
+    assert.deepEqual(p.map(x => x.data), ["2026-08-03", "2026-08-10"]);
   });
 });
 

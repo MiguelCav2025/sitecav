@@ -18,11 +18,20 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#172554",
+  // Sem `cover`, o env(safe-area-inset-*) do CSS vale sempre zero e as margens
+  // da área segura não fazem nada. Com `black-translucent` declarado acima, o
+  // resultado era o cabeçalho nascendo atrás do relógio e do notch.
+  viewportFit: "cover",
+  // O app é uma ferramenta de sala de aula: dar zoom no meio da chamada só
+  // atrapalha, e o layout já é feito para caber na tela do celular.
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function ProfessorLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-blue-900">
+    <div className="min-h-screen bg-blue-900 safe-x safe-bottom">
       {children}
     </div>
   );

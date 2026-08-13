@@ -215,6 +215,19 @@
   .mobile-menu-item {
     @apply block w-full px-4 py-3 text-lg text-white hover:bg-blue-800 transition-colors;
   }
+
+  /* ── Área segura do PWA do professor ──────────────────────────────────────
+     O app declara `black-translucent` na barra de status, o que faz o conteúdo
+     passar POR BAIXO do relógio e do notch. Sem estas margens o cabeçalho
+     nasce escondido atrás deles — é o que dá ao app cara de página jogada.
+     Exigem `viewportFit: "cover"`, declarado no layout de /professor.
+     O fallback 0px cobre navegador comum, onde o env() não existe. */
+  .safe-top    { padding-top:    env(safe-area-inset-top, 0px); }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .safe-x {
+    padding-left:  env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
   
   /* Utilities para espaçamentos comuns */
   .spacing-section {
