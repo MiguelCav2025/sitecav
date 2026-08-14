@@ -10,6 +10,7 @@ import {
 } from "@/lib/calendario-escolar";
 import { useSemestreVigente } from "@/hooks/useSemestreVigente";
 import { emojiDaDisciplina } from "@/lib/emoji-disciplina";
+import { conflitosDeSala, descreverConflito } from "@/lib/conflitos-grade";
 import { useConfirmacao } from "@/components/ui/confirmar";
 import RecalcularGrade from "./RecalcularGrade";
 import { Button } from "@/components/ui/button";
@@ -107,6 +108,30 @@ const badgeSem = (s: number) => {
 // Estavam duplicadas aqui e em outros três componentes.
 const moduloDaTurma = (entrada: string, semestreAtual: string | null) =>
   moduloAtual(entrada, semestreAtual) ?? 0;
+
+/**
+ * Turnos em que cada disciplina realmente acontece.
+ *
+ * A disciplina não guarda turno: quem tem turno é a turma. Duas disciplinas na
+ * mesma sala e dia só colidem se houver turma dos dois lados no mesmo turno.
+ */
+function turnosPorDisciplina(
+  disciplinas: readonly Disciplina[],
+  turmas: readonly Turma[],
+  semestreAtual: string | null,
+): Record<string, string[]> {
+  const saida: Record<string, string[]> = {};
+  for (const d of disciplinas) {
+    const turnos = new Set<string>();
+    for (const t of turmas) {
+      if (t.curso === d.curso && moduloDaTurma(t.entrada, semestreAtual) === d.modulo) {
+        turnos.add(t.turno);
+      }
+    }
+    saida[d.id] = [...turnos];
+  }
+  return saida;
+}
 
 const semestreLetivoParaTurma = semestreLetivo;
 
@@ -645,6 +670,18 @@ export default function DisciplinasManager() {
     setDisciplinas(prev => prev.map(d => d.id === id ? { ...d, emoji } : d));
   };
 
+  const turnosDe = turnosPorDisciplina(disciplinas, turmas, semestreAtual);
+  const conflitos = conflitosDeSala(disciplinas.map(d => ({
+    id: d.id,
+    nome: d.nome,
+    curso: d.curso,
+    modulo: d.modulo,
+    dia_da_semana: d.dia_da_semana,
+    sala_id: d.sala_id,
+    sala: salas.find(s => s.id === d.sala_id)?.nome ?? null,
+    turnos: turnosDe[d.id] ?? [],
+  })));
+
   // Agrupa disciplinas: curso → semestre → dia_da_semana
   const porCursoSemestre = CURSOS.reduce<Record<string, Record<number, Disciplina[]>>>((acc, curso) => {
     acc[curso] = {};
@@ -852,6 +889,31 @@ export default function DisciplinasManager() {
         <p className="text-sm text-white/50 italic">Nenhuma disciplina cadastrada.</p>
       ) : (
         <div className="space-y-8">
+          {/* Choque de sala só apareceria no dia da aula, com duas turmas na
+              porta. Hoje não há nenhum — mas isso é sorte de quem montou a
+              grade, e nada impedia o próximo de criar um. */}
+          {conflitos.length > 0 && (
+            <div className="rounded-xl border border-red-300 bg-red-50 p-4 space-y-2">
+              <p className="text-sm font-semibold text-red-800">
+                {conflitos.length === 1
+                  ? "1 choque de sala na grade"
+                  : `${conflitos.length} choques de sala na grade`}
+              </p>
+              <ul className="space-y-1 text-sm text-red-700">
+                {conflitos.map(c => (
+                  <li key={`${c.recurso}-${c.diaDaSemana}-${c.turno}`} className="flex gap-2">
+                    <span className="text-red-400">•</span>
+                    {descreverConflito(c)}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-red-600">
+                Duas turmas na mesma sala, no mesmo dia e turno. Mude a sala de uma delas
+                pelo formulário, ou o dia da semana.
+              </p>
+            </div>
+          )}
+
           {CURSOS.map(curso => {
             const temAlguma = [1, 2, 3].some(sem => porCursoSemestre[curso][sem].length > 0);
             if (!temAlguma) return null;

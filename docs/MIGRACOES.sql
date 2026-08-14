@@ -35,6 +35,9 @@
 --                   Conferido: nenhuma funcao cita mais o nome antigo, e as
 --                   consultas das quatro telas respondem.
 --
+--   Fase 17 ... [x] aplicada em 13/08/2026 (abono de falta)
+--   Fase 18 ... [x] aplicada e verificada em 13/08/2026 (motivo do feriado)
+--
 -- NAO HA MIGRACAO PENDENTE. O banco e o codigo estao alinhados.
 --
 -- COMO RODAR: um bloco de cada vez (FASE 1, depois FASE 2), conferindo o
