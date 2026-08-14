@@ -1,4 +1,5 @@
 import { avaliarModulo, type AvaliacaoDoModulo, type DesempenhoDisciplina } from "./aprovacao.ts";
+import { MODULOS_DO_CURSO } from "./calendario-escolar.ts";
 
 /**
  * Fechamento do módulo: transformar as linhas de `vw_desempenho_aluno` na
@@ -104,11 +105,27 @@ export function pendenciasDaTurma(alunos: readonly AlunoParaFechar[]): string[] 
   return [...vistas].sort((x, y) => x.localeCompare(y, "pt-BR"));
 }
 
+/** O que se grava na matrícula ao encerrar. */
+export type Desfecho = "aprovado" | "retido" | "concluido";
+
+/**
+ * Passar no último módulo não é ser aprovado — é **concluir o curso**.
+ *
+ * A diferença não é semântica: quem foi aprovado no módulo 1 ou 2 volta no
+ * semestre seguinte, e quem concluiu, não. Gravar os dois como `aprovado`
+ * torna impossível listar os formandos, e o primeiro deles aparece no fim
+ * deste semestre.
+ */
+export function desfechoDaAprovacao(modulo: number): "aprovado" | "concluido" {
+  return modulo >= MODULOS_DO_CURSO ? "concluido" : "aprovado";
+}
+
 /** A situação da matrícula que corresponde à avaliação, quando há uma. */
 export function situacaoSugerida(
   avaliacao: AvaliacaoDoModulo,
-): "aprovado" | "retido" | null {
-  if (avaliacao.situacao === "aprovado") return "aprovado";
+  modulo: number,
+): Desfecho | null {
+  if (avaliacao.situacao === "aprovado") return desfechoDaAprovacao(modulo);
   if (avaliacao.situacao === "retido") return "retido";
   return null;
 }

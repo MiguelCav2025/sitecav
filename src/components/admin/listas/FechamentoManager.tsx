@@ -2,13 +2,13 @@
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { moduloAtual, rotuloModulo } from "@/lib/calendario-escolar";
+import { moduloAtual, rotuloModulo, MODULOS_DO_CURSO } from "@/lib/calendario-escolar";
 import { useSemestreVigente } from "@/hooks/useSemestreVigente";
 import { NOTA_MINIMA, PRESENCA_MINIMA, type Situacao } from "@/lib/aprovacao";
 import { encerrarMatricula, reabrirMatricula } from "@/lib/matriculas";
 import {
   montarFechamento, resumirFechamento, pendenciasDaTurma, situacaoSugerida,
-  type AlunoParaFechar, type LinhaDesempenho, type MatriculaAberta,
+  type AlunoParaFechar, type Desfecho, type LinhaDesempenho, type MatriculaAberta,
 } from "@/lib/fechamento";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -127,11 +127,17 @@ export default function FechamentoManager() {
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  const decidir = async (a: AlunoParaFechar, situacao: "aprovado" | "retido") => {
-    const sugerida = situacaoSugerida(a.avaliacao);
+  // No último módulo, passar é CONCLUIR o curso — não "ser aprovado para o
+  // semestre que vem", que não existe. O botão muda de nome junto.
+  const ehUltimoModulo = modulo !== null && modulo >= MODULOS_DO_CURSO;
+  const desfechoPositivo: Desfecho = ehUltimoModulo ? "concluido" : "aprovado";
+
+  const decidir = async (a: AlunoParaFechar, situacao: Desfecho) => {
+    const sugerida = situacaoSugerida(a.avaliacao, modulo ?? 1);
     const contraria = sugerida !== null && sugerida !== situacao;
 
-    const rotulo = situacao === "aprovado" ? "Aprovar" : "Reter";
+    const rotulo = situacao === "retido" ? "Reter"
+      : situacao === "concluido" ? "Formar" : "Aprovar";
     const abonos = abonosPorAluno.get(a.alunoId) ?? 0;
 
     const ok = await confirmar({
@@ -164,6 +170,14 @@ export default function FechamentoManager() {
             <p className="text-amber-800">
               Ele tem <strong>{abonos} falta(s) abonada(s)</strong> que não entram na frequência
               calculada. Vale conferir no relatório antes de decidir.
+            </p>
+          )}
+
+          {situacao === "concluido" && (
+            <p className="rounded-lg border border-purple-200 bg-purple-50 p-2 text-purple-900">
+              Este é o <strong>último módulo</strong>: {a.nome.split(" ")[0]} <strong>conclui o
+              curso</strong>. Não volta no semestre que vem — sai das turmas ativas e passa a
+              constar entre os formados.
             </p>
           )}
 
@@ -278,6 +292,11 @@ export default function FechamentoManager() {
             <p className="text-sm text-gray-500">
               Fechando o <strong>{rotuloModulo(modulo).toLowerCase()}</strong> de {turma.curso} {turma.turno},
               turma que entrou em {turma.entrada}.
+              {ehUltimoModulo && (
+                <span className="ml-1 text-purple-700">
+                  É o último módulo: quem passar <strong>conclui o curso</strong>.
+                </span>
+              )}
             </p>
           )}
         </CardContent>
@@ -390,13 +409,15 @@ export default function FechamentoManager() {
                             <div className="flex gap-1">
                               <Button
                                 size="sm" variant="outline"
-                                className="h-7 text-xs text-green-700 border-green-200 hover:bg-green-50"
+                                className={`h-7 text-xs ${ehUltimoModulo
+                                  ? "text-purple-700 border-purple-200 hover:bg-purple-50"
+                                  : "text-green-700 border-green-200 hover:bg-green-50"}`}
                                 disabled={decidindo === a.matriculaId}
-                                onClick={() => decidir(a, "aprovado")}
+                                onClick={() => decidir(a, desfechoPositivo)}
                               >
                                 {decidindo === a.matriculaId
                                   ? <Loader2 className="h-3 w-3 animate-spin" />
-                                  : "Aprovar"}
+                                  : ehUltimoModulo ? "Formar" : "Aprovar"}
                               </Button>
                               <Button
                                 size="sm" variant="outline"

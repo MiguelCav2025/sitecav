@@ -5,6 +5,7 @@ import {
   resumirFechamento,
   pendenciasDaTurma,
   situacaoSugerida,
+  desfechoDaAprovacao,
   type LinhaDesempenho,
   type MatriculaAberta,
 } from "../src/lib/fechamento.ts";
@@ -142,13 +143,36 @@ describe("pendenciasDaTurma", () => {
 });
 
 describe("situacaoSugerida", () => {
-  it("traduz o resultado, e não sugere nada para indefinido", () => {
-    const [aprovado] = montarFechamento([matricula("Ana", "1")], [linha("1", "Ana", "Roteiro")]);
-    const [retido] = montarFechamento([matricula("Bia", "2")], [linha("2", "Bia", "Roteiro", { nota_professor: 2, nota_final: 2 })]);
-    const [indefinido] = montarFechamento([matricula("Caio", "3")], []);
+  const [aprovado] = montarFechamento([matricula("Ana", "1")], [linha("1", "Ana", "Roteiro")]);
+  const [retido] = montarFechamento([matricula("Bia", "2")], [linha("2", "Bia", "Roteiro", { nota_professor: 2, nota_final: 2 })]);
+  const [indefinido] = montarFechamento([matricula("Caio", "3")], []);
 
-    assert.equal(situacaoSugerida(aprovado.avaliacao), "aprovado");
-    assert.equal(situacaoSugerida(retido.avaliacao), "retido");
-    assert.equal(situacaoSugerida(indefinido.avaliacao), null);
+  it("traduz o resultado, e nao sugere nada para indefinido", () => {
+    assert.equal(situacaoSugerida(aprovado.avaliacao, 1), "aprovado");
+    assert.equal(situacaoSugerida(retido.avaliacao, 1), "retido");
+    assert.equal(situacaoSugerida(indefinido.avaliacao, 1), null);
+  });
+
+  it("passar no ULTIMO modulo e concluir o curso, nao ser aprovado", () => {
+    // Quem e aprovado no 1o ou no 2o volta no semestre seguinte. Quem conclui,
+    // nao. Gravar os dois como "aprovado" torna impossivel listar os formandos.
+    assert.equal(situacaoSugerida(aprovado.avaliacao, 3), "concluido");
+    assert.equal(situacaoSugerida(aprovado.avaliacao, 2), "aprovado");
+  });
+
+  it("reter no ultimo modulo continua sendo reter", () => {
+    assert.equal(situacaoSugerida(retido.avaliacao, 3), "retido");
+  });
+});
+
+describe("desfechoDaAprovacao", () => {
+  it("so o ultimo modulo conclui", () => {
+    assert.equal(desfechoDaAprovacao(1), "aprovado");
+    assert.equal(desfechoDaAprovacao(2), "aprovado");
+    assert.equal(desfechoDaAprovacao(3), "concluido");
+  });
+
+  it("modulo acima do ultimo tambem conclui, nao volta a ser aprovado", () => {
+    assert.equal(desfechoDaAprovacao(4), "concluido");
   });
 });
