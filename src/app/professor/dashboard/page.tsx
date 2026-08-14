@@ -16,6 +16,9 @@ import {
   salvarRascunho, lerRascunho, limparRascunho, mesclarPresencas,
 } from "@/lib/rascunho-chamada";
 import { useConfirmacao } from "@/components/ui/confirmar";
+import {
+  proximaPresenca, rotuloDaPresenca, rotuloDoTurno, type PresencaNoDia,
+} from "@/lib/aulas-do-dia";
 
 interface Turma { id: string; nome: string; turno: string; entrada: string; curso: string; }
 interface Disciplina { id: string; nome: string; emoji: string | null; }
@@ -33,7 +36,7 @@ interface Aula {
 // O banco também garante isso, via constraint.
 const MIN_CONTEUDO = 30;
 interface Aluno { id: string; nome: string; }
-interface Presenca { aluno_id: string; presente: boolean; }
+interface Presenca { aluno_id: string; presente: boolean; aulas_presentes: number | null; }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const rotuloDaTurma = (turma: Turma, semestreAtual: string | null) =>
@@ -109,7 +112,7 @@ export default function ProfessorDashboard() {
 
   // Chamada
   const [alunos, setAlunos] = useState<Aluno[]>([]);
-  const [presencas, setPresencas] = useState<Record<string, boolean>>({});
+  const [presencas, setPresencas] = useState<Record<string, PresencaNoDia>>({});
   const [salvandoPresenca, setSalvandoPresenca] = useState<string | null>(null);
   const [chamadaFinalizada, setChamadaFinalizada] = useState(false);
   const [carregandoChamada, setCarregandoChamada] = useState(false);
@@ -117,7 +120,7 @@ export default function ProfessorDashboard() {
   const [erro, setErro] = useState<string | null>(null);
   const [finalizando, setFinalizando] = useState(false);
   /** Marcações que a rede recusou e estão guardadas no aparelho. */
-  const [pendentesLocais, setPendentesLocais] = useState<Record<string, boolean>>({});
+  const [pendentesLocais, setPendentesLocais] = useState<Record<string, PresencaNoDia>>({});
   const [reenviando, setReenviando] = useState(false);
 
   useEffect(() => {
@@ -202,9 +205,16 @@ export default function ProfessorDashboard() {
     setAlunos(daTurma.map(a => ({ id: a.id, nome: a.nome })));
 
     const { data: presData } = await supabase
-      .from("presencas").select("aluno_id, presente").eq("aula_id", aula.id);
-    const mapa: Record<string, boolean> = {};
-    (presData ?? []).forEach((p: Presenca) => { mapa[p.aluno_id] = p.presente; });
+      .from("presencas")
+      .select("aluno_id, presente, aulas_presentes")
+      .eq("aula_id", aula.id);
+
+    // Registro anterior à Fase 19 não tem a contagem: ali `presente` valia o
+    // dia inteiro, e é essa a leitura fiel do que foi marcado na época.
+    const mapa: Record<string, PresencaNoDia> = {};
+    (presData ?? []).forEach((p: Presenca) => {
+      mapa[p.aluno_id] = (p.aulas_presentes ?? (p.presente ? 2 : 0)) as PresencaNoDia;
+    });
 
     // O que ficou no aparelho vence: foi digitado depois do que o servidor
     // tem, e é justamente o que não conseguiu subir.
@@ -218,15 +228,22 @@ export default function ProfessorDashboard() {
   const togglePresenca = async (alunoId: string) => {
     if (chamadaFinalizada || tela.tipo !== "chamada") return;
     const aulaId = tela.aula.id;
-    const valorAnterior = presencas[alunoId];
-    const novoValor = !valorAnterior;
+    // ausente → presente no dia → só a 1ª aula → ausente (D54)
+    const novoValor = proximaPresenca(presencas[alunoId]);
 
     setErro(null);
     setSalvandoPresenca(alunoId);
     setPresencas(prev => ({ ...prev, [alunoId]: novoValor }));
 
     const { error } = await supabase.from("presencas").upsert(
-      { aula_id: aulaId, aluno_id: alunoId, presente: novoValor },
+      {
+        aula_id: aulaId,
+        aluno_id: alunoId,
+        aulas_presentes: novoValor,
+        // `presente` continua valendo como "esteve em pelo menos uma": é o que
+        // as policies e os relatórios antigos leem.
+        presente: novoValor > 0,
+      },
       { onConflict: "aula_id,aluno_id" }
     );
 
@@ -257,13 +274,13 @@ export default function ProfessorDashboard() {
     if (fila.length === 0) return;
 
     setReenviando(true);
-    const aindaFalta: Record<string, boolean> = {};
-    for (const [alunoId, presente] of fila) {
+    const aindaFalta: Record<string, PresencaNoDia> = {};
+    for (const [alunoId, aulas] of fila) {
       const { error } = await supabase.from("presencas").upsert(
-        { aula_id: aulaId, aluno_id: alunoId, presente },
+        { aula_id: aulaId, aluno_id: alunoId, aulas_presentes: aulas, presente: aulas > 0 },
         { onConflict: "aula_id,aluno_id" },
       );
-      if (error) aindaFalta[alunoId] = presente;
+      if (error) aindaFalta[alunoId] = aulas;
     }
     setPendentesLocais(aindaFalta);
     salvarRascunho(aulaId, aindaFalta, conteudo);
@@ -302,13 +319,13 @@ export default function ProfessorDashboard() {
     // Sobe primeiro o que ficou guardado no aparelho. Fechar a chamada com
     // marcação pendente gravaria falta em quem estava presente.
     if (Object.keys(pendentesLocais).length > 0) {
-      const aindaFalta: Record<string, boolean> = {};
-      for (const [alunoId, presente] of Object.entries(pendentesLocais)) {
+      const aindaFalta: Record<string, PresencaNoDia> = {};
+      for (const [alunoId, aulas] of Object.entries(pendentesLocais)) {
         const { error } = await supabase.from("presencas").upsert(
-          { aula_id: aula.id, aluno_id: alunoId, presente },
+          { aula_id: aula.id, aluno_id: alunoId, aulas_presentes: aulas, presente: aulas > 0 },
           { onConflict: "aula_id,aluno_id" },
         );
-        if (error) aindaFalta[alunoId] = presente;
+        if (error) aindaFalta[alunoId] = aulas;
       }
       if (Object.keys(aindaFalta).length > 0) {
         setPendentesLocais(aindaFalta);
@@ -375,8 +392,9 @@ export default function ProfessorDashboard() {
   // ── Tela: Chamada ─────────────────────────────────────────────────────────────
   if (tela.tipo === "chamada") {
     const { aula } = tela;
-    const presentes = Object.values(presencas).filter(Boolean).length;
-    const ausentes = alunos.length - presentes;
+    const presentes = Object.values(presencas).filter(v => v === 2).length;
+    const parciais = Object.values(presencas).filter(v => v === 1).length;
+    const ausentes = alunos.length - presentes - parciais;
 
     return (
       <div className="min-h-screen bg-blue-900 flex flex-col">
@@ -445,23 +463,37 @@ export default function ProfessorDashboard() {
           ) : (
             <div className="space-y-2">
               {alunos.map(aluno => {
-                const presente = presencas[aluno.id] ?? false;
+                const marcado = presencas[aluno.id] ?? 0;
                 const salvando = salvandoPresenca === aluno.id;
+                // Um toque marca o dia inteiro — é o que acontece com quase
+                // todo aluno. O segundo toque é para quem saiu no intervalo.
+                const fundo = marcado === 2
+                  ? "bg-green-500 hover:bg-green-600 text-white shadow-lg"
+                  : marcado === 1
+                    ? "bg-amber-500 hover:bg-amber-600 text-white shadow-lg"
+                    : "bg-white/10 hover:bg-white/20 text-white border border-white/20";
                 return (
                   <button
                     key={aluno.id}
                     onClick={() => togglePresenca(aluno.id)}
                     disabled={chamadaFinalizada || salvando}
                     className={`w-full flex items-center justify-between p-4 rounded-xl transition-all text-left
-                      ${presente ? "bg-green-500 hover:bg-green-600 text-white shadow-lg" : "bg-white/10 hover:bg-white/20 text-white border border-white/20"}
+                      ${fundo}
                       ${chamadaFinalizada ? "cursor-default" : "cursor-pointer active:scale-[0.98]"}`}
                   >
-                    <span className="font-medium">{aluno.nome}</span>
+                    <span className="min-w-0">
+                      <span className="block font-medium truncate">{aluno.nome}</span>
+                      <span className={`block text-xs ${marcado === 0 ? "text-white/40" : "text-white/80"}`}>
+                        {rotuloDaPresenca(marcado)}
+                      </span>
+                    </span>
                     {salvando
                       ? <Loader2 className="h-5 w-5 animate-spin shrink-0" />
-                      : presente
+                      : marcado === 2
                         ? <CheckCircle className="h-6 w-6 shrink-0" />
-                        : <XCircle className="h-6 w-6 text-white/30 shrink-0" />
+                        : marcado === 1
+                          ? <span className="shrink-0 rounded-full bg-white/25 px-2 py-0.5 text-xs font-bold">1/2</span>
+                          : <XCircle className="h-6 w-6 text-white/30 shrink-0" />
                     }
                   </button>
                 );

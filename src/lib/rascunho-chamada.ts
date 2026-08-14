@@ -1,3 +1,5 @@
+import type { PresencaNoDia } from "./aulas-do-dia.ts";
+
 /**
  * O rascunho da chamada, guardado no próprio aparelho.
  *
@@ -16,7 +18,7 @@
 export interface RascunhoDaChamada {
   aulaId: string;
   /** aluno_id → presente. Só o que ainda não foi confirmado pelo servidor. */
-  presencas: Record<string, boolean>;
+  presencas: Record<string, PresencaNoDia>;
   conteudo: string;
   salvoEm: number;
 }
@@ -39,7 +41,7 @@ function comStorage<T>(acao: (s: Storage) => T, padrao: T): T {
 
 export function salvarRascunho(
   aulaId: string,
-  presencas: Record<string, boolean>,
+  presencas: Record<string, PresencaNoDia>,
   conteudo: string,
 ): void {
   comStorage(s => {
@@ -81,9 +83,9 @@ export function limparRascunho(aulaId: string): void {
  * servidor tinha, e é justamente o que não conseguiu subir.
  */
 export function mesclarPresencas(
-  doServidor: Readonly<Record<string, boolean>>,
-  rascunho: Readonly<Record<string, boolean>> | undefined,
-): Record<string, boolean> {
+  doServidor: Readonly<Record<string, PresencaNoDia>>,
+  rascunho: Readonly<Record<string, PresencaNoDia>> | undefined,
+): Record<string, PresencaNoDia> {
   return { ...doServidor, ...(rascunho ?? {}) };
 }
 
