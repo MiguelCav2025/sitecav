@@ -430,20 +430,24 @@ function DisciplinaCard({
       {/* `total_aulas` guarda ENCONTROS; o Guia do CAV conta aulas, e cada dia
           vale duas. Mostrar só um dos dois números já confundiu — a grade dizia
           17 e o Guia, 34. */}
-      <p className="text-xs text-gray-400 mb-1 truncate" title={sala ?? undefined}>
+      {/* O card é um bloco colorido, e cinza-claro sobre cor tem menos
+          contraste do que sobre branco — o ícone do professor sumia. Sala e
+          professor são as duas perguntas que se faz olhando a grade: precisam
+          ser legíveis de relance, não decifráveis. */}
+      <p className="text-xs text-gray-600 mb-1 truncate" title={sala ?? undefined}>
         {disciplina.total_aulas} dias · {disciplina.total_aulas * AULAS_POR_ENCONTRO} aulas
         {sala
-          ? <> · <span className="text-gray-500">{sala}</span></>
-          : <> · <span className="text-amber-600">sem sala</span></>}
+          ? <> · <span className="font-medium text-gray-700">{sala}</span></>
+          : <> · <span className="font-medium text-amber-700">sem sala</span></>}
       </p>
-      <p className="text-xs mb-2 truncate flex items-center gap-1" title={professor?.nome}>
-        <UserCheck className="h-3 w-3 shrink-0 text-gray-300" />
+      <p className="text-xs mb-2 truncate flex items-center gap-1.5" title={professor?.nome}>
+        <UserCheck className="h-3.5 w-3.5 shrink-0 text-gray-500" />
         {professor
-          ? <span className="text-gray-500">
+          ? <span className="font-medium text-gray-700">
               {professor.nome}
-              {professor.varios && <span className="text-gray-400"> e outro</span>}
+              {professor.varios && <span className="font-normal text-gray-500"> e outro</span>}
             </span>
-          : <span className="text-amber-600">sem professor</span>}
+          : <span className="font-medium text-amber-700">sem professor</span>}
       </p>
       <div className="flex items-center gap-1 justify-between">
         <button
