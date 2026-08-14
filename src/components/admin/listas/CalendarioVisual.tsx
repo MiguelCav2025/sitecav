@@ -94,31 +94,40 @@ export default function CalendarioVisual({
     return { ano, mes, celulas };
   });
 
+  // O dia letivo é o que se quer ler; fim de semana e fora do período são
+  // contexto. Mas `gray-200` sobre branco era quase invisível — apagar demais
+  // faz o mês perder a forma, e a forma é o que denuncia um feriado no dia
+  // errado. Sobre o fundo cinza do mês, os dias úteis ganham branco: agora há
+  // três níveis de leitura em vez de dois.
   const CORES: Record<string, string> = {
-    letivo:  "bg-green-100 text-green-800",
-    feriado: "bg-red-100 text-red-700 font-semibold",
-    fds:     "text-gray-300",
-    fora:    "text-gray-200",
+    letivo:  "bg-green-200 text-green-900 font-medium",
+    feriado: "bg-red-200 text-red-900 font-semibold",
+    fds:     "bg-white text-gray-400",
+    fora:    "text-gray-300",
   };
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-3 rounded bg-green-100 border border-green-200" />
-          {letivos} dias de aula
+      <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded bg-green-200" />
+          <strong className="text-gray-800">{letivos}</strong> dias de aula
+          <span className="text-gray-400">· {letivos * 2} aulas</span>
         </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-3 rounded bg-red-100 border border-red-200" />
-          {feriados.length} sem aula
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded bg-red-200" />
+          <strong className="text-gray-800">{feriados.length}</strong> sem aula
         </span>
         <span className="text-gray-400">Passe o mouse num dia vermelho para ver o motivo.</span>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {meses.map(({ ano, mes, celulas }) => (
-          <div key={`${ano}-${mes}`} className="rounded-lg border border-gray-200 p-2">
-            <p className="mb-1 text-center text-xs font-semibold capitalize text-gray-600">
+          // Fundo levemente cinza: o card do semestre já é branco, e caixa
+          // branca sobre branca só se separa pela borda — que some. O mês
+          // precisa ler como um bloco, não como um vazio com contorno.
+          <div key={`${ano}-${mes}`} className="rounded-lg border border-gray-200 bg-gray-50 p-2">
+            <p className="mb-1.5 text-center text-xs font-semibold capitalize text-gray-700">
               {MESES[mes - 1]} <span className="font-normal text-gray-400">{ano}</span>
             </p>
 
@@ -128,7 +137,11 @@ export default function CalendarioVisual({
               <thead>
                 <tr>
                   {DIAS_CABECALHO.map((d, i) => (
-                    <th key={i} className="pb-1 text-center text-[10px] font-normal text-gray-400">
+                    <th
+                      key={i}
+                      className={`pb-1 text-center text-[10px] font-semibold ${
+                        i === 0 || i === 6 ? "text-gray-300" : "text-gray-500"}`}
+                    >
                       {d}
                     </th>
                   ))}
