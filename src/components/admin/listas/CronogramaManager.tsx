@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 import { contarDiasLetivos } from "@/lib/calendario-escolar";
 import { useConfirmacao } from "@/components/ui/confirmar";
 import { conciliarFeriados, type TipoDeFeriado } from "@/lib/feriados";
+import { semestresSugeridos, type SemestreSugerido } from "@/lib/semestres-sugeridos";
+import CalendarioVisual from "./CalendarioVisual";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -109,6 +111,62 @@ export default function CronogramaManager() {
     fetch();
   };
 
+  /**
+   * Cria de uma vez os semestres que ainda não existem, já com os feriados.
+   *
+   * As datas são sugestão — o CAV decide quando começa. O que o sistema faz
+   * bem é lembrar dos feriados e da forma do ano letivo, que é justamente o
+   * que se esquece quando se faz isso uma vez a cada seis meses.
+   */
+  const handleCriarProximos = async () => {
+    const hoje = new Date().toISOString().slice(0, 10);
+    const propostos = semestresSugeridos(hoje, 4, cronogramas.map(c => c.semestre));
+
+    if (propostos.length === 0) {
+      return showMsg("ok", "Os próximos semestres já estão cadastrados.");
+    }
+
+    const ok = await confirmar({
+      titulo: `Criar ${propostos.length} semestres?`,
+      rotuloConfirmar: "Criar semestres",
+      descricao: (
+        <>
+          <p>Serão criados com os feriados nacionais e o aniversário de São Bernardo já marcados:</p>
+          <ul className="space-y-0.5 rounded-lg bg-gray-50 p-2">
+            {propostos.map(s => (
+              <li key={s.semestre}>
+                <strong>{s.semestre}</strong> — {formatarData(s.data_inicio)} a {formatarData(s.data_fim)}
+                <span className="text-gray-400"> · {s.feriadosConhecidos} feriados</span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-amber-700">
+            <strong>Confira as datas depois.</strong> São uma estimativa pela forma dos semestres
+            anteriores — quem decide o início e o fim é a coordenação. Emendas e recessos da
+            escola também precisam ser adicionados à mão.
+          </p>
+          <p className="text-gray-500">Semestres já cadastrados não são tocados.</p>
+        </>
+      ),
+    });
+    if (!ok) return;
+
+    setSalvando(true);
+    const { error } = await supabase.from("cronogramas").insert(
+      propostos.map((s: SemestreSugerido) => ({
+        semestre: s.semestre,
+        data_inicio: s.data_inicio,
+        data_fim: s.data_fim,
+        feriados: s.feriados,
+      })),
+    );
+    setSalvando(false);
+
+    if (error) return showMsg("erro", `Erro ao criar: ${error.message}`);
+    showMsg("ok", `${propostos.length} semestres criados. Confira as datas de cada um.`);
+    fetch();
+  };
+
   const handleAdicionarFeriado = async (cron: Cronograma) => {
     const val = feriadoInput[cron.id]?.trim();
     if (!val) return;
@@ -171,6 +229,20 @@ export default function CronogramaManager() {
           <p>Cadastre o período letivo de cada semestre — início, fim e os dias em que não há aula. Ao criar uma disciplina com <strong>dia da semana definido</strong>, o sistema usa este calendário para preencher as datas de cada aula e saber quantas são.</p>
           <p>Os feriados nacionais e o aniversário de São Bernardo aparecem <strong>sugeridos</strong>, já calculados para o período. Quem confirma é você: incluir um dia aqui tira uma aula da grade. Datas da escola — emenda, recesso, evento — você adiciona à mão.</p>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-blue-200 bg-white p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+        <div>
+          <p className="text-sm font-semibold text-gray-800">Adiantar os próximos semestres</p>
+          <p className="text-sm text-gray-600">
+            Cria os quatro próximos — dois anos — com os feriados já marcados. As datas vêm
+            estimadas pela forma dos semestres anteriores; você confere e ajusta.
+          </p>
+        </div>
+        <Button onClick={handleCriarProximos} disabled={salvando} variant="outline" className="shrink-0 text-gray-700">
+          {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Calendar className="h-4 w-4 mr-2" />}
+          Criar próximos semestres
+        </Button>
       </div>
 
       {/* Accordion novo cronograma */}
@@ -332,6 +404,17 @@ export default function CronogramaManager() {
                         </div>
                       );
                     })()}
+
+                    {/* O semestre desenhado. Um feriado no dia errado salta aos
+                        olhos aqui, coisa que numa lista de datas não acontece. */}
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-gray-500">O semestre no calendário</p>
+                      <CalendarioVisual
+                        inicio={editDatas[cron.id]?.inicio ?? cron.data_inicio}
+                        fim={editDatas[cron.id]?.fim ?? cron.data_fim}
+                        feriados={cron.feriados}
+                      />
+                    </div>
 
                     {/* Feriados */}
                     {(() => {
