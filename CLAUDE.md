@@ -47,6 +47,26 @@ decisões (D*), dúvidas em aberto (N*) e o registro de cada fase concluída.
 - A service_role key só existe em código de servidor (`src/lib/supabase/admin.ts`).
   Nunca importar em componente client.
 
+## Armadilha do Tailwind: classe nova some do CSS
+
+O Tailwind 4 faz varredura incremental e **não repercorre arquivo já visto**
+quando uma classe nova aparece nele. A classe fica no código, some do CSS
+gerado, e o elemento renderiza **sem cor** — sem erro de build, sem aviso.
+
+Em um dia isso escondeu um chip inteiro (branco sobre branco), apagou os dias
+de aula do calendário e derrubou um `grid-cols-7`. Some conteúdo em vez de
+quebrar, que é o pior modo de falhar.
+
+Como confirmar, antes de culpar o CSS:
+
+```bash
+grep -c "bg-green-200" .next/static/css/*.css   # 0 = não foi gerada
+```
+
+Como corrigir: apagar `.next` e rebuildar. Na Vercel, *Redeploy* com a opção de
+cache desmarcada. E ao ver cor faltando numa tela, **suspeite disto antes de
+reescrever o componente**.
+
 ## Armadilha conhecida do ambiente
 
 A API de **listagem** do Supabase Auth (`listUsers`) responde **500** neste

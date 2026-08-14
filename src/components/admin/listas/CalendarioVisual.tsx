@@ -99,13 +99,13 @@ export default function CalendarioVisual({
   // faz o mês perder a forma, e a forma é o que denuncia um feriado no dia
   // errado. Sobre o fundo cinza do mês, os dias úteis ganham branco: agora há
   // três níveis de leitura em vez de dois.
-  // SÓ tonalidades já usadas em outros lugares do projeto. `bg-green-200` e
-  // `bg-red-200` não são geradas aqui — o mesmo defeito que fez o chip laranja
-  // sumir. Ao usá-las, os dias de aula desapareceram e sobrou o calendário
-  // vazio. O contraste vem do fundo cinza do mês, não de tons mais fortes.
+  // Três níveis de leitura sobre o cinza do mês: o dia de aula em verde, o
+  // feriado em vermelho com borda, e o fim de semana em branco — contexto, não
+  // informação. Antes o verde e o cinza tinham peso parecido e o feriado não
+  // saltava, que é justamente o que se vem conferir aqui.
   const CORES: Record<string, string> = {
     letivo:  "bg-green-100 text-green-800 font-medium",
-    feriado: "bg-red-100 text-red-700 font-semibold",
+    feriado: "bg-red-100 text-red-800 font-bold ring-1 ring-red-300",
     fds:     "bg-white text-gray-400",
     fora:    "text-gray-300",
   };
