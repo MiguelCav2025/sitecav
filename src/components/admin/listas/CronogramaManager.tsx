@@ -211,11 +211,21 @@ export default function CronogramaManager() {
       : `${datas.length} feriados adicionados.`);
   };
 
-  const CORES_POR_TIPO: Record<TipoDeFeriado, string> = {
-    nacional:    "bg-red-50 border-red-200 text-red-700",
-    municipal:   "bg-orange-50 border-orange-200 text-orange-700",
-    facultativo: "bg-amber-50 border-amber-200 text-amber-800",
+  /**
+   * O texto do chip é sempre escuro, e o tipo aparece no fundo e no ponto.
+   *
+   * Antes cada tipo trazia a própria cor de texto, e `text-orange-700` não
+   * resolveu — o chip do aniversário da cidade saiu branco sobre branco e
+   * simplesmente sumiu da lista, embora o dia estivesse marcado no calendário.
+   * Uma cor de texto só, que se sabe legível, tira a classe de fonte do
+   * caminho crítico: no pior caso erra o tom do fundo, nunca some.
+   */
+  const CORES_POR_TIPO: Record<TipoDeFeriado, { chip: string; ponto: string }> = {
+    nacional:    { chip: "bg-red-50 border-red-200",       ponto: "bg-red-500" },
+    municipal:   { chip: "bg-orange-50 border-orange-200", ponto: "bg-orange-500" },
+    facultativo: { chip: "bg-amber-50 border-amber-200",   ponto: "bg-amber-500" },
   };
+  const COR_PERSONALIZADA = { chip: "bg-gray-50 border-gray-200", ponto: "bg-gray-400" };
 
   return (
     <div className="space-y-6">
@@ -498,12 +508,12 @@ export default function CronogramaManager() {
                                 const ehPersonalizado = personalizados.includes(data);
                                 const cor = conhecido
                                   ? CORES_POR_TIPO[conhecido.tipo]
-                                  : "bg-gray-50 border-gray-200 text-gray-600";
+                                  : COR_PERSONALIZADA;
                                 const nome = conhecido?.nome ?? "Data da escola";
                                 return (
                                   <span
                                     key={data}
-                                    className={`flex items-center gap-1.5 border text-xs px-2 py-1 rounded-full ${cor}`}
+                                    className={`flex items-center gap-1.5 border text-xs px-2 py-1 rounded-full text-gray-700 ${cor.chip}`}
                                     title={ehPersonalizado
                                       ? "Data da escola — nenhum calendário oficial a conhece"
                                       : nome}
@@ -513,7 +523,7 @@ export default function CronogramaManager() {
                                         "Aniversário de São Bernardo do Campo" sozinho
                                         ocupava mais que três datas. Agora o tipo vira
                                         um ponto colorido e o nome fica no toque. */}
-                                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" />
+                                    <span className={`h-2 w-2 shrink-0 rounded-full ${cor.ponto}`} />
                                     <span className="whitespace-nowrap">{formatarData(data)}</span>
                                     <button
                                       onClick={() => handleRemoverFeriado(cron, data)}
