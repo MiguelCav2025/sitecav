@@ -170,6 +170,15 @@ export default function ProfessorDashboard() {
   const aulasDaTurma = (disciplinaId: string, turmaId: string) =>
     todasAulas.filter(a => a.disciplina?.id === disciplinaId && a.turma.id === turmaId);
 
+  /**
+   * Aulas que já aconteceram e ele não fechou. Da mais antiga para a mais
+   * recente: é a de duas semanas atrás que ninguém lembra mais o que foi dado.
+   */
+  const hoje = new Date().toISOString().slice(0, 10);
+  const atrasadas = todasAulas
+    .filter(a => !a.chamada_finalizada && a.data_aula !== null && a.data_aula <= hoje)
+    .sort((x, y) => (x.data_aula ?? "").localeCompare(y.data_aula ?? ""));
+
   // ── Abrir chamada ─────────────────────────────────────────────────────────────
   const abrirChamada = async (aula: Aula) => {
     // D22 — aula fechada é definitiva e não se abre mais.
@@ -576,6 +585,35 @@ export default function ProfessorDashboard() {
         onSair={handleSair}
       />
       <div className="flex-1 px-4 py-6 space-y-3 max-w-lg mx-auto w-full">
+        {/* O que ele deve, antes de tudo. A coordenação já vê isso nos
+            relatórios, mas quem faz a chamada é ele — e sem este aviso teria
+            que abrir disciplina por disciplina para descobrir o que ficou. */}
+        {atrasadas.length > 0 && (
+          <button
+            onClick={() => abrirChamada(atrasadas[0])}
+            className="w-full rounded-2xl bg-amber-500 p-4 text-left text-white shadow-sm transition-all active:scale-[0.98]"
+          >
+            <div className="flex items-center gap-3">
+              <ClipboardList className="h-8 w-8 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold">
+                  {atrasadas.length === 1
+                    ? "1 chamada em atraso"
+                    : `${atrasadas.length} chamadas em atraso`}
+                </p>
+                <p className="text-sm text-amber-50 truncate">
+                  A mais antiga: {atrasadas[0].disciplina?.nome} · aula {atrasadas[0].numero} ·{" "}
+                  {formatarData(atrasadas[0].data_aula)}
+                </p>
+              </div>
+              <ChevronRight className="h-5 w-5 shrink-0 opacity-80" />
+            </div>
+            <p className="mt-2 text-xs text-amber-50">
+              Toque para fazer esta. O diário de uma aula antiga é o mais difícil de lembrar.
+            </p>
+          </button>
+        )}
+
         {disciplinas.length === 0 ? (
           <div className="bg-white rounded-2xl p-8 text-center text-gray-400 mt-8 shadow-sm">
             <GraduationCap className="h-10 w-10 mx-auto mb-3 opacity-40" />
@@ -588,6 +626,7 @@ export default function ProfessorDashboard() {
             const feitas = todasAulasDaDisc.filter(a => a.chamada_finalizada).length;
             const turmas = turmasDaDisciplina(disc.id);
             const pct = todasAulasDaDisc.length ? Math.round((feitas / todasAulasDaDisc.length) * 100) : 0;
+            const atrasadasDaDisc = atrasadas.filter(a => a.disciplina?.id === disc.id).length;
             return (
               <button
                 key={disc.id}
@@ -605,6 +644,11 @@ export default function ProfessorDashboard() {
                   <p className="text-gray-900 font-semibold truncate">{disc.nome}</p>
                   <p className="text-gray-400 text-xs mt-0.5">
                     {turmas.length} turma{turmas.length !== 1 ? "s" : ""}
+                    {atrasadasDaDisc > 0 && (
+                      <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-800">
+                        {atrasadasDaDisc} em atraso
+                      </span>
+                    )}
                   </p>
                   <div className="mt-2 flex items-center gap-2">
                     <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
