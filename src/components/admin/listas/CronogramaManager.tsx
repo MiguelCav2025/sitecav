@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { contarDiasLetivos } from "@/lib/calendario-escolar";
 import { useConfirmacao } from "@/components/ui/confirmar";
-import { conciliarFeriados, type TipoDeFeriado } from "@/lib/feriados";
+import { conciliarFeriados, feriadosNoPeriodo, type TipoDeFeriado } from "@/lib/feriados";
 import { semestresSugeridos, type SemestreSugerido } from "@/lib/semestres-sugeridos";
 import CalendarioVisual from "./CalendarioVisual";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,8 @@ interface Cronograma {
   data_inicio: string;
   data_fim: string;
   feriados: string[];
+  /** Motivo por data, só do que nenhum calendário oficial conhece (D53). */
+  motivos_feriados: Record<string, string>;
 }
 
 const DIAS_SEMANA = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -47,6 +49,7 @@ export default function CronogramaManager() {
   const [form, setForm] = useState({ semestre: "", data_inicio: "", data_fim: "" });
   // Feriados em edição por cronograma
   const [feriadoInput, setFeriadoInput] = useState<Record<string, string>>({});
+  const [motivoInput, setMotivoInput] = useState<Record<string, string>>({});
   // Edição inline de datas por cronograma
   const [editDatas, setEditDatas] = useState<Record<string, { inicio: string; fim: string }>>({});
 
@@ -83,6 +86,7 @@ export default function CronogramaManager() {
       data_inicio: form.data_inicio,
       data_fim: form.data_fim,
       feriados: [],
+      motivos_feriados: {},
     }]);
     if (error) showMsg("erro", "Erro ao salvar cronograma.");
     else {
@@ -172,10 +176,29 @@ export default function CronogramaManager() {
     if (!val) return;
     if (val < cron.data_inicio || val > cron.data_fim)
       return showMsg("erro", "Data fora do período do cronograma.");
+    if (cron.feriados.includes(val))
+      return showMsg("erro", "Este dia já está marcado.");
+
     const novosFeriados = [...cron.feriados, val].sort();
-    await supabase.from("cronogramas").update({ feriados: novosFeriados }).eq("id", cron.id);
-    setCronogramas(prev => prev.map(c => c.id === cron.id ? { ...c, feriados: novosFeriados } : c));
+
+    // O motivo só é guardado para o que nenhum calendário oficial conhece.
+    // Feriado nacional tem o nome calculado — gravá-lo duplicaria a verdade.
+    const conhecido = feriadosNoPeriodo(cron.data_inicio, cron.data_fim)
+      .find(f => f.data === val);
+    const motivo = motivoInput[cron.id]?.trim();
+    const novosMotivos = conhecido || !motivo
+      ? cron.motivos_feriados
+      : { ...cron.motivos_feriados, [val]: motivo };
+
+    const { error } = await supabase.from("cronogramas")
+      .update({ feriados: novosFeriados, motivos_feriados: novosMotivos })
+      .eq("id", cron.id);
+    if (error) return showMsg("erro", `Erro ao salvar: ${error.message}`);
+
+    setCronogramas(prev => prev.map(c =>
+      c.id === cron.id ? { ...c, feriados: novosFeriados, motivos_feriados: novosMotivos } : c));
     setFeriadoInput(prev => ({ ...prev, [cron.id]: "" }));
+    setMotivoInput(prev => ({ ...prev, [cron.id]: "" }));
   };
 
   const handleSalvarDatas = async (cronId: string) => {
@@ -479,7 +502,7 @@ export default function CronogramaManager() {
 
                           {/* Data que nenhuma lista conhece: emenda, recesso,
                               evento da escola. Só a coordenação sabe. */}
-                          <div className="flex gap-2">
+                          <div className="flex flex-wrap gap-2">
                             <input
                               type="date"
                               className="h-8 text-xs text-gray-800 border border-gray-300 rounded-lg px-2 w-44 focus:outline-none focus:border-blue-500"
@@ -488,10 +511,26 @@ export default function CronogramaManager() {
                               value={feriadoInput[cron.id] ?? ""}
                               onChange={e => setFeriadoInput(prev => ({ ...prev, [cron.id]: e.target.value }))}
                             />
+                            {/* Sem isto, uma emenda vira "Data da escola" para
+                                sempre — e daqui a um ano ninguém lembra se foi
+                                emenda do aniversário, formatura ou dedetização. */}
+                            <input
+                              type="text"
+                              maxLength={60}
+                              placeholder="Motivo (ex.: emenda do aniversário)"
+                              className="h-8 flex-1 min-w-56 text-xs text-gray-800 border border-gray-300 rounded-lg px-2 focus:outline-none focus:border-blue-500"
+                              value={motivoInput[cron.id] ?? ""}
+                              onChange={e => setMotivoInput(prev => ({ ...prev, [cron.id]: e.target.value }))}
+                              onKeyDown={e => { if (e.key === "Enter") handleAdicionarFeriado(cron); }}
+                            />
                             <Button size="sm" variant="outline" className="h-8 text-xs text-gray-700" onClick={() => handleAdicionarFeriado(cron)}>
                               + Adicionar
                             </Button>
                           </div>
+                          <p className="text-xs text-gray-400">
+                            O motivo só é preciso para o que o sistema não conhece. Feriado
+                            nacional ou da cidade já vem com o nome.
+                          </p>
 
                           {cron.feriados.length === 0 ? (
                             <p className="text-xs text-gray-400 italic">Nenhum feriado cadastrado.</p>
@@ -509,13 +548,15 @@ export default function CronogramaManager() {
                                 const cor = conhecido
                                   ? CORES_POR_TIPO[conhecido.tipo]
                                   : COR_PERSONALIZADA;
-                                const nome = conhecido?.nome ?? "Data da escola";
+                                const nome = conhecido?.nome
+                                  ?? cron.motivos_feriados?.[data]
+                                  ?? "Data da escola";
                                 return (
                                   <span
                                     key={data}
                                     className={`flex items-center gap-1.5 border text-xs px-2 py-1 rounded-full text-gray-700 ${cor.chip}`}
-                                    title={ehPersonalizado
-                                      ? "Data da escola — nenhum calendário oficial a conhece"
+                                    title={ehPersonalizado && !cron.motivos_feriados?.[data]
+                                      ? "Data da escola — sem motivo registrado. Remova e cadastre de novo para anotar o porquê."
                                       : nome}
                                   >
                                     {/* O nome inteiro virava um chip largo demais, que

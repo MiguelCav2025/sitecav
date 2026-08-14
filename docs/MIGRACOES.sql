@@ -2169,6 +2169,41 @@ create policy abonos_admin on public.abonos
 
 
 -- ============================================================================
+-- FASE 18 — por que nao houve aula naquele dia  (D53)
+-- ----------------------------------------------------------------------------
+-- `cronogramas.feriados` guarda so a data. O nome ("Independencia",
+-- "Aniversario de Sao Bernardo") e CALCULADO pelo sistema, nunca gravado — o
+-- que funciona para feriado oficial e falha justamente para o que so a escola
+-- sabe: emenda, recesso, evento, ponto facultativo concedido.
+--
+-- Hoje o coordenador marca 21/08 e o sistema mostra "Data da escola". Daqui a
+-- um ano ninguem lembra se foi emenda do aniversario, formatura ou dedetizacao.
+--
+-- Coluna NOVA em vez de mudar `feriados` para jsonb: o array de datas e lido
+-- pela contagem de aulas, pela geracao de grade e pelo script de importacao.
+-- Trocar o tipo mexeria nos tres; anexar o motivo nao mexe em nenhum.
+-- ============================================================================
+
+alter table public.cronogramas
+  add column if not exists motivos_feriados jsonb not null default '{}'::jsonb;
+
+comment on column public.cronogramas.motivos_feriados is
+  'Motivo por data, so para o que nenhum calendario oficial conhece. Ex.: {"2026-08-21": "Emenda do aniversario da cidade"}. Feriado oficial tem o nome calculado (D53).';
+
+-- 18.1 — o que ja sabemos do 2026/2, para a unica emenda nao ficar orfa
+update public.cronogramas
+   set motivos_feriados = motivos_feriados || '{"2026-08-21": "Emenda do aniversário da cidade"}'::jsonb
+ where semestre = '2026/2'
+   and feriados @> array['2026-08-21']::text[];
+
+-- 18.2 — conferencia
+-- select semestre, motivos_feriados from public.cronogramas order by data_inicio desc;
+
+-- ROLLBACK
+--   alter table public.cronogramas drop column if exists motivos_feriados;
+
+
+-- ============================================================================
 -- LIMPEZAS — rodar SEPARADO das fases funcionais
 -- ----------------------------------------------------------------------------
 -- Rodar cada comando ISOLADAMENTE. Se um falhar, ele nao derruba os outros.
