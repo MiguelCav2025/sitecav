@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useConfirmacao } from "@/components/ui/confirmar";
+import { procurarParecidos, repetidosNaLista } from "@/lib/duplicados";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Plus, Trash2, Users, Loader2, CheckCircle, AlertCircle, Info, GraduationCap, Download, X, ChevronDown, ChevronUp } from "lucide-react";
@@ -124,6 +125,62 @@ function AlunosModal({ turma, onClose }: { turma: Turma; onClose: () => void }) 
   const handleSalvarTodos = async () => {
     const validas = linhas.filter(l => l.nome.trim());
     if (validas.length === 0) return showMsg("erro", "Preencha ao menos um nome.");
+
+    // Duas pessoas com o mesmo nome viram duas frequências separadas, e o
+    // professor vê o nome repetido na chamada sem saber qual marcar. O sistema
+    // avisa; quem decide é o coordenador, porque homônimo existe de verdade.
+    const repetidos = repetidosNaLista(validas.map(l => l.nome));
+    if (repetidos.length > 0) {
+      const ok = await confirmar({
+        titulo: "O mesmo nome aparece duas vezes na lista",
+        perigo: true,
+        rotuloConfirmar: "Cadastrar mesmo assim",
+        descricao: (
+          <>
+            <p>Repetido nesta leva: <strong>{repetidos.join(", ")}</strong>.</p>
+            <p>Cada linha vira uma pessoa diferente, com frequência e notas próprias.</p>
+          </>
+        ),
+      });
+      if (!ok) return;
+    }
+
+    const { data: jaCadastrados } = await supabase.from("alunos").select("id, nome");
+    const colisoes = validas
+      .map(l => ({ nome: l.nome.trim(), achados: procurarParecidos(l.nome, (jaCadastrados ?? []) as { id: string; nome: string }[]) }))
+      .filter(c => c.achados.length > 0);
+
+    if (colisoes.length > 0) {
+      const ok = await confirmar({
+        titulo: colisoes.length === 1 ? "Já existe alguém com este nome" : "Já existem alunos com estes nomes",
+        perigo: true,
+        rotuloConfirmar: "Cadastrar como pessoa nova",
+        descricao: (
+          <>
+            <ul className="space-y-1 rounded-lg bg-gray-50 p-2">
+              {colisoes.map(c => (
+                <li key={c.nome}>
+                  <strong>{c.nome}</strong>
+                  <span className="text-gray-500">
+                    {" "}— já cadastrado como {c.achados.map(a => a.candidato.nome).join(", ")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p>
+              Se for a <strong>mesma pessoa</strong>, cancele: ela já existe, e o certo é
+              matriculá-la nesta turma em vez de criar outra ficha.
+            </p>
+            <p className="text-gray-500">
+              Se forem homônimos mesmo, siga — mas vale escrever o nome completo dos dois,
+              senão o professor não distingue um do outro na chamada.
+            </p>
+          </>
+        ),
+      });
+      if (!ok) return;
+    }
+
     setSalvando(true);
 
     // Duas etapas: a pessoa e o vínculo dela com a turma. O aluno existe por
