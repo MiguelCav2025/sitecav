@@ -205,6 +205,77 @@ export function montarDiario(aulas: readonly AulaFechada[]): LinhaDoDiario[] {
     );
 }
 
+export interface RiscoDeFrequencia {
+  alunoId: string;
+  aluno: string;
+  disciplinaId: string;
+  disciplina: string;
+  aulasDadas: number;
+  aulasPrevistas: number;
+  presencas: number;
+  /** O melhor cenário: vindo a todas as aulas que ainda faltam. */
+  melhorPercentualPossivel: number;
+  /** Quantas das restantes ele ainda pode perder e mesmo assim fechar em 70%. */
+  faltasQueAindaCabem: number;
+  /** Nem vindo a todas as restantes ele chega ao mínimo. */
+  jaNaoAlcanca: boolean;
+}
+
+/**
+ * Quem já não alcança os 70%, e quem está por um fio.
+ *
+ * O sistema só dizia que o aluno rodou por falta no fechamento — quando não há
+ * mais o que fazer. Sabendo em outubro que alguém **não chega ao mínimo nem
+ * vindo a todas as aulas restantes**, a coordenação ainda pode conversar,
+ * entender o motivo, orientar. Depois de dezembro, só resta comunicar.
+ *
+ * `aulasPrevistas` é o total planejado da disciplina, não o já dado: é a
+ * diferença entre os dois que diz quanto ainda dá para recuperar.
+ */
+export function riscoDeFrequencia(
+  linhas: readonly LinhaFrequencia[],
+  aulasPrevistasPorDisciplina: Readonly<Record<string, number>>,
+): RiscoDeFrequencia[] {
+  const saida: RiscoDeFrequencia[] = [];
+
+  for (const l of linhas) {
+    const previstas = aulasPrevistasPorDisciplina[l.disciplinaId] ?? l.aulasDadas;
+    // Grade encolhida depois das aulas dadas: não há restantes negativas.
+    const restantes = Math.max(0, previstas - l.aulasDadas);
+    if (previstas === 0) continue;
+
+    const melhor = arredondar(((l.presencas + restantes) * 100) / previstas);
+    // Quantas faltas ainda cabem: quantas presenças faltam para o mínimo.
+    const presencasNecessarias = Math.ceil((PRESENCA_MINIMA * previstas) / 100);
+    const faltasQueAindaCabem = Math.max(0, restantes - (presencasNecessarias - l.presencas));
+
+    const jaNaoAlcanca = melhor < PRESENCA_MINIMA;
+    // Só interessa quem corre risco: quem tem folga não precisa de aviso.
+    if (!jaNaoAlcanca && faltasQueAindaCabem > 2) continue;
+
+    saida.push({
+      alunoId: l.alunoId,
+      aluno: l.aluno,
+      disciplinaId: l.disciplinaId,
+      disciplina: l.disciplina,
+      aulasDadas: l.aulasDadas,
+      aulasPrevistas: previstas,
+      presencas: l.presencas,
+      melhorPercentualPossivel: melhor,
+      faltasQueAindaCabem,
+      jaNaoAlcanca,
+    });
+  }
+
+  // Os casos perdidos primeiro; entre eles, quem tem menos margem.
+  return saida.sort(
+    (a, b) =>
+      Number(b.jaNaoAlcanca) - Number(a.jaNaoAlcanca) ||
+      a.faltasQueAindaCabem - b.faltasQueAindaCabem ||
+      a.aluno.localeCompare(b.aluno, "pt-BR"),
+  );
+}
+
 export interface FaltaDoAluno {
   aulaId: string;
   numero: number;

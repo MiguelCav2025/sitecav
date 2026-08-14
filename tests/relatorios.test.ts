@@ -6,6 +6,7 @@ import {
   montarDiario,
   aulasPendentesDeChamada,
   faltasDoAluno,
+  riscoDeFrequencia,
   limparParaCSV,
   type AulaFechada,
   type RegistroPresenca,
@@ -206,6 +207,87 @@ describe("abono de falta", () => {
     );
     assert.deepEqual(r.nomesEmRisco, ["Bruno"]);
     assert.deepEqual(r.nomesSalvosPeloAbono, ["Bruno"]);
+  });
+});
+
+describe("riscoDeFrequencia", () => {
+  const aluno = [{ id: "a1", nome: "Bruno" }];
+  // 10 das 20 aulas previstas ja aconteceram.
+  const dadas = Array.from({ length: 10 }, (_, i) => aula(`x${i}`, "Roteiro", i + 1));
+  const previstas = { "d-Roteiro": 20 };
+  const risco = (presentes: number) =>
+    riscoDeFrequencia(
+      frequenciaPorDisciplina(aluno, dadas, dadas.slice(0, presentes).map(a => presente(a.id, "a1"))),
+      previstas,
+    );
+
+  it("acusa quem NAO alcanca nem vindo a todas as restantes", () => {
+    // Foi a 3 de 10. Mesmo indo as 10 que faltam: 13/20 = 65%, abaixo de 70%.
+    const [r] = risco(3);
+    assert.equal(r.jaNaoAlcanca, true);
+    assert.equal(r.melhorPercentualPossivel, 65);
+  });
+
+  it("nao acusa quem ainda alcanca, mesmo com frequencia baixa hoje", () => {
+    // Foi a 5 de 10 — 50% hoje. Mas indo as 10 restantes: 15/20 = 75%.
+    const [r] = risco(5);
+    assert.equal(r.jaNaoAlcanca, false);
+    assert.equal(r.melhorPercentualPossivel, 75);
+  });
+
+  it("diz quantas faltas ainda cabem", () => {
+    // Precisa de 14 presencas em 20. Tem 5, restam 10 aulas: pode perder 1.
+    const [r] = risco(5);
+    assert.equal(r.faltasQueAindaCabem, 1);
+  });
+
+  it("quem tem folga nao entra na lista — o aviso perderia o sentido", () => {
+    // Foi a 10 de 10. Pode faltar a 6 das 10 restantes e ainda fecha em 70%.
+    assert.deepEqual(risco(10), []);
+  });
+
+  it("os casos perdidos vem antes dos que ainda dao tempo", () => {
+    // Ana foi a 3 de 10: nem indo a todas chega aos 70%, esta perdida.
+    // Zeca foi a 5: ainda alcanca, mas so pode perder mais uma.
+    const linhas = frequenciaPorDisciplina(
+      [{ id: "a1", nome: "Zeca" }, { id: "a2", nome: "Ana" }],
+      dadas,
+      [
+        ...dadas.slice(0, 5).map(a => presente(a.id, "a1")),
+        ...dadas.slice(0, 3).map(a => presente(a.id, "a2")),
+      ],
+    );
+    const r = riscoDeFrequencia(linhas, previstas);
+
+    assert.equal(r[0].aluno, "Ana");
+    assert.equal(r[0].jaNaoAlcanca, true);
+    assert.equal(r[1].aluno, "Zeca");
+    assert.equal(r[1].jaNaoAlcanca, false);
+  });
+
+  it("empatados na margem, desempata pelo nome", () => {
+    // Os dois faltaram a tudo: nenhum alcanca, e a margem de ambos e zero.
+    const linhas = frequenciaPorDisciplina(
+      [{ id: "a1", nome: "Zeca" }, { id: "a2", nome: "Ana" }], dadas, [],
+    );
+    assert.deepEqual(riscoDeFrequencia(linhas, previstas).map(x => x.aluno), ["Ana", "Zeca"]);
+  });
+
+  it("grade menor que as aulas ja dadas nao gera restante negativo", () => {
+    const r = riscoDeFrequencia(
+      frequenciaPorDisciplina(aluno, dadas, []),
+      { "d-Roteiro": 5 },
+    );
+    assert.ok(r[0].melhorPercentualPossivel >= 0);
+  });
+
+  it("disciplina sem previsao usa o que ja foi dado", () => {
+    const [r] = riscoDeFrequencia(
+      frequenciaPorDisciplina(aluno, dadas, dadas.slice(0, 3).map(a => presente(a.id, "a1"))),
+      {},
+    );
+    assert.equal(r.aulasPrevistas, 10);
+    assert.equal(r.jaNaoAlcanca, true, "sem aulas restantes, 30% e definitivo");
   });
 });
 

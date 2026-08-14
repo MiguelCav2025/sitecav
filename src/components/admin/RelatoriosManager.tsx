@@ -9,7 +9,7 @@ import { PRESENCA_MINIMA } from "@/lib/aprovacao";
 import { buscarMatriculasDaTurma, type MatriculaDaTurma } from "@/lib/matriculas";
 import {
   frequenciaPorDisciplina, resumirFrequencia, montarDiario, aulasPendentesDeChamada,
-  faltasDoAluno, limparParaCSV,
+  faltasDoAluno, riscoDeFrequencia, limparParaCSV,
   type Abono, type AulaFechada, type AulaPendente, type LinhaFrequencia,
   type LinhaDoDiario, type RegistroPresenca,
 } from "@/lib/relatorios";
@@ -65,6 +65,7 @@ export default function RelatoriosManager() {
   const [aulasFechadasDaTurma, setAulasFechadasDaTurma] = useState<AulaFechada[]>([]);
   const [presencasDaTurma, setPresencasDaTurma] = useState<RegistroPresenca[]>([]);
   const [abonos, setAbonos] = useState<Abono[]>([]);
+  const [aulasPrevistas, setAulasPrevistas] = useState<Record<string, number>>({});
   const [linhaAberta, setLinhaAberta] = useState<string | null>(null);
   const [abonando, setAbonando] = useState<string | null>(null);
 
@@ -122,6 +123,14 @@ export default function RelatoriosManager() {
         .in("aula_id", todasAulas.map(a => a.id));
       abonos = (data ?? []) as Abono[];
     }
+
+    // Quantas aulas a disciplina TEM, e não quantas já foram dadas: é a
+    // diferença entre as duas que diz o quanto ainda dá para recuperar.
+    const { data: discs } = await supabase
+      .from("disciplinas").select("id, total_aulas");
+    setAulasPrevistas(Object.fromEntries(
+      ((discs ?? []) as { id: string; total_aulas: number }[]).map(d => [d.id, d.total_aulas]),
+    ));
 
     const hoje = new Date().toISOString().slice(0, 10);
     setAlunosDaTurma(matriculas);
@@ -202,6 +211,7 @@ export default function RelatoriosManager() {
   const aulasFechadas = diario.length;
   const encerrados = alunosDaTurma.filter(a => a.situacao !== "cursando").length;
   const situacaoPorAluno = Object.fromEntries(alunosDaTurma.map(a => [a.id, a.situacao]));
+  const riscos = riscoDeFrequencia(frequencia, aulasPrevistas);
 
   return (
     <div className="space-y-6">
@@ -371,6 +381,31 @@ export default function RelatoriosManager() {
               <Download className="h-3.5 w-3.5" /> CSV
             </button>
           </div>
+
+          {/* O aviso que chega a tempo. Depois do fechamento, saber que alguém
+              rodou por falta não serve para nada — aqui ainda dá para conversar. */}
+          {riscos.length > 0 && (
+            <div className="border-b border-amber-100 bg-amber-50 px-4 py-3 text-xs text-amber-900 space-y-1">
+              <p className="font-semibold">Ainda dá tempo de agir</p>
+              {riscos.filter(r => r.jaNaoAlcanca).length > 0 && (
+                <p>
+                  <strong>Não alcança mais os {PRESENCA_MINIMA}%</strong> nem vindo a todas as
+                  aulas restantes:{" "}
+                  {riscos.filter(r => r.jaNaoAlcanca)
+                    .map(r => `${r.aluno} (${r.disciplina}, no máximo ${r.melhorPercentualPossivel}%)`)
+                    .join("; ")}.
+                </p>
+              )}
+              {riscos.filter(r => !r.jaNaoAlcanca).length > 0 && (
+                <p>
+                  <strong>Por um fio</strong> —{" "}
+                  {riscos.filter(r => !r.jaNaoAlcanca)
+                    .map(r => `${r.aluno} (${r.disciplina}) pode faltar a mais ${r.faltasQueAindaCabem}`)
+                    .join("; ")}.
+                </p>
+              )}
+            </div>
+          )}
 
           {resumo.emRisco > 0 ? (
             <div className="px-4 py-2 bg-red-50 border-b border-red-100 text-xs text-red-800 space-y-1">
