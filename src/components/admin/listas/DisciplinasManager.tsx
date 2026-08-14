@@ -11,6 +11,7 @@ import {
 import { useSemestreVigente } from "@/hooks/useSemestreVigente";
 import { emojiDaDisciplina } from "@/lib/emoji-disciplina";
 import { conflitosDeSala, descreverConflito } from "@/lib/conflitos-grade";
+import { AULAS_POR_ENCONTRO, rotuloDoTurno } from "@/lib/aulas-do-dia";
 import { useConfirmacao } from "@/components/ui/confirmar";
 import RecalcularGrade from "./RecalcularGrade";
 import { Button } from "@/components/ui/button";
@@ -426,8 +427,11 @@ function DisciplinaCard({
       </div>
       {/* Sala e professor no card: são as duas perguntas que se faz olhando uma
           grade — onde é, e com quem. Antes exigiam abrir cada disciplina. */}
+      {/* `total_aulas` guarda ENCONTROS; o Guia do CAV conta aulas, e cada dia
+          vale duas. Mostrar só um dos dois números já confundiu — a grade dizia
+          17 e o Guia, 34. */}
       <p className="text-xs text-gray-400 mb-1 truncate" title={sala ?? undefined}>
-        {disciplina.total_aulas} aulas
+        {disciplina.total_aulas} dias · {disciplina.total_aulas * AULAS_POR_ENCONTRO} aulas
         {sala
           ? <> · <span className="text-gray-500">{sala}</span></>
           : <> · <span className="text-amber-600">sem sala</span></>}
@@ -931,6 +935,7 @@ export default function DisciplinasManager() {
                     <div
                       key={dia.value}
                       className="text-center text-xs font-semibold py-1.5 rounded-lg bg-white/10 text-white/75 border border-white/10"
+                      title={`Manhã ${rotuloDoTurno("Manhã")} · Noite ${rotuloDoTurno("Noite")}`}
                     >
                       <Calendar className="h-3 w-3 mx-auto mb-0.5" />
                       {dia.label}
