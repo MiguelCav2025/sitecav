@@ -2191,10 +2191,12 @@ comment on column public.cronogramas.motivos_feriados is
   'Motivo por data, so para o que nenhum calendario oficial conhece. Ex.: {"2026-08-21": "Emenda do aniversario da cidade"}. Feriado oficial tem o nome calculado (D53).';
 
 -- 18.1 — o que ja sabemos do 2026/2, para a unica emenda nao ficar orfa
+-- `feriados` e date[], nao text[]: o cast errado derruba a transacao inteira,
+-- e no editor do Supabase isso desfaz ate o `alter table` acima.
 update public.cronogramas
    set motivos_feriados = motivos_feriados || '{"2026-08-21": "Emenda do aniversário da cidade"}'::jsonb
  where semestre = '2026/2'
-   and feriados @> array['2026-08-21']::text[];
+   and feriados @> array['2026-08-21']::date[];
 
 -- 18.2 — conferencia
 -- select semestre, motivos_feriados from public.cronogramas order by data_inicio desc;
