@@ -36,6 +36,19 @@ function mesesDoPeriodo(inicio: string, fim: string): { ano: number; mes: number
   return saida;
 }
 
+type Celula = { dia: number; data: string; tipo: string; titulo?: string } | null;
+
+/** Quebra as células em linhas de sete, completando a última semana. */
+function semanas(celulas: Celula[]): Celula[][] {
+  const linhas: Celula[][] = [];
+  for (let i = 0; i < celulas.length; i += 7) {
+    const linha = celulas.slice(i, i + 7);
+    while (linha.length < 7) linha.push(null);
+    linhas.push(linha);
+  }
+  return linhas;
+}
+
 export default function CalendarioVisual({
   inicio,
   fim,
@@ -57,8 +70,7 @@ export default function CalendarioVisual({
     const diasNoMes = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
     const vazios = primeiro.getUTCDay();
 
-    const celulas: ({ dia: number; data: string; tipo: string; titulo?: string } | null)[] =
-      Array.from({ length: vazios }, () => null);
+    const celulas: Celula[] = Array.from({ length: vazios }, () => null);
 
     for (let dia = 1; dia <= diasNoMes; dia++) {
       const data = iso(ano, mes, dia);
@@ -110,26 +122,40 @@ export default function CalendarioVisual({
               {MESES[mes - 1]} <span className="font-normal text-gray-400">{ano}</span>
             </p>
 
-            <div className="grid grid-cols-7 gap-0.5 text-center">
-              {DIAS_CABECALHO.map((d, i) => (
-                <span key={i} className="text-[10px] text-gray-400">{d}</span>
-              ))}
-
-              {celulas.map((c, i) =>
-                c === null ? (
-                  <span key={`v${i}`} />
-                ) : (
-                  <span
-                    key={c.data}
-                    title={c.titulo}
-                    className={`rounded py-0.5 text-[11px] leading-4 ${CORES[c.tipo]} ${
-                      c.tipo === "feriado" ? "cursor-help" : ""}`}
-                  >
-                    {c.dia}
-                  </span>
-                ),
-              )}
-            </div>
+            {/* Tabela, e não grid: um calendário É uma tabela, e assim as sete
+                colunas não dependem de nenhuma classe utilitária pegar. */}
+            <table className="w-full table-fixed border-collapse">
+              <thead>
+                <tr>
+                  {DIAS_CABECALHO.map((d, i) => (
+                    <th key={i} className="pb-1 text-center text-[10px] font-normal text-gray-400">
+                      {d}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {semanas(celulas).map((semana, i) => (
+                  <tr key={i}>
+                    {semana.map((c, j) =>
+                      c === null ? (
+                        <td key={`v${j}`} />
+                      ) : (
+                        <td key={c.data} className="p-px">
+                          <span
+                            title={c.titulo}
+                            className={`block rounded py-0.5 text-center text-[11px] leading-4 ${CORES[c.tipo]} ${
+                              c.tipo === "feriado" ? "cursor-help" : ""}`}
+                          >
+                            {c.dia}
+                          </span>
+                        </td>
+                      ),
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ))}
       </div>
