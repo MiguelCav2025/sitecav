@@ -12,6 +12,9 @@ import { moduloAtual, rotuloModulo } from "@/lib/calendario-escolar";
 import { useSemestreVigente } from "@/hooks/useSemestreVigente";
 import LancarNotas from "@/components/professor/LancarNotas";
 import { buscarAlunosDaTurma } from "@/lib/matriculas";
+import {
+  salvarRascunho, lerRascunho, limparRascunho, mesclarPresencas,
+} from "@/lib/rascunho-chamada";
 import { useConfirmacao } from "@/components/ui/confirmar";
 
 interface Turma { id: string; nome: string; turno: string; entrada: string; curso: string; }
@@ -113,6 +116,9 @@ export default function ProfessorDashboard() {
   const [conteudo, setConteudo] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [finalizando, setFinalizando] = useState(false);
+  /** Marcações que a rede recusou e estão guardadas no aparelho. */
+  const [pendentesLocais, setPendentesLocais] = useState<Record<string, boolean>>({});
+  const [reenviando, setReenviando] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -199,7 +205,13 @@ export default function ProfessorDashboard() {
       .from("presencas").select("aluno_id, presente").eq("aula_id", aula.id);
     const mapa: Record<string, boolean> = {};
     (presData ?? []).forEach((p: Presenca) => { mapa[p.aluno_id] = p.presente; });
-    setPresencas(mapa);
+
+    // O que ficou no aparelho vence: foi digitado depois do que o servidor
+    // tem, e é justamente o que não conseguiu subir.
+    const rascunho = lerRascunho(aula.id);
+    setPendentesLocais(rascunho?.presencas ?? {});
+    setPresencas(mesclarPresencas(mapa, rascunho?.presencas));
+    if (rascunho?.conteudo) setConteudo(rascunho.conteudo);
     setCarregandoChamada(false);
   };
 
@@ -218,18 +230,48 @@ export default function ProfessorDashboard() {
       { onConflict: "aula_id,aluno_id" }
     );
 
-    // Sem isto o botão ficava verde mesmo quando o banco recusava a gravação,
-    // e o professor saía achando que tinha registrado a presença.
+    // Antes o toque era desfeito quando a rede falhava. Isso protegia contra a
+    // mentira do botão verde, mas jogava fora o que o professor acabara de
+    // fazer — e ele estava em pé, na frente da turma. Agora a marcação FICA na
+    // tela e no aparelho, e sobe depois.
     if (error) {
-      setPresencas(prev => {
-        const copia = { ...prev };
-        if (valorAnterior === undefined) delete copia[alunoId];
-        else copia[alunoId] = valorAnterior;
-        return copia;
-      });
-      setErro("Não foi possível salvar a presença. Verifique a conexão e tente de novo.");
+      const naoSubiram = { ...pendentesLocais, [alunoId]: novoValor };
+      setPendentesLocais(naoSubiram);
+      salvarRascunho(aulaId, naoSubiram, conteudo);
+      setErro(null);
+    } else if (pendentesLocais[alunoId] !== undefined) {
+      // Subiu: sai da fila.
+      const restantes = { ...pendentesLocais };
+      delete restantes[alunoId];
+      setPendentesLocais(restantes);
+      salvarRascunho(aulaId, restantes, conteudo);
     }
     setSalvandoPresenca(null);
+  };
+
+  /** Tenta subir de novo o que ficou para trás. */
+  const reenviarPendentes = async () => {
+    if (tela.tipo !== "chamada") return;
+    const aulaId = tela.aula.id;
+    const fila = Object.entries(pendentesLocais);
+    if (fila.length === 0) return;
+
+    setReenviando(true);
+    const aindaFalta: Record<string, boolean> = {};
+    for (const [alunoId, presente] of fila) {
+      const { error } = await supabase.from("presencas").upsert(
+        { aula_id: aulaId, aluno_id: alunoId, presente },
+        { onConflict: "aula_id,aluno_id" },
+      );
+      if (error) aindaFalta[alunoId] = presente;
+    }
+    setPendentesLocais(aindaFalta);
+    salvarRascunho(aulaId, aindaFalta, conteudo);
+    setReenviando(false);
+
+    setErro(Object.keys(aindaFalta).length > 0
+      ? "Ainda não consegui salvar tudo. As marcações continuam guardadas no aparelho."
+      : null);
   };
 
   const finalizarChamada = async () => {
@@ -256,6 +298,31 @@ export default function ProfessorDashboard() {
 
     setErro(null);
     setFinalizando(true);
+
+    // Sobe primeiro o que ficou guardado no aparelho. Fechar a chamada com
+    // marcação pendente gravaria falta em quem estava presente.
+    if (Object.keys(pendentesLocais).length > 0) {
+      const aindaFalta: Record<string, boolean> = {};
+      for (const [alunoId, presente] of Object.entries(pendentesLocais)) {
+        const { error } = await supabase.from("presencas").upsert(
+          { aula_id: aula.id, aluno_id: alunoId, presente },
+          { onConflict: "aula_id,aluno_id" },
+        );
+        if (error) aindaFalta[alunoId] = presente;
+      }
+      if (Object.keys(aindaFalta).length > 0) {
+        setPendentesLocais(aindaFalta);
+        salvarRascunho(aula.id, aindaFalta, texto);
+        setErro(
+          `${Object.keys(aindaFalta).length} marcação(ões) ainda não subiram. ` +
+          `Sem elas, fechar agora registraria falta em quem estava presente. ` +
+          `Espere a conexão voltar e tente de novo — nada foi perdido.`,
+        );
+        setFinalizando(false);
+        return;
+      }
+      setPendentesLocais({});
+    }
 
     // Quem não foi marcado entra como ausente
     const semPresenca = alunos.filter(a => presencas[a.id] === undefined);
@@ -287,6 +354,8 @@ export default function ProfessorDashboard() {
       return;
     }
 
+    // Fechou: o rascunho vira lixo que um dia reapareceria sobre dado bom.
+    limparRascunho(aula.id);
     setChamadaFinalizada(true);
     setFinalizando(false);
     setTodasAulas(prev => prev.map(a =>
@@ -324,6 +393,24 @@ export default function ProfessorDashboard() {
           onSair={handleSair}
         />
         <div className="flex-1 px-4 py-4 space-y-3 max-w-lg mx-auto w-full">
+          {/* Sem este aviso, o professor não teria como saber que a rede caiu:
+              a marcação continua na tela, verde, como se tivesse subido. */}
+          {Object.keys(pendentesLocais).length > 0 && (
+            <div className="rounded-xl border border-amber-400/40 bg-amber-500/20 p-3 space-y-2">
+              <p className="text-sm text-amber-50">
+                <strong>{Object.keys(pendentesLocais).length} marcação(ões) ainda não salvaram.</strong>{" "}
+                Estão guardadas no seu celular — não se perdem se você sair ou o app fechar.
+              </p>
+              <button
+                onClick={reenviarPendentes}
+                disabled={reenviando}
+                className="rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {reenviando ? "Tentando..." : "Tentar salvar de novo"}
+              </button>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-green-500/20 border border-green-400/30 rounded-xl p-3 text-center">
               <p className="text-2xl font-bold text-green-400">{presentes}</p>
