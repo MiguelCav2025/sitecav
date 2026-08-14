@@ -10,6 +10,9 @@ import {
   montarFechamento, resumirFechamento, pendenciasDaTurma, situacaoSugerida,
   type AlunoParaFechar, type Desfecho, type LinhaDesempenho, type MatriculaAberta,
 } from "@/lib/fechamento";
+import {
+  faltasDoAluno, type Abono, type AulaFechada, type RegistroPresenca,
+} from "@/lib/relatorios";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useConfirmacao } from "@/components/ui/confirmar";
@@ -61,6 +64,11 @@ export default function FechamentoManager() {
   const [alunos, setAlunos] = useState<AlunoParaFechar[]>([]);
   const [decididos, setDecididos] = useState<Decidido[]>([]);
   const [abonosPorAluno, setAbonosPorAluno] = useState<Map<string, number>>(new Map());
+  // Guardados para abonar aqui dentro, sem sair da tela da decisão.
+  const [aulasFechadas, setAulasFechadas] = useState<AulaFechada[]>([]);
+  const [presencas, setPresencas] = useState<RegistroPresenca[]>([]);
+  const [abonos, setAbonos] = useState<Abono[]>([]);
+  const [abonando, setAbonando] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [aberto, setAberto] = useState<string | null>(null);
   const [decidindo, setDecidindo] = useState<string | null>(null);
@@ -91,7 +99,9 @@ export default function FechamentoManager() {
         .select("id, modulo, situacao, aluno:alunos(id, nome)")
         .eq("turma_id", turmaId),
       supabase.from("vw_desempenho_aluno").select("*").eq("turma_id", turmaId),
-      supabase.from("aulas").select("id").eq("turma_id", turmaId),
+      supabase.from("aulas")
+        .select("id, numero, data_aula, disciplina_id, chamada_finalizada, disciplina:disciplinas(nome)")
+        .eq("turma_id", turmaId).eq("chamada_finalizada", true).order("numero"),
     ]);
 
     const linhas = ((mats ?? []) as unknown as {
@@ -104,18 +114,42 @@ export default function FechamentoManager() {
       .filter(m => m.situacao === "cursando")
       .map(m => ({ matriculaId: m.id, alunoId: m.aluno!.id, nome: m.aluno!.nome }));
 
-    // Abonos concedidos nas aulas desta turma. O número por aluno basta aqui:
-    // ele serve para avisar que a frequência oficial não conta a história toda.
-    const idsDasAulas = ((aulasData ?? []) as { id: string }[]).map(a => a.id);
-    const porAluno = new Map<string, number>();
+    // Aula por aula, e não só o total: o abono se concede aqui agora, e para
+    // isso é preciso saber DE QUAL falta se está falando. Antes esta tela só
+    // contava os abonos e mandava o coordenador para Relatórios concedê-los —
+    // uma decisão partida em duas telas.
+    const fechadas: AulaFechada[] = ((aulasData ?? []) as unknown as {
+      id: string; numero: number; data_aula: string; disciplina_id: string;
+      chamada_finalizada: boolean; disciplina: { nome: string } | null;
+    }[]).map(a => ({
+      id: a.id,
+      numero: a.numero,
+      disciplina_id: a.disciplina_id,
+      disciplina: a.disciplina?.nome ?? "—",
+      data_aula: a.data_aula,
+      conteudo_ministrado: null,
+      professor: null,
+      finalizada: true,
+    }));
+
+    const idsDasAulas = fechadas.map(a => a.id);
+    let presencas: RegistroPresenca[] = [];
+    let abonos: Abono[] = [];
     if (idsDasAulas.length > 0) {
-      const { data: abonos } = await supabase
-        .from("abonos").select("aluno_id").in("aula_id", idsDasAulas);
-      for (const a of (abonos ?? []) as { aluno_id: string }[]) {
-        porAluno.set(a.aluno_id, (porAluno.get(a.aluno_id) ?? 0) + 1);
-      }
+      const [{ data: pres }, { data: abon }] = await Promise.all([
+        supabase.from("presencas").select("aula_id, aluno_id, presente").in("aula_id", idsDasAulas),
+        supabase.from("abonos").select("aula_id, aluno_id").in("aula_id", idsDasAulas),
+      ]);
+      presencas = (pres ?? []) as RegistroPresenca[];
+      abonos = (abon ?? []) as Abono[];
     }
 
+    const porAluno = new Map<string, number>();
+    for (const a of abonos) porAluno.set(a.aluno_id, (porAluno.get(a.aluno_id) ?? 0) + 1);
+
+    setAulasFechadas(fechadas);
+    setPresencas(presencas);
+    setAbonos(abonos);
     setAbonosPorAluno(porAluno);
     setDecididos(linhas
       .filter(m => m.situacao !== "cursando")
@@ -126,6 +160,57 @@ export default function FechamentoManager() {
   }, [supabase, turmaId]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  /**
+   * Concede o abono sem sair daqui.
+   *
+   * A presença NÃO é tocada: a falta aconteceu, e a chamada fechada é
+   * definitiva. O abono anda ao lado dela, com dono, motivo e data — e a
+   * frequência oficial continua sendo a que o professor registrou.
+   */
+  const abonar = async (alunoId: string, aulaId: string, nomeAluno: string) => {
+    const motivo = prompt(
+      `Abonar a falta de ${nomeAluno}.\n\n` +
+      `Escreva o motivo (atestado médico, decisão da prefeitura, etc.).\n` +
+      `Ele fica registrado com a data e quem concedeu.`
+    );
+    if (motivo === null) return;
+    if (motivo.trim().length < 3) return alert("Escreva o motivo do abono.");
+
+    setAbonando(aulaId);
+    const { data: sessao } = await supabase.auth.getUser();
+    const { data: admin } = await supabase.from("administradores")
+      .select("id").eq("user_id", sessao.user?.id ?? "").maybeSingle();
+
+    const { error } = await supabase.from("abonos").insert([{
+      aluno_id: alunoId, aula_id: aulaId, motivo: motivo.trim(),
+      concedido_por: admin?.id ?? null,
+    }]);
+    setAbonando(null);
+    if (error) return alert(`Não foi possível abonar: ${error.message}`);
+    carregar();
+  };
+
+  const removerAbono = async (alunoId: string, aulaId: string) => {
+    const ok = await confirmar({
+      titulo: "Remover este abono?",
+      rotuloConfirmar: "Remover",
+      perigo: true,
+      descricao: (
+        <>
+          <p>A falta volta a pesar na frequência do aluno.</p>
+          <p className="text-gray-500">O motivo registrado e a data de quem concedeu se perdem.</p>
+        </>
+      ),
+    });
+    if (!ok) return;
+    setAbonando(aulaId);
+    const { error } = await supabase.from("abonos").delete()
+      .eq("aluno_id", alunoId).eq("aula_id", aulaId);
+    setAbonando(null);
+    if (error) return alert(`Não foi possível remover: ${error.message}`);
+    carregar();
+  };
 
   // No último módulo, passar é CONCLUIR o curso — não "ser aprovado para o
   // semestre que vem", que não existe. O botão muda de nome junto.
@@ -138,7 +223,7 @@ export default function FechamentoManager() {
 
     const rotulo = situacao === "retido" ? "Reter"
       : situacao === "concluido" ? "Formar" : "Aprovar";
-    const abonos = abonosPorAluno.get(a.alunoId) ?? 0;
+    const abonosDele = abonosPorAluno.get(a.alunoId) ?? 0;
 
     const ok = await confirmar({
       titulo: `${rotulo} ${a.nome}?`,
@@ -166,10 +251,10 @@ export default function FechamentoManager() {
             </div>
           )}
 
-          {abonos > 0 && (
+          {abonosDele > 0 && (
             <p className="text-amber-800">
-              Ele tem <strong>{abonos} falta(s) abonada(s)</strong> que não entram na frequência
-              calculada. Vale conferir no relatório antes de decidir.
+              Ele tem <strong>{abonosDele} falta(s) abonada(s)</strong> que não entram na
+              frequência calculada — ela mostra a falta como ela aconteceu.
             </p>
           )}
 
@@ -377,7 +462,7 @@ export default function FechamentoManager() {
                             <button
                               onClick={() => setAberto(expandido ? null : a.alunoId)}
                               className="text-gray-400 hover:text-gray-700"
-                              title={expandido ? "Recolher" : "Ver disciplina por disciplina"}
+                              title={expandido ? "Recolher" : "Ver disciplina por disciplina e abonar faltas"}
                             >
                               {expandido ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                             </button>
@@ -451,8 +536,13 @@ export default function FechamentoManager() {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {a.avaliacao.disciplinas.map(d => (
-                                      <tr key={d.disciplinaId} className="border-t border-gray-200">
+                                    {a.avaliacao.disciplinas.map(d => {
+                                      const faltas = faltasDoAluno(
+                                        a.alunoId, d.disciplinaId, aulasFechadas, presencas, abonos,
+                                      );
+                                      return (
+                                      <Fragment key={d.disciplinaId}>
+                                      <tr className="border-t border-gray-200">
                                         <td className="py-1.5 text-gray-700">{d.disciplina}</td>
                                         <td className={`py-1.5 ${d.notaFinal !== null && d.notaFinal < NOTA_MINIMA ? "text-red-600 font-semibold" : "text-gray-600"}`}>
                                           {d.notaFinal ?? "—"}
@@ -467,7 +557,47 @@ export default function FechamentoManager() {
                                         </td>
                                         <td className="py-1.5 text-gray-500">{d.motivos.join(" ") || "—"}</td>
                                       </tr>
-                                    ))}
+
+                                      {/* As faltas logo abaixo da disciplina a que pertencem, e
+                                          clicáveis. O abono nasceu em Relatórios porque os dados
+                                          já estavam carregados lá — conveniência de quem escreve,
+                                          não de quem usa: a decisão acontece AQUI, e mandar o
+                                          coordenador a outra aba para depois voltar era partir
+                                          um julgamento só em duas telas. */}
+                                      {faltas.length > 0 && (
+                                        <tr>
+                                          <td />
+                                          <td colSpan={4} className="pb-2">
+                                            <div className="flex flex-wrap items-center gap-1.5">
+                                              <span className="text-[11px] text-gray-400">Faltou em:</span>
+                                              {faltas.map(f => (
+                                                <button
+                                                  key={f.aulaId}
+                                                  disabled={abonando === f.aulaId}
+                                                  onClick={() => {
+                                                    if (f.abonada) removerAbono(a.alunoId, f.aulaId);
+                                                    else abonar(a.alunoId, f.aulaId, a.nome);
+                                                  }}
+                                                  className={`rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
+                                                    f.abonada
+                                                      ? "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                                                      : "border-gray-300 bg-white text-gray-600 hover:bg-gray-100"}`}
+                                                  title={f.abonada
+                                                    ? "Clique para remover o abono"
+                                                    : "Clique para abonar esta falta"}
+                                                >
+                                                  {abonando === f.aulaId
+                                                    ? "..."
+                                                    : <>Aula {f.numero}{f.abonada && " · abonada"}</>}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      )}
+                                      </Fragment>
+                                      );
+                                    })}
                                   </tbody>
                                 </table>
                               )}
