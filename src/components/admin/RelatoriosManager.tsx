@@ -48,7 +48,7 @@ const formatarData = (iso: string | null) => {
 export default function RelatoriosManager() {
   const supabase = createClient();
   const { semestre: semestreAtual } = useSemestreVigente();
-  const { confirmar, dialogo } = useConfirmacao();
+  const { confirmar, perguntar, dialogo } = useConfirmacao();
 
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [turmaSel, setTurmaSel] = useState("");
@@ -148,14 +148,28 @@ export default function RelatoriosManager() {
    * Concede o abono. A presença NÃO é tocada: a falta aconteceu, e a chamada
    * fechada é definitiva. O abono anda ao lado dela, com dono e data.
    */
-  const abonar = async (alunoId: string, aulaId: string, nomeAluno: string) => {
-    const motivo = prompt(
-      `Abonar a falta de ${nomeAluno}.\n\n` +
-      `Escreva o motivo (atestado médico, decisão da prefeitura, etc.).\n` +
-      `Ele fica registrado com a data e quem concedeu.`
-    );
+  const abonar = async (alunoId: string, aulaId: string, nomeAluno: string, numero: number) => {
+    const motivo = await perguntar({
+      titulo: `Abonar a falta de ${nomeAluno}?`,
+      rotuloConfirmar: "Abonar",
+      descricao: (
+        <>
+          <p>
+            A falta da <strong>aula {numero}</strong> continua registrada — o abono
+            anda ao lado dela, e não no lugar dela.
+          </p>
+          <p className="text-gray-500">
+            O motivo fica no histórico do aluno com a data e o nome de quem concedeu.
+          </p>
+        </>
+      ),
+      campo: {
+        rotulo: "Motivo do abono",
+        exemplo: "Atestado médico de 12/05, entregue na secretaria",
+        minimo: 3,
+      },
+    });
     if (motivo === null) return;
-    if (motivo.trim().length < 3) return alert("O motivo é obrigatório — mínimo 3 caracteres.");
 
     setAbonando(aulaId);
     const { data: sessao } = await supabase.auth.getUser();
@@ -163,7 +177,7 @@ export default function RelatoriosManager() {
       .select("id").eq("user_id", sessao.user?.id ?? "").maybeSingle();
 
     const { error } = await supabase.from("abonos").insert([{
-      aluno_id: alunoId, aula_id: aulaId, motivo: motivo.trim(),
+      aluno_id: alunoId, aula_id: aulaId, motivo,
       concedido_por: admin?.id ?? null,
     }]);
     setAbonando(null);
@@ -507,7 +521,7 @@ export default function RelatoriosManager() {
                                   onClick={e => {
                                     e.stopPropagation();
                                     if (f.abonada) removerAbono(l.alunoId, f.aulaId);
-                                    else abonar(l.alunoId, f.aulaId, l.aluno);
+                                    else abonar(l.alunoId, f.aulaId, l.aluno, f.numero);
                                   }}
                                   className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
                                     f.abonada

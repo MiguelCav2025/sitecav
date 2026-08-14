@@ -57,7 +57,7 @@ const ESTILO: Record<Situacao, { cor: string; rotulo: string; Icone: typeof Chec
 export default function FechamentoManager() {
   const supabase = createClient();
   const { semestre: semestreAtual } = useSemestreVigente();
-  const { confirmar, dialogo } = useConfirmacao();
+  const { confirmar, perguntar, dialogo } = useConfirmacao();
 
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [turmaId, setTurmaId] = useState("");
@@ -168,14 +168,28 @@ export default function FechamentoManager() {
    * definitiva. O abono anda ao lado dela, com dono, motivo e data — e a
    * frequência oficial continua sendo a que o professor registrou.
    */
-  const abonar = async (alunoId: string, aulaId: string, nomeAluno: string) => {
-    const motivo = prompt(
-      `Abonar a falta de ${nomeAluno}.\n\n` +
-      `Escreva o motivo (atestado médico, decisão da prefeitura, etc.).\n` +
-      `Ele fica registrado com a data e quem concedeu.`
-    );
+  const abonar = async (alunoId: string, aulaId: string, nomeAluno: string, numero: number) => {
+    const motivo = await perguntar({
+      titulo: `Abonar a falta de ${nomeAluno}?`,
+      rotuloConfirmar: "Abonar",
+      descricao: (
+        <>
+          <p>
+            A falta da <strong>aula {numero}</strong> continua registrada — o abono
+            anda ao lado dela, e não no lugar dela.
+          </p>
+          <p className="text-gray-500">
+            O motivo fica no histórico do aluno com a data e o nome de quem concedeu.
+          </p>
+        </>
+      ),
+      campo: {
+        rotulo: "Motivo do abono",
+        exemplo: "Atestado médico de 12/05, entregue na secretaria",
+        minimo: 3,
+      },
+    });
     if (motivo === null) return;
-    if (motivo.trim().length < 3) return alert("Escreva o motivo do abono.");
 
     setAbonando(aulaId);
     const { data: sessao } = await supabase.auth.getUser();
@@ -183,7 +197,7 @@ export default function FechamentoManager() {
       .select("id").eq("user_id", sessao.user?.id ?? "").maybeSingle();
 
     const { error } = await supabase.from("abonos").insert([{
-      aluno_id: alunoId, aula_id: aulaId, motivo: motivo.trim(),
+      aluno_id: alunoId, aula_id: aulaId, motivo,
       concedido_por: admin?.id ?? null,
     }]);
     setAbonando(null);
@@ -323,6 +337,18 @@ export default function FechamentoManager() {
 
   const resumo = resumirFechamento(alunos);
   const pendencias = pendenciasDaTurma(alunos);
+
+  // As disciplinas que já tiveram aula nesta turma, na ordem em que aconteceram.
+  // Servem de plano B para o aluno que não tem nota nenhuma lançada: ele não
+  // aparece na view de desempenho, e sem isto a tela dizia apenas "nenhuma nota
+  // lançada" — deixando as faltas dele inalcançáveis justo na tela onde a
+  // decisão é tomada.
+  const disciplinasComAula: { id: string; nome: string }[] = [];
+  for (const aula of aulasFechadas) {
+    if (!disciplinasComAula.some(d => d.id === aula.disciplina_id)) {
+      disciplinasComAula.push({ id: aula.disciplina_id, nome: aula.disciplina });
+    }
+  }
   const retidos = decididos.filter(d => d.situacao === "retido");
 
   return (
@@ -453,6 +479,20 @@ export default function FechamentoManager() {
                   {alunos.map(a => {
                     const estilo = ESTILO[a.avaliacao.situacao];
                     const expandido = aberto === a.alunoId;
+
+                    // Sem nota nenhuma, a linha ainda existe — só com os campos
+                    // vazios. É o suficiente para o abono chegar até ela.
+                    const semNota = a.avaliacao.disciplinas.length === 0;
+                    const linhas = semNota
+                      ? disciplinasComAula.map(d => ({
+                          disciplinaId: d.id,
+                          disciplina: d.nome,
+                          notaFinal: null,
+                          percentual: null,
+                          situacao: "indefinido" as Situacao,
+                          motivos: [] as string[],
+                        }))
+                      : a.avaliacao.disciplinas;
                     return (
                       // Fragment com key: a linha do aluno e a de detalhe são
                       // irmãs no <tbody>, então o item da lista é o par.
@@ -520,11 +560,20 @@ export default function FechamentoManager() {
                           <tr className="bg-gray-50/60">
                             <td />
                             <td colSpan={4} className="px-4 pb-4">
-                              {a.avaliacao.disciplinas.length === 0 ? (
+                              {linhas.length === 0 ? (
                                 <p className="text-xs text-gray-500 italic py-2">
-                                  Nenhuma nota lançada para este aluno.
+                                  Nenhuma nota lançada e nenhuma aula dada para este aluno.
                                 </p>
                               ) : (
+                                <>
+                                {semNota && (
+                                  <p className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">
+                                    <strong>Nenhuma nota lançada</strong> para este aluno — as
+                                    disciplinas abaixo vêm das aulas já dadas, e é por isso que a
+                                    nota e a presença aparecem vazias. As faltas continuam
+                                    abonáveis daqui.
+                                  </p>
+                                )}
                                 <table className="w-full text-xs">
                                   <thead>
                                     <tr className="text-gray-400">
@@ -536,7 +585,7 @@ export default function FechamentoManager() {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {a.avaliacao.disciplinas.map(d => {
+                                    {linhas.map(d => {
                                       const faltas = faltasDoAluno(
                                         a.alunoId, d.disciplinaId, aulasFechadas, presencas, abonos,
                                       );
@@ -576,7 +625,7 @@ export default function FechamentoManager() {
                                                   disabled={abonando === f.aulaId}
                                                   onClick={() => {
                                                     if (f.abonada) removerAbono(a.alunoId, f.aulaId);
-                                                    else abonar(a.alunoId, f.aulaId, a.nome);
+                                                    else abonar(a.alunoId, f.aulaId, a.nome, f.numero);
                                                   }}
                                                   className={`rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
                                                     f.abonada
@@ -600,6 +649,7 @@ export default function FechamentoManager() {
                                     })}
                                   </tbody>
                                 </table>
+                                </>
                               )}
                             </td>
                           </tr>
