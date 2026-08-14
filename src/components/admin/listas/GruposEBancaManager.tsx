@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   AlertCircle, AlertTriangle, CheckCircle, Info, Loader2, Plus, Trash2, UserPlus, Users, X,
 } from "lucide-react";
-import { moduloAtual, MODULOS_DO_CURSO } from "@/lib/calendario-escolar";
+import { moduloAtual, rotuloModulo, MODULOS_DO_CURSO } from "@/lib/calendario-escolar";
 import { useSemestreVigente } from "@/hooks/useSemestreVigente";
 import { buscarAlunosDaTurma } from "@/lib/matriculas";
 import {
@@ -210,12 +210,24 @@ export default function GruposEBancaManager() {
             <Select value={turmaId} onValueChange={escolherTurma}>
               <SelectTrigger className="text-gray-800"><SelectValue placeholder="Selecione..." /></SelectTrigger>
               <SelectContent>
-                {turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
+                {/* Mesmo rótulo do Fechamento e dos Relatórios. Aqui aparecia o
+                    nome cru ("Animação Manhã 2025/2"), e o 2025/2 lido como
+                    módulo — que é o engano que a Fase 14 veio desfazer. */}
+                {turmas.map(t => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.curso} · {t.turno} · {rotuloModulo(moduloAtual(t.entrada, semestreVigenteAtual))} (entrada {t.entrada})
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-1">
-            <Label className="text-gray-700">Módulo</Label>
+            <Label className="text-gray-700">
+              Módulo
+              <span className="ml-2 text-xs font-normal text-gray-400">
+                vem preenchido com o atual; mude para ver a banca de um módulo anterior
+              </span>
+            </Label>
             <Select value={modulo} onValueChange={setModulo}>
               <SelectTrigger className="text-gray-800"><SelectValue /></SelectTrigger>
               <SelectContent>
