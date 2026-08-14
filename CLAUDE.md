@@ -63,9 +63,13 @@ Como confirmar, antes de culpar o CSS:
 grep -c "bg-green-200" .next/static/css/*.css   # 0 = não foi gerada
 ```
 
-Como corrigir: apagar `.next` e rebuildar. Na Vercel, *Redeploy* com a opção de
-cache desmarcada. E ao ver cor faltando numa tela, **suspeite disto antes de
-reescrever o componente**.
+**Já está resolvido**: o script `prebuild` apaga `.next/cache` antes de cada
+build, aqui e na Vercel. Não peça mais "Redeploy sem cache" — era um passo
+manual que dependia de alguém lembrar. Se voltar a acontecer, o primeiro
+suspeito é o `prebuild` ter sumido do `package.json`.
+
+Ao ver cor faltando numa tela, **suspeite disto antes de reescrever o
+componente** — foi assim que um calendário inteiro foi reescrito à toa.
 
 ## Armadilha conhecida do ambiente
 
