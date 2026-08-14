@@ -99,9 +99,13 @@ export default function CalendarioVisual({
   // faz o mês perder a forma, e a forma é o que denuncia um feriado no dia
   // errado. Sobre o fundo cinza do mês, os dias úteis ganham branco: agora há
   // três níveis de leitura em vez de dois.
+  // SÓ tonalidades já usadas em outros lugares do projeto. `bg-green-200` e
+  // `bg-red-200` não são geradas aqui — o mesmo defeito que fez o chip laranja
+  // sumir. Ao usá-las, os dias de aula desapareceram e sobrou o calendário
+  // vazio. O contraste vem do fundo cinza do mês, não de tons mais fortes.
   const CORES: Record<string, string> = {
-    letivo:  "bg-green-200 text-green-900 font-medium",
-    feriado: "bg-red-200 text-red-900 font-semibold",
+    letivo:  "bg-green-100 text-green-800 font-medium",
+    feriado: "bg-red-100 text-red-700 font-semibold",
     fds:     "bg-white text-gray-400",
     fora:    "text-gray-300",
   };
@@ -110,12 +114,12 @@ export default function CalendarioVisual({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600">
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded bg-green-200" />
+          <span className="inline-block h-3 w-3 rounded bg-green-100 border border-green-300" />
           <strong className="text-gray-800">{letivos}</strong> dias de aula
           <span className="text-gray-400">· {letivos * 2} aulas</span>
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded bg-red-200" />
+          <span className="inline-block h-3 w-3 rounded bg-red-100 border border-red-300" />
           <strong className="text-gray-800">{feriados.length}</strong> sem aula
         </span>
         <span className="text-gray-400">Passe o mouse num dia vermelho para ver o motivo.</span>
