@@ -2209,6 +2209,108 @@ update public.cronogramas
 
 
 -- ============================================================================
+-- FASE 19 — o dia da disciplina sao DUAS aulas  (D54)
+-- ----------------------------------------------------------------------------
+-- Do Guia de Funcionamento do CAV, aprovado para este semestre: cada dia de
+-- disciplina tem duas aulas — 9h00-10h20 e 10h35-12h00 pela manha, 19h00-20h20
+-- e 20h35-22h00 a noite, com 15 minutos de intervalo. Sao ~18 dias por
+-- disciplina no semestre, ou 36 aulas. A aprovacao exige 70% DAS AULAS.
+--
+-- POR QUE ISSO NAO E SO MULTIPLICAR POR 2
+--
+-- Se todo dia valesse 2 aulas para todo mundo, 70% de 36 seria identico a 70%
+-- de 18: a conta nao mudaria. A diferenca aparece num caso so — o aluno que
+-- assiste a primeira aula e vai embora no intervalo. Hoje ele conta como
+-- presente e leva as duas; deveria levar uma.
+--
+-- O ENCONTRO CONTINUA SENDO UM REGISTRO SO
+--
+-- Uma linha em `aulas` por dia, uma chamada, um diario. Desdobrar em duas
+-- linhas faria o professor escrever o diario duas vezes por dia — e ele ja tem
+-- 101 chamadas atrasadas para pôr em dia. O diario cabe os dois: "Aula 1 —
+-- ... Aula 2 — ...".
+-- ============================================================================
+
+-- 19.1 — quantas das duas aulas do dia o aluno assistiu
+alter table public.presencas
+  add column if not exists aulas_presentes smallint not null default 0
+    check (aulas_presentes between 0 and 2);
+
+comment on column public.presencas.aulas_presentes is
+  'Quantas das 2 aulas do dia o aluno assistiu: 0, 1 ou 2. `presente` continua valendo como "esteve em pelo menos uma" (D54).';
+
+-- 19.2 — o que ja existe: presente virou 2, falta virou 0.
+-- Nao ha como saber retroativamente quem saiu no intervalo; presente inteiro e
+-- a leitura fiel do que foi registrado na epoca.
+update public.presencas
+   set aulas_presentes = case when presente then 2 else 0 end
+ where aulas_presentes = 0 and presente;
+
+-- 19.3 — a view passa a contar AULAS, nao encontros.
+-- `aulas_dadas` vira o dobro dos encontros fechados, e `presencas` soma o que
+-- cada aluno assistiu de fato. O percentual continua sendo presencas/dadas —
+-- so que agora um aluno que saiu no intervalo pesa metade, que era o ponto.
+drop view if exists public.vw_desempenho_aluno;
+create view public.vw_desempenho_aluno
+with (security_invoker = true) as
+select
+  n.aluno_id,
+  al.nome                       as aluno,
+  n.turma_id,
+  n.disciplina_id,
+  d.nome                        as disciplina,
+  d.modulo,
+  s.nome                        as sala,
+  n.nota                        as nota_professor,
+  n.nota1, n.nota2, n.nota3, n.nota4,
+  case when d.modulo = 1 then null else g.nota_banca end as nota_banca,
+  case
+    when d.modulo = 1         then n.nota
+    when g.nota_banca is null then null
+    else round((n.nota + g.nota_banca) / 2, 2)
+  end                           as nota_final,
+  pres.aulas_dadas,
+  pres.presencas,
+  case
+    when pres.aulas_dadas is null or pres.aulas_dadas = 0 then null
+    else round(pres.presencas * 100.0 / pres.aulas_dadas, 1)
+  end                           as percentual_presenca
+from public.notas_disciplina n
+join public.alunos      al on al.id = n.aluno_id
+join public.disciplinas d  on d.id  = n.disciplina_id
+left join public.salas  s  on s.id  = d.sala_id
+left join public.grupos g
+  on  g.turma_id = n.turma_id
+  and g.modulo   = d.modulo
+  and exists (
+    select 1 from public.grupo_alunos ga
+     where ga.grupo_id = g.id and ga.aluno_id = n.aluno_id
+  )
+left join lateral (
+  select
+    count(*) * 2                                   as aulas_dadas,
+    coalesce(sum(p.aulas_presentes), 0)            as presencas
+  from public.aulas a
+  left join public.presencas p
+    on p.aula_id = a.id and p.aluno_id = n.aluno_id
+ where a.turma_id      = n.turma_id
+   and a.disciplina_id = n.disciplina_id
+   and a.chamada_finalizada
+) pres on true;
+
+comment on view public.vw_desempenho_aluno is
+  'Nota final e frequencia por aluno/disciplina, em AULAS (cada dia vale 2). No 1o modulo nao ha banca e a final e a nota do professor. NULL significa indeterminado, nunca zero.';
+
+-- 19.4 — conferencia
+-- select column_name from information_schema.columns
+--  where table_schema='public' and table_name='presencas';
+-- select count(*), sum(aulas_presentes) from public.presencas;
+
+-- ROLLBACK (a view volta ao texto da fase 16)
+--   alter table public.presencas drop column if exists aulas_presentes;
+
+
+-- ============================================================================
 -- LIMPEZAS — rodar SEPARADO das fases funcionais
 -- ----------------------------------------------------------------------------
 -- Rodar cada comando ISOLADAMENTE. Se um falhar, ele nao derruba os outros.

@@ -41,6 +41,7 @@ describe("frequenciaPorDisciplina", () => {
     const porDisc = Object.fromEntries(linhas.map(l => [l.disciplina, l]));
 
     assert.equal(porDisc["Roteiro"].percentual, 100);
+    assert.equal(porDisc["Roteiro"].aulasDadas, 4, "2 encontros = 4 aulas");
     assert.equal(porDisc["Roteiro"].abaixoDoMinimo, false);
     assert.equal(porDisc["Desenho"].percentual, 0);
     assert.equal(porDisc["Desenho"].abaixoDoMinimo, true);
@@ -68,8 +69,8 @@ describe("frequenciaPorDisciplina", () => {
   it("ausencia de registro conta como falta, como na view", () => {
     const aulas = [aula("r1", "Roteiro", 1), aula("r2", "Roteiro", 2)];
     const [linha] = frequenciaPorDisciplina([alunos[0]], aulas, [presente("r1", "a1")]);
-    assert.equal(linha.presencas, 1);
-    assert.equal(linha.faltas, 1);
+    assert.equal(linha.presencas, 2, "1 dia assistido = 2 aulas");
+    assert.equal(linha.faltas, 2);
   });
 
   it("registro com presente=false nao vira presenca", () => {
@@ -84,7 +85,7 @@ describe("frequenciaPorDisciplina", () => {
     const linhas = frequenciaPorDisciplina(alunos, aulas, [presente("r1", "a1")]);
     const bruno = linhas.find(l => l.aluno === "Bruno")!;
     const ana = linhas.find(l => l.aluno === "Ana")!;
-    assert.equal(bruno.presencas, 1);
+    assert.equal(bruno.presencas, 2);
     assert.equal(ana.presencas, 0);
   });
 
@@ -153,8 +154,8 @@ describe("abono de falta", () => {
       { aula_id: "x6", aluno_id: "a1" }, { aula_id: "x7", aluno_id: "a1" },
     ]);
     assert.equal(l.percentual, 60);
-    assert.equal(l.faltas, 4);
-    assert.equal(l.faltasAbonadas, 2);
+    assert.equal(l.faltas, 8, "4 dias sem ir = 8 aulas");
+    assert.equal(l.faltasAbonadas, 4, "2 dias abonados = 4 aulas");
   });
 
   it("mostra em separado quanto daria se o abono valesse", () => {
@@ -188,7 +189,7 @@ describe("abono de falta", () => {
   it("abono de um aluno nao vale para outro", () => {
     const dois = [{ id: "a1", nome: "Bruno" }, { id: "a2", nome: "Ana" }];
     const linhas = frequenciaPorDisciplina(dois, dez, presencaEm(6), [{ aula_id: "x6", aluno_id: "a1" }]);
-    assert.equal(linhas.find(l => l.aluno === "Bruno")!.faltasAbonadas, 1);
+    assert.equal(linhas.find(l => l.aluno === "Bruno")!.faltasAbonadas, 2);
     assert.equal(linhas.find(l => l.aluno === "Ana")!.faltasAbonadas, 0);
   });
 
@@ -235,10 +236,13 @@ describe("riscoDeFrequencia", () => {
     assert.equal(r.melhorPercentualPossivel, 75);
   });
 
-  it("diz quantas faltas ainda cabem", () => {
-    // Precisa de 14 presencas em 20. Tem 5, restam 10 aulas: pode perder 1.
+  it("diz quantas AULAS ainda cabem — nao dias", () => {
+    // 20 encontros previstos = 40 aulas; 10 ja dados = 20 aulas. Foi a 5 dias
+    // (10 aulas). Precisa de 28 das 40; restam 20: pode perder 2 aulas, que e
+    // um dia inteiro. Contar em dias aqui daria 1 e esconderia o meio-dia.
     const [r] = risco(5);
-    assert.equal(r.faltasQueAindaCabem, 1);
+    assert.equal(r.faltasQueAindaCabem, 2);
+    assert.equal(r.aulasPrevistas, 40);
   });
 
   it("quem tem folga nao entra na lista — o aviso perderia o sentido", () => {
@@ -286,7 +290,7 @@ describe("riscoDeFrequencia", () => {
       frequenciaPorDisciplina(aluno, dadas, dadas.slice(0, 3).map(a => presente(a.id, "a1"))),
       {},
     );
-    assert.equal(r.aulasPrevistas, 10);
+    assert.equal(r.aulasPrevistas, 20, "10 encontros dados = 20 aulas");
     assert.equal(r.jaNaoAlcanca, true, "sem aulas restantes, 30% e definitivo");
   });
 });

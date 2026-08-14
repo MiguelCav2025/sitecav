@@ -1,4 +1,5 @@
 import { PRESENCA_MINIMA, arredondar } from "./aprovacao.ts";
+import { AULAS_POR_ENCONTRO } from "./aulas-do-dia.ts";
 
 /**
  * Relatórios de presença e diário de sala.
@@ -31,6 +32,21 @@ export interface RegistroPresenca {
   aula_id: string;
   aluno_id: string;
   presente: boolean;
+  /** Quantas das 2 aulas do dia ele assistiu (D54). Ausente = deriva de `presente`. */
+  aulas_presentes?: number | null;
+}
+
+/**
+ * Quantas aulas o aluno assistiu naquele dia.
+ *
+ * Registro anterior à Fase 19 não tem a contagem: ali `presente` valia o dia
+ * inteiro, e é essa a leitura fiel do que foi marcado na época.
+ */
+export function aulasAssistidas(p: RegistroPresenca): number {
+  if (p.aulas_presentes === null || p.aulas_presentes === undefined) {
+    return p.presente ? AULAS_POR_ENCONTRO : 0;
+  }
+  return p.aulas_presentes;
 }
 
 export interface AlunoSimples {
@@ -83,11 +99,14 @@ export function frequenciaPorDisciplina(
     porDisciplina.get(a.disciplina_id)!.aulaIds.add(a.id);
   }
 
-  const presentesPorAluno = new Map<string, Set<string>>();
+  // Quantas AULAS o aluno assistiu em cada dia — 0, 1 ou 2. Contar dias
+  // esconderia quem assiste a primeira e vai embora no intervalo.
+  const assistidasPorAluno = new Map<string, Map<string, number>>();
   for (const p of presencas) {
-    if (!p.presente) continue;
-    if (!presentesPorAluno.has(p.aluno_id)) presentesPorAluno.set(p.aluno_id, new Set());
-    presentesPorAluno.get(p.aluno_id)!.add(p.aula_id);
+    const n = aulasAssistidas(p);
+    if (n === 0) continue;
+    if (!assistidasPorAluno.has(p.aluno_id)) assistidasPorAluno.set(p.aluno_id, new Map());
+    assistidasPorAluno.get(p.aluno_id)!.set(p.aula_id, n);
   }
 
   const abonadasPorAluno = new Map<string, Set<string>>();
@@ -98,20 +117,22 @@ export function frequenciaPorDisciplina(
 
   const linhas: LinhaFrequencia[] = [];
   for (const aluno of alunos) {
-    const presentes = presentesPorAluno.get(aluno.id) ?? new Set<string>();
+    const assistidas = assistidasPorAluno.get(aluno.id) ?? new Map<string, number>();
     const abonadas = abonadasPorAluno.get(aluno.id) ?? new Set<string>();
 
     for (const [disciplinaId, d] of porDisciplina) {
-      const aulasDadas = d.aulaIds.size;
+      // Tudo em AULAS: cada encontro fechado vale duas (D54).
+      const aulasDadas = d.aulaIds.size * AULAS_POR_ENCONTRO;
       if (aulasDadas === 0) continue;
 
       let comparecimentos = 0;
       let abonos = 0;
       for (const aulaId of d.aulaIds) {
-        if (presentes.has(aulaId)) comparecimentos++;
-        // Abono só conta onde houve falta: abonar quem esteve presente seria
-        // somar duas vezes a mesma aula e passar dos 100%.
-        else if (abonadas.has(aulaId)) abonos++;
+        const n = assistidas.get(aulaId) ?? 0;
+        comparecimentos += n;
+        // O abono cobre só o que faltou daquele dia: abonar aula assistida
+        // somaria a mesma duas vezes e passaria dos 100%.
+        if (abonadas.has(aulaId)) abonos += AULAS_POR_ENCONTRO - n;
       }
 
       const percentual = arredondar((comparecimentos * 100) / aulasDadas);
@@ -234,12 +255,18 @@ export interface RiscoDeFrequencia {
  */
 export function riscoDeFrequencia(
   linhas: readonly LinhaFrequencia[],
-  aulasPrevistasPorDisciplina: Readonly<Record<string, number>>,
+  /** ENCONTROS previstos por disciplina — é o que `disciplinas.total_aulas` guarda. */
+  encontrosPrevistosPorDisciplina: Readonly<Record<string, number>>,
 ): RiscoDeFrequencia[] {
   const saida: RiscoDeFrequencia[] = [];
 
   for (const l of linhas) {
-    const previstas = aulasPrevistasPorDisciplina[l.disciplinaId] ?? l.aulasDadas;
+    // A grade planeja encontros; a frequência mede aulas. Converter aqui evita
+    // comparar 18 previstos com 36 dadas e concluir que a disciplina acabou.
+    const encontros = encontrosPrevistosPorDisciplina[l.disciplinaId];
+    const previstas = encontros === undefined
+      ? l.aulasDadas
+      : encontros * AULAS_POR_ENCONTRO;
     // Grade encolhida depois das aulas dadas: não há restantes negativas.
     const restantes = Math.max(0, previstas - l.aulasDadas);
     if (previstas === 0) continue;
