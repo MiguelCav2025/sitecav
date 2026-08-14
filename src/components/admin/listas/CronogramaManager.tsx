@@ -486,6 +486,12 @@ export default function CronogramaManager() {
                           {cron.feriados.length === 0 ? (
                             <p className="text-xs text-gray-400 italic">Nenhum feriado cadastrado.</p>
                           ) : (
+                            <>
+                            <p className="text-xs text-gray-400">
+                              Vermelho: feriado nacional · laranja: de São Bernardo ·
+                              âmbar: ponto facultativo · cinza: data da escola.
+                              Passe o mouse para ver o nome.
+                            </p>
                             <div className="flex flex-wrap gap-2">
                               {cron.feriados.map(data => {
                                 const conhecido = porData.get(data);
@@ -493,22 +499,34 @@ export default function CronogramaManager() {
                                 const cor = conhecido
                                   ? CORES_POR_TIPO[conhecido.tipo]
                                   : "bg-gray-50 border-gray-200 text-gray-600";
+                                const nome = conhecido?.nome ?? "Data da escola";
                                 return (
                                   <span
                                     key={data}
-                                    className={`flex items-center gap-1 border text-xs px-2 py-1 rounded-full ${cor}`}
-                                    title={ehPersonalizado ? "Data da escola — nenhum calendário oficial a conhece" : conhecido?.nome}
+                                    className={`flex items-center gap-1.5 border text-xs px-2 py-1 rounded-full ${cor}`}
+                                    title={ehPersonalizado
+                                      ? "Data da escola — nenhum calendário oficial a conhece"
+                                      : nome}
                                   >
-                                    {formatarData(data)}
-                                    {conhecido && <span className="opacity-75">· {conhecido.nome}</span>}
-                                    {ehPersonalizado && <span className="opacity-60">· da escola</span>}
-                                    <button onClick={() => handleRemoverFeriado(cron, data)} className="ml-0.5 hover:opacity-60">
+                                    {/* O nome inteiro virava um chip largo demais, que
+                                        quebrava a linha e desalinhava a lista toda —
+                                        "Aniversário de São Bernardo do Campo" sozinho
+                                        ocupava mais que três datas. Agora o tipo vira
+                                        um ponto colorido e o nome fica no toque. */}
+                                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" />
+                                    <span className="whitespace-nowrap">{formatarData(data)}</span>
+                                    <button
+                                      onClick={() => handleRemoverFeriado(cron, data)}
+                                      className="ml-0.5 shrink-0 hover:opacity-60"
+                                      title={`Remover ${nome}`}
+                                    >
                                       <X className="h-3 w-3" />
                                     </button>
                                   </span>
                                 );
                               })}
                             </div>
+                            </>
                           )}
                         </div>
                       );
