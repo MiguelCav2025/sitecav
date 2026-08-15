@@ -651,7 +651,9 @@ function MatrizDoCurso({ curso }: { curso: CursoNaMatriz }) {
                 Mód. {i + 1}
               </th>
             ))}
-            <th className="w-16 pb-1 text-xs font-medium text-gray-400">Total</th>
+            <th className="w-20 border-l border-gray-200 pb-1 pl-2 text-xs font-medium text-gray-400">
+              Total
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -675,19 +677,26 @@ function MatrizDoCurso({ curso }: { curso: CursoNaMatriz }) {
                   )}
                 </td>
               ))}
-              {/* Total sem moldura: é soma, não turma. Dar a ele a mesma caixa
-                  das células o faria parecer uma quarta turma. */}
-              <td className="p-0.5 pl-2 text-right text-base font-semibold tabular-nums text-gray-500">
+              {/* Sem moldura: é soma, não turma — com a mesma caixa das células
+                  pareceria uma quarta turma. Mas CENTRALIZADO como elas, e com
+                  uma borda que separa o resumo do dado: alinhado à direita, o
+                  número não batia com o próprio cabeçalho. */}
+              <td className="border-l border-gray-200 p-0.5 pl-2 text-center text-base font-semibold tabular-nums text-gray-500">
                 {l.total}
               </td>
             </tr>
           ))}
           <tr>
-            <th className="pt-1 pr-2 text-left text-xs font-medium text-gray-400">Total</th>
+            <th className="border-t border-gray-200 pr-2 pt-1.5 text-left text-xs font-medium text-gray-400">
+              Total
+            </th>
             {curso.totaisPorModulo.map((t, i) => (
-              <td key={i} className="pt-1 text-sm font-semibold tabular-nums text-gray-500">{t}</td>
+              <td key={i} className="border-t border-gray-200 pt-1.5 text-center text-sm font-semibold tabular-nums text-gray-500">
+                {t}
+              </td>
             ))}
-            <td className="pt-1 pl-2 text-right text-base font-bold tabular-nums text-gray-700">
+            {/* O canto: total de linha encontra total de coluna. */}
+            <td className="border-l border-t border-gray-200 pl-2 pt-1.5 text-center text-base font-bold tabular-nums text-gray-700">
               {curso.total}
             </td>
           </tr>
