@@ -27,6 +27,10 @@ export default function ProfessorLoginPage() {
       setErro("Este link de acesso já foi usado ou expirou. Peça um novo à coordenação.");
     } else if (motivo === "link_invalido") {
       setErro("Link de acesso inválido. Peça um novo à coordenação.");
+    } else if (motivo === "conexao") {
+      // O middleware não CONSEGUIU perguntar se a sessão vale — diferente de
+      // ela não valer. Sem dizer isso, o professor conclui que errou a senha.
+      setErro("Não foi possível verificar sua sessão: o servidor não respondeu. Tente de novo em instantes.");
     }
   }, []);
 

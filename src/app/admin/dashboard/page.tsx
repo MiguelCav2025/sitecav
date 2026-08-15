@@ -92,10 +92,25 @@ function DashboardInner() {
       const { data } = await supabase.auth.getUser();
       if (!data.user) { router.push('/admin/login'); return; }
 
-      // Bloqueia professores de acessar o admin
+      // Administrador é CONCESSÃO EXPLÍCITA: constar em `administradores` com
+      // ativo = true. Aqui a regra era a antiga — "não é professor, então é
+      // admin" —, que promovia qualquer conta órfã ou importada. O middleware,
+      // o `requireAdmin()` e o `is_admin()` do banco já concordavam entre si;
+      // esta tela era a única que ainda decidia por eliminação.
+      const { data: admin } = await supabase
+        .from('administradores')
+        .select('user_id')
+        .eq('user_id', data.user.id)
+        .eq('ativo', true)
+        .maybeSingle();
+
+      if (admin) { setUser(data.user); return; }
+
+      // Não é admin. Se for professor, vai para a área dele — e para a troca
+      // de senha, se ainda não criou a própria.
       const { data: prof } = await supabase
         .from('professores')
-        .select('id, senha_alterada')
+        .select('senha_alterada')
         .eq('user_id', data.user.id)
         .maybeSingle();
 
@@ -104,7 +119,8 @@ function DashboardInner() {
         return;
       }
 
-      setUser(data.user);
+      // Autenticado e não é nem uma coisa nem outra: não há tela para ele.
+      router.push('/admin/login');
     };
     getUser();
   }, [router, supabase.auth]);

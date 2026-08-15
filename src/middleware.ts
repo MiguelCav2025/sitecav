@@ -33,30 +33,56 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const ehAreaDoProfessor = request.nextUrl.pathname.startsWith("/professor");
 
-  if (!user) {
+  /**
+   * Manda para o login, dizendo por quê.
+   *
+   * `conexao` existe porque antes havia um caso só: "não tem sessão". Se o
+   * `getUser()` LANÇASSE — Supabase fora do ar, rede instável, timeout — o
+   * desfecho era idêntico ao de quem nunca logou, e a pessoa voltava ao
+   * formulário sem uma palavra. Ela tenta a senha de novo, acha que errou,
+   * pede para redefinir. Falhar fechado está certo; falhar calado, não.
+   */
+  const paraOLogin = (motivo?: "conexao") => {
     const url = request.nextUrl.clone();
     url.pathname = ehAreaDoProfessor ? "/professor/login" : "/admin/login";
-    url.search = "";
+    url.search = motivo ? `?erro=${motivo}` : "";
     return NextResponse.redirect(url);
+  };
+
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch {
+    // Sem conseguir perguntar, não se conclui nada — e não concluir nada
+    // significa negar. Nunca deixar passar por não ter tido resposta.
+    return paraOLogin("conexao");
   }
+
+  if (!user) return paraOLogin();
 
   // O painel exige ser administrador, não apenas estar autenticado. Sem esta
   // checagem, um professor logado recebia o HTML do painel e só era mandado
   // embora depois que o JavaScript rodasse — os dados ficavam protegidos pelo
   // RLS, mas a casca aparecia.
   if (!ehAreaDoProfessor) {
-    const { data: admin } = await supabase
-      .from("administradores")
-      .select("user_id")
-      .eq("user_id", user.id)
-      .eq("ativo", true)
-      .maybeSingle();
+    let admin = null;
+    try {
+      const { data } = await supabase
+        .from("administradores")
+        .select("user_id")
+        .eq("user_id", user.id)
+        .eq("ativo", true)
+        .maybeSingle();
+      admin = data;
+    } catch {
+      // Mesma regra de cima: sem resposta, nega. Mandar para a área do
+      // professor aqui seria pior — a pessoa É admin, e cairia numa tela que
+      // não é dela por causa de uma falha de rede.
+      return paraOLogin("conexao");
+    }
 
     if (!admin) {
       const url = request.nextUrl.clone();

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +15,20 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClient();
+
+  // O middleware manda `?erro=conexao` quando não CONSEGUIU perguntar ao
+  // Supabase se a sessão vale — coisa diferente de a sessão não valer. Sem
+  // isto, quem foi devolvido por uma queda de rede via o formulário em branco
+  // e concluía que a própria senha estava errada.
+  //
+  // Lido do endereço direto, e não com `useSearchParams`, para não obrigar a
+  // página inteira a viver dentro de um <Suspense> — mesma escolha da tela do
+  // professor.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("erro") === "conexao") {
+      setError("Não foi possível verificar sua sessão: o servidor de autenticação não respondeu. Tente de novo em instantes.");
+    }
+  }, []);
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
