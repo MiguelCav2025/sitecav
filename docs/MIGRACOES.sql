@@ -37,6 +37,10 @@
 --
 --   Fase 17 ... [x] aplicada em 13/08/2026 (abono de falta)
 --   Fase 18 ... [x] aplicada e verificada em 13/08/2026 (motivo do feriado)
+--   Fase 20 ... [ ] indice de data + duas views de leitura para o Resumo.
+--                   Nao muda dado nenhum. Conferido antes de escrever: o
+--                   indice de presencas que eu temia faltar ja existe
+--                   (presencas_aula_id_aluno_id_key, aula_id na frente).
 --
 -- NAO HA MIGRACAO PENDENTE. O banco e o codigo estao alinhados.
 --
@@ -2322,3 +2326,134 @@ comment on view public.vw_desempenho_aluno is
 -- Se falhar por dependencia, rode a V4 acima para descobrir quem depende dela.
 --
 --   alter table public.aulas drop column if exists descricao;
+
+
+-- ============================================================================
+-- FASE 20 — O RESUMO DA ESCOLA
+-- ----------------------------------------------------------------------------
+-- O coordenador nao tem panorama. Todo aviso que construimos vive dentro de
+-- UMA turma escolhida num dropdown: chamada em atraso, aluno que ja nao
+-- alcanca os 70%, aluno esperando decisao. Com 12 turmas possiveis, saber o
+-- estado da escola custa abrir doze vezes tres abas diferentes.
+--
+-- Esta fase nao muda dado nenhum. Cria dois indices e duas views de leitura,
+-- para que a tela de Resumo faca 2 consultas de dezenas de linhas em vez de
+-- baixar ~10 mil linhas de presenca e somar no navegador.
+--
+-- POR QUE VIEW, E NAO SOMA NO CLIENTE
+--
+-- Somar no navegador significa trazer uma linha de `presencas` por aluno por
+-- aula. Isso e lento na rede, pesado no celular, e falha do pior jeito: se a
+-- API cortar a resposta num limite de linhas, o resumo mostra numero errado
+-- sem erro nenhum. Somar no Postgres devolve ~565 linhas e nao tem esse modo
+-- de falha.
+
+
+-- 20.1 — indice que falta em `aulas`
+--
+-- O resumo faz duas perguntas por data: "quais aulas ja passaram sem chamada"
+-- e "quais sao hoje". Nenhum dos tres indices de `aulas` (turma, disciplina,
+-- professor) atende a essas duas, e hoje elas varrem a tabela inteira.
+--
+-- Com 979 aulas isso resolve em milissegundos de qualquer jeito. O indice e
+-- seguro para quando a escola tiver cinco anos de historico, nao ganho de
+-- agora — e custa quase nada guardar.
+
+create index if not exists idx_aulas_data on public.aulas(data_aula);
+
+-- NAO precisa de indice em `presencas`: a unique key
+-- presencas_aula_id_aluno_id_key ja tem aula_id como primeira coluna, entao
+-- `where aula_id in (...)` — a consulta mais quente do sistema, usada tambem
+-- pela chamada do professor — ja passa por ela. Conferido em 15/08/2026.
+
+
+-- 20.2 — frequencia de TODA a escola, somada no banco
+--
+-- Irma da vw_desempenho_aluno, com duas diferencas de proposito:
+--
+--   • sai de `matriculas`, e nao de `notas_disciplina`. Aluno sem uma unica
+--     nota lancada aparece aqui — e ele e justamente quem corre mais risco de
+--     ser decidido no escuro.
+--   • nao traz nota nenhuma. Isto e frequencia, e so.
+--
+-- Conta AULAS, nao encontros: cada dia vale 2 (Guia de Funcionamento), e a
+-- presenca parcial existe — o aluno pode assistir a primeira e ir embora.
+
+drop view if exists public.vw_frequencia_turma;
+create view public.vw_frequencia_turma
+with (security_invoker = true) as
+select
+  a.turma_id,
+  m.aluno_id,
+  al.nome                                    as aluno,
+  m.modulo,
+  a.disciplina_id,
+  d.nome                                     as disciplina,
+  -- O total planejado da disciplina, nao o ja dado: e a diferenca entre os
+  -- dois que diz o quanto ainda da para recuperar.
+  d.total_aulas * 2                          as aulas_previstas,
+  count(*) filter (where a.chamada_finalizada) * 2                        as aulas_dadas,
+  coalesce(sum(p.aulas_presentes) filter (where a.chamada_finalizada), 0) as presencas,
+  count(ab.aula_id)                          as faltas_abonadas
+from public.matriculas m
+join public.alunos      al on al.id = m.aluno_id
+join public.aulas       a  on a.turma_id = m.turma_id
+join public.disciplinas d  on d.id = a.disciplina_id
+left join public.presencas p
+  on p.aula_id = a.id and p.aluno_id = m.aluno_id
+left join public.abonos ab
+  on ab.aula_id = a.id and ab.aluno_id = m.aluno_id
+where m.situacao = 'cursando'
+group by a.turma_id, m.aluno_id, al.nome, m.modulo,
+         a.disciplina_id, d.nome, d.total_aulas;
+
+comment on view public.vw_frequencia_turma is
+  'Frequencia por aluno/disciplina de quem esta cursando, em AULAS (cada dia vale 2). Sai de matriculas: aluno sem nota lancada aparece.';
+
+
+-- 20.3 — chamadas em atraso, de todas as turmas
+--
+-- A data de hoje sai em America/Sao_Paulo, e nao current_date: o banco roda em
+-- UTC, e depois das 21h a aula da noite ja seria "amanha" — passaria a contar
+-- como atrasada no mesmo dia em que aconteceu.
+
+drop view if exists public.vw_chamadas_pendentes;
+create view public.vw_chamadas_pendentes
+with (security_invoker = true) as
+select
+  a.id                                       as aula_id,
+  a.turma_id,
+  t.curso,
+  t.turno,
+  t.entrada,
+  a.disciplina_id,
+  d.nome                                     as disciplina,
+  a.numero,
+  a.data_aula,
+  pr.nome                                    as professor,
+  ((now() at time zone 'America/Sao_Paulo')::date - a.data_aula) as dias_atras
+from public.aulas a
+join public.turmas       t  on t.id  = a.turma_id
+join public.disciplinas  d  on d.id  = a.disciplina_id
+left join public.professores pr on pr.id = a.professor_id
+where a.chamada_finalizada is not true
+  and a.data_aula is not null
+  and a.data_aula <= (now() at time zone 'America/Sao_Paulo')::date;
+
+comment on view public.vw_chamadas_pendentes is
+  'Aulas cuja data ja passou e a chamada nao foi feita, em todas as turmas. A mais antiga e a que corre risco de ninguem mais lembrar.';
+
+
+-- 20.4 — conferencia
+--
+-- select count(*) from public.vw_frequencia_turma;    -- ~565 esperadas
+-- select count(*) from public.vw_chamadas_pendentes;
+-- select curso, turno, disciplina, professor, numero, data_aula, dias_atras
+--   from public.vw_chamadas_pendentes order by data_aula limit 20;
+
+
+-- ROLLBACK 20
+--
+--   drop view  if exists public.vw_chamadas_pendentes;
+--   drop view  if exists public.vw_frequencia_turma;
+--   drop index if exists public.idx_aulas_data;

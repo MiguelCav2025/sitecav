@@ -22,6 +22,7 @@ const ReferenceVideoManager = dynamic(() => import('@/components/admin/Reference
 const ReferenceBibliographyManager = dynamic(() => import('@/components/admin/ReferenceBibliographyManager'), { ssr: false });
 
 // ── Escola ────────────────────────────────────────────────────────────────────
+const ResumoManager = dynamic(() => import('@/components/admin/listas/ResumoManager'), { ssr: false });
 const CronogramaManager = dynamic(() => import('@/components/admin/listas/CronogramaManager'), { ssr: false });
 const TurmasManager = dynamic(() => import('@/components/admin/listas/TurmasManager'), { ssr: false });
 const DisciplinasManager = dynamic(() => import('@/components/admin/listas/DisciplinasManager'), { ssr: false });
@@ -34,7 +35,7 @@ const RelatoriosManager = dynamic(() => import('@/components/admin/RelatoriosMan
 const AdminManager = dynamic(() => import('@/components/admin/AdminManager'), { ssr: false });
 const SalasManager = dynamic(() => import('@/components/admin/SalasManager'), { ssr: false });
 
-function ConteudoSecao({ secao }: { secao: string }) {
+function ConteudoSecao({ secao, aoNavegar }: { secao: string; aoNavegar: (s: string) => void }) {
   switch (secao) {
     case "banners": return <BannerManager />;
     case "portfolio": return <ProjectManager />;
@@ -57,6 +58,7 @@ function ConteudoSecao({ secao }: { secao: string }) {
     case "ref_videos": return <ReferenceVideoManager />;
     case "ref_biblio": return <ReferenceBibliographyManager />;
 
+    case "resumo": return <ResumoManager aoNavegar={aoNavegar} />;
     case "cronograma": return <CronogramaManager />;
     case "turmas": return <TurmasManager />;
     case "disciplinas": return <DisciplinasManager />;
@@ -134,7 +136,7 @@ function DashboardInner() {
             {secaoAtual.label}
           </h2>
         )}
-        <ConteudoSecao secao={secao} />
+        <ConteudoSecao secao={secao} aoNavegar={setSecao} />
       </section>
     </div>
   );

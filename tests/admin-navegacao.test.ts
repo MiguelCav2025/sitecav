@@ -40,15 +40,29 @@ describe("passos da area Escola", () => {
     assert.ok(escola);
   });
 
-  test("todas as secoes da Escola sao numeradas", () => {
+  // O Resumo e a excecao proposital: ele nao e etapa de configuracao, e o
+  // que se olha DEPOIS de tudo configurado. Numera-lo diria ao coordenador
+  // que ele precisa preencher algo ali antes de seguir para o passo 2.
+  const SEM_PASSO = ["resumo"];
+
+  test("toda secao de configuracao da Escola e numerada", () => {
     for (const s of escola.secoes) {
+      if (SEM_PASSO.includes(s.value)) {
+        assert.equal(s.passo, undefined, `${s.value} nao deveria ter passo`);
+        continue;
+      }
       assert.equal(typeof s.passo, "number", `${s.value} deveria ter passo`);
     }
   });
 
   test("os passos sao 1..N, sem furo nem repeticao", () => {
-    const passos = escola.secoes.map(s => s.passo!);
+    const passos = escola.secoes.filter(s => s.passo !== undefined).map(s => s.passo!);
     assert.deepEqual(passos, Array.from({ length: passos.length }, (_, i) => i + 1));
+  });
+
+  test("o Resumo vem antes de tudo: e a tela de entrada do painel", () => {
+    assert.equal(escola.secoes[0].value, "resumo");
+    assert.equal(SECAO_PADRAO, "resumo");
   });
 
   test("cronograma vem antes de turmas, que vem antes de disciplinas", () => {

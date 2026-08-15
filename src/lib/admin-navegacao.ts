@@ -1,7 +1,7 @@
 import {
   Images, Film, Building2, Camera, Palette, Users, Download, ClipboardList,
   Video, BookOpen, CalendarDays, GraduationCap, BookMarked, UserCheck,
-  BarChart3, Settings, Award, DoorOpen, Scale, type LucideIcon,
+  BarChart3, Settings, Award, DoorOpen, Scale, LayoutDashboard, type LucideIcon,
 } from "lucide-react";
 
 export interface SecaoAdmin {
@@ -57,6 +57,10 @@ export const AREAS: AreaAdmin[] = [
     // do calendário (2026/2). A aba se chamava Cronograma e falava das duas
     // coisas — ver D46 no plano.
     secoes: [
+      // Sem numero: o Resumo nao e etapa de configuracao, e o que se olha
+      // depois que tudo esta configurado. Por isso vem antes do passo 1 e
+      // fora da contagem.
+      { value: "resumo", label: "Resumo", ajuda: "O que precisa da sua atencao hoje", icone: LayoutDashboard },
       { passo: 1, value: "cronograma",  label: "Calendário letivo", ajuda: "Início, fim e feriados do semestre", icone: CalendarDays },
       { passo: 2, value: "turmas",      label: "Turmas",      ajuda: "Turmas e os alunos de cada uma",       icone: GraduationCap },
       { passo: 3, value: "disciplinas", label: "Disciplinas", ajuda: "Matérias, sala, professor e aulas",   icone: BookMarked },
@@ -82,7 +86,9 @@ export const AREAS: AreaAdmin[] = [
 
 export const TODAS_AS_SECOES: SecaoAdmin[] = AREAS.flatMap(a => a.secoes);
 
-export const SECAO_PADRAO = "banners";
+// O painel abria em Banners — resquicio de quando isto era so o site
+// institucional. Quem entra aqui hoje coordena uma escola.
+export const SECAO_PADRAO = "resumo";
 
 /** Descobre a que área uma seção pertence, para a URL guardar só a seção. */
 export function areaDaSecao(secao: string): AreaAdmin {
