@@ -379,14 +379,14 @@ export default function ResumoManager({
               // formam uma coluna que se lê de cima a baixo, e a gravidade
               // forma outra, alinhada a direita. Antes tudo tinha o mesmo peso
               // e o olho nao tinha por onde comecar.
-              <li key={a.professor} className="py-2">
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="font-semibold text-gray-900">{a.professor}</span>
-                  <span className="shrink-0 text-xs font-medium text-red-700">
-                    há {a.diasDaMaisAntiga} dias
-                  </span>
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              // Uma linha so. Em duas, agrupar as turmas deixou a segunda quase
+              // vazia e abriu um vao de meia tela entre o chip e "ha N dias".
+              // Agora o nome ancora a esquerda, os dados seguem, e a gravidade
+              // vai para a direita com `ml-auto` — o vao virou separacao, e
+              // nao buraco.
+              <li key={a.professor} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+                <span className="font-semibold text-gray-900">{a.professor}</span>
+                <div className="flex flex-wrap items-center gap-1.5">
                   <span className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-red-800">
                     {a.quantidade} {plural(a.quantidade, "aula", "aulas")}
                   </span>
@@ -405,6 +405,9 @@ export default function ResumoManager({
                     </span>
                   ))}
                 </div>
+                <span className="ml-auto shrink-0 text-xs font-medium text-red-700">
+                  há {a.diasDaMaisAntiga} dias
+                </span>
               </li>
             ))}
           </ul>
@@ -484,7 +487,11 @@ export default function ResumoManager({
           ajuda="Retrato de quem está matriculado agora. Vira decisão no fim do módulo."
           acao={<Ir para="fechamento">Ir ao fechamento</Ir>}
         >
-          <div className="grid gap-4 sm:grid-cols-2">
+          {/* `max-w-4xl`: sem teto, cada matriz esticava para metade de um card
+              de 1400px e ficava uma tabelinha perdida num campo vazio. O
+              conteudo tem um tamanho natural — o container e que precisa
+              respeita-lo. */}
+          <div className="grid max-w-4xl gap-4 sm:grid-cols-2">
             {matrizDeTurmas(esperando, MODULOS_DO_CURSO).map(c => (
               <MatrizDoCurso key={c.curso} curso={c} />
             ))}
@@ -630,7 +637,7 @@ function Bloco({
  */
 function MatrizDoCurso({ curso }: { curso: CursoNaMatriz }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
       <div className="mb-2 flex items-baseline justify-between gap-2">
         <h4 className="text-sm font-semibold text-gray-800">{curso.curso}</h4>
         <span className="text-xs text-gray-500">
@@ -643,9 +650,9 @@ function MatrizDoCurso({ curso }: { curso: CursoNaMatriz }) {
       <table className="border-collapse text-center">
         <thead>
           <tr>
-            <th className="w-12" />
+            <th className="w-16" />
             {Array.from({ length: MODULOS_DO_CURSO }, (_, i) => (
-              <th key={i} className="w-14 pb-1 text-[11px] font-medium text-gray-500">
+              <th key={i} className="w-20 pb-1 text-xs font-medium text-gray-500">
                 Mód. {i + 1}
               </th>
             ))}
@@ -654,19 +661,19 @@ function MatrizDoCurso({ curso }: { curso: CursoNaMatriz }) {
         <tbody>
           {curso.linhas.map(l => (
             <tr key={l.turno}>
-              <th className="py-1 text-left text-[11px] font-medium text-gray-500">{l.turno}</th>
+              <th className="py-1 pr-2 text-left text-xs font-medium text-gray-500">{l.turno}</th>
               {l.celulas.map((c, i) => (
                 <td key={i} className="p-0.5">
                   {c === null ? (
                     // O buraco precisa ler como buraco, e não como zero aluno.
                     <span
                       title="Não há turma neste módulo e turno"
-                      className="block rounded border border-dashed border-gray-300 py-1.5 text-xs text-gray-400"
+                      className="block rounded-md border border-dashed border-gray-300 py-2.5 text-xs text-gray-400"
                     >
                       —
                     </span>
                   ) : (
-                    <span className="block rounded border border-gray-200 bg-white py-1.5 text-base font-bold tabular-nums text-gray-800">
+                    <span className="block rounded-md border border-gray-200 bg-white py-2 text-lg font-bold tabular-nums text-gray-800">
                       {c.quantidade}
                     </span>
                   )}
