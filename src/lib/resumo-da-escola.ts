@@ -515,7 +515,9 @@ export interface CursoNaMatriz {
   total: number;
   turnos: string[];
   /** Uma linha por turno; cada célula é um módulo, ou null se a turma não existe. */
-  linhas: { turno: string; celulas: (TurmaNaMatriz | null)[] }[];
+  linhas: { turno: string; celulas: (TurmaNaMatriz | null)[]; total: number }[];
+  /** Soma de cada módulo, somando os turnos. */
+  totaisPorModulo: number[];
   /** Quantos dos módulos × turnos possíveis não têm turma. */
   vazias: number;
 }
@@ -553,20 +555,30 @@ export function matrizDeTurmas(
       .sort((a, b) => ordemDoTurno(a) - ordemDoTurno(b) || a.localeCompare(b, "pt-BR"));
 
     let vazias = 0;
-    const linhas = turnos.map(turno => ({
-      turno,
-      celulas: Array.from({ length: modulos }, (_, i) => {
+    const linhas = turnos.map(turno => {
+      const celulas = Array.from({ length: modulos }, (_, i) => {
         const achado = doCurso.find(d => d.turno === turno && d.modulo === i + 1);
         if (!achado) { vazias++; return null; }
         return { turmaId: achado.turmaId, quantidade: achado.quantidade };
-      }),
-    }));
+      });
+      // O total do turno responde uma pergunta que a matriz sozinha não
+      // responde: a escola é mais cheia de manhã ou à noite? É a conta que o
+      // coordenador faria de cabeça olhando a linha.
+      return {
+        turno,
+        celulas,
+        total: celulas.reduce((soma, c) => soma + (c?.quantidade ?? 0), 0),
+      };
+    });
 
     return {
       curso,
       total: doCurso.reduce((s, d) => s + d.quantidade, 0),
       turnos,
       linhas,
+      totaisPorModulo: Array.from({ length: modulos }, (_, i) =>
+        linhas.reduce((soma, l) => soma + (l.celulas[i]?.quantidade ?? 0), 0),
+      ),
       vazias,
     };
   });

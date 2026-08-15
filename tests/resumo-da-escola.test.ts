@@ -359,3 +359,17 @@ test("módulo desconhecido não some do grupo", () => {
   ]);
   assert.deepEqual(g.porTurno[0].modulos, [1, null]);
 });
+
+test("cada turno soma o proprio total, ignorando a celula que nao existe", () => {
+  const [animacao] = matrizDeTurmas(turmasReais, 3);
+  const manha = animacao.linhas.find(l => l.turno === "Manhã")!;
+  const noite = animacao.linhas.find(l => l.turno === "Noite")!;
+  assert.equal(manha.total, 17);   // — + 11 + 6
+  assert.equal(noite.total, 25);   // 9 + 11 + 5
+  assert.equal(manha.total + noite.total, animacao.total);
+});
+
+test("o total por modulo soma os turnos", () => {
+  const cine = matrizDeTurmas(turmasReais, 3).find(c => c.curso === "Cine/TV")!;
+  assert.deepEqual(cine.totaisPorModulo, [29, 25, 17]);
+});
