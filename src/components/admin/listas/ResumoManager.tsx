@@ -555,8 +555,12 @@ type Nivel = "urgente" | "atencao" | "panorama";
 const NIVEIS: Record<Nivel, {
   faixa: string; borda: string; fundo: string; numero: string; titulo: string;
 }> = {
-  urgente:  { faixa: "bg-red-500",   borda: "border-red-200",   fundo: "bg-red-50/60",   numero: "text-red-600",   titulo: "text-lg font-bold text-gray-900" },
-  atencao:  { faixa: "bg-amber-500", borda: "border-amber-200", fundo: "bg-amber-50/60", numero: "text-amber-600", titulo: "text-base font-semibold text-gray-900" },
+  // Fundo SOLIDO, nunca translucido. O painel tem fundo azul-escuro, e
+  // `bg-red-50/60` nao compoe sobre branco — compoe sobre o azul, e o vermelho
+  // claro vira um roxo sujo. Mesma familia do branco-sobre-branco: a cor sai
+  // errada sem erro de build e sem aviso.
+  urgente:  { faixa: "bg-red-500",   borda: "border-red-200",   fundo: "bg-red-50",   numero: "text-red-600",   titulo: "text-lg font-bold text-gray-900" },
+  atencao:  { faixa: "bg-amber-500", borda: "border-amber-200", fundo: "bg-amber-50", numero: "text-amber-600", titulo: "text-base font-semibold text-gray-900" },
   panorama: { faixa: "bg-transparent", borda: "border-gray-200", fundo: "bg-white",      numero: "text-gray-400",  titulo: "text-base font-semibold text-gray-700" },
 };
 

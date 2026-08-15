@@ -71,6 +71,16 @@ suspeito é o `prebuild` ter sumido do `package.json`.
 Ao ver cor faltando numa tela, **suspeite disto antes de reescrever o
 componente** — foi assim que um calendário inteiro foi reescrito à toa.
 
+### Primo dele: fundo translúcido sobre o painel escuro
+
+O painel do admin tem fundo **azul-escuro**. Um `bg-red-50/60` ali não compõe
+sobre branco — compõe sobre o azul, e o vermelho claro vira um roxo sujo.
+Dentro de um card branco a mesma classe fica certa, o que faz o erro parecer
+aleatório.
+
+Regra: **fundo de bloco direto no painel é sólido** (`bg-red-50`). Opacidade
+só dentro de algo que já tem fundo branco — linha de tabela, por exemplo.
+
 ## Armadilha conhecida do ambiente
 
 A API de **listagem** do Supabase Auth (`listUsers`) responde **500** neste
