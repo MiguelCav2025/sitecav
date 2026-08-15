@@ -1,5 +1,6 @@
 import { PRESENCA_MINIMA } from "./aprovacao.ts";
 import { AULAS_POR_ENCONTRO } from "./aulas-do-dia.ts";
+import { normalizarNome } from "./duplicados.ts";
 import {
   riscoDeFrequencia,
   type LinhaFrequencia,
@@ -272,4 +273,174 @@ export function andamentoDoSemestre(
  */
 export function estaTudoEmOrdem(contagens: readonly number[]): boolean {
   return contagens.every(n => n === 0);
+}
+
+// ── Lacunas de configuração ──────────────────────────────────────────────────
+
+export interface DisciplinaConfigurada {
+  id: string;
+  nome: string;
+  curso: string;
+  modulo: number;
+  professor_id: string | null;
+  sala_id: string | null;
+  dia_da_semana: number | null;
+}
+
+export interface Lacuna {
+  /** Aba onde se conserta. */
+  onde: string;
+  texto: string;
+}
+
+/**
+ * O que ficou pela metade na montagem do semestre.
+ *
+ * Hoje esses buracos só aparecem quando alguém tropeça neles: a disciplina
+ * sem professor não gera aula com dono, a sem dia da semana não entra na
+ * grade, a turma sem aluno nenhum é uma turma que não existe de verdade.
+ * Todos são silenciosos — nada quebra, a coisa só não acontece.
+ *
+ * Fica por último e recolhido na tela: é o que se olha em fevereiro, não em
+ * maio.
+ */
+export function lacunasDeConfiguracao(entrada: {
+  disciplinas: readonly DisciplinaConfigurada[];
+  /** Chaves `curso|modulo` que alguma turma ativa realmente cursa. */
+  cursoModuloEmUso: ReadonlySet<string>;
+  turmas: readonly TurmaDoResumo[];
+  /** Ids de turma com pelo menos um aluno cursando. */
+  turmasComAluno: ReadonlySet<string>;
+  /** Existe cronograma cujo período cobre a data de hoje. */
+  temCalendario: boolean;
+}): Lacuna[] {
+  const saida: Lacuna[] = [];
+
+  // Sem calendário cobrindo hoje, o sistema não sabe qual e o semestre
+  // vigente — e sem isso o módulo de TODA turma fica desconhecido, porque ele
+  // é calculado a partir da entrada mais o semestre corrente. É a lacuna que
+  // trava as outras, por isso vem primeiro.
+  if (!entrada.temCalendario) {
+    saida.push({
+      onde: "cronograma",
+      texto: "Nenhum calendário letivo cobre a data de hoje — sem ele o sistema não sabe em que módulo cada turma está.",
+    });
+  }
+
+  // Só as disciplinas que alguma turma cursa de fato. A tabela guarda as
+  // matérias dos três módulos dos dois cursos; cobrar sala de uma disciplina
+  // do módulo 3 quando não existe turma no módulo 3 seria alarme falso.
+  const emUso = entrada.disciplinas.filter(
+    d => entrada.cursoModuloEmUso.has(`${d.curso}|${d.modulo}`),
+  );
+
+  const contar = (falta: (d: DisciplinaConfigurada) => boolean) =>
+    emUso.filter(falta).map(d => d.nome).sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+  const semProfessor = contar(d => d.professor_id === null);
+  const semSala = contar(d => d.sala_id === null);
+  const semDia = contar(d => d.dia_da_semana === null);
+
+  if (semProfessor.length > 0) {
+    saida.push({
+      onde: "disciplinas",
+      texto: `${semProfessor.length} disciplina(s) sem professor: ${semProfessor.join(", ")}.`,
+    });
+  }
+  if (semDia.length > 0) {
+    saida.push({
+      onde: "disciplinas",
+      texto: `${semDia.length} disciplina(s) sem dia da semana — não entram na grade: ${semDia.join(", ")}.`,
+    });
+  }
+  if (semSala.length > 0) {
+    saida.push({
+      onde: "disciplinas",
+      texto: `${semSala.length} disciplina(s) sem sala: ${semSala.join(", ")}.`,
+    });
+  }
+
+  const vazias = entrada.turmas.filter(t => !entrada.turmasComAluno.has(t.id));
+  if (vazias.length > 0) {
+    saida.push({
+      onde: "turmas",
+      texto: `${vazias.length} turma(s) sem nenhum aluno cursando: ${
+        vazias.map(t => `${t.curso} ${t.turno} (entrada ${t.entrada})`).join(", ")}.`,
+    });
+  }
+
+  return saida;
+}
+
+// ── Busca de aluno ───────────────────────────────────────────────────────────
+
+export interface MatriculaNaBusca {
+  turmaId: string;
+  turma: string;
+  modulo: number;
+  /** Média das disciplinas já com chamada fechada. Null = nada lançado ainda. */
+  percentual: number | null;
+}
+
+export interface AlunoNaBusca {
+  id: string;
+  nome: string;
+  /** Vazio quando o aluno não está cursando nada — ele existe, mas não tem turma. */
+  matriculas: MatriculaNaBusca[];
+}
+
+/**
+ * O índice da busca.
+ *
+ * Sai de `alunos`, e não da frequência: quem ainda não tem aula dada, ou quem
+ * já concluiu o curso, precisa ser encontrável. "Cadê o fulano?" é a pergunta
+ * mais frequente de qualquer secretaria, e hoje exige acertar a turma antes de
+ * poder procurar.
+ */
+export function indexarAlunos(
+  alunos: readonly { id: string; nome: string }[],
+  frequencia: readonly FrequenciaDaEscola[],
+  rotuloDaTurma: (turmaId: string) => string,
+): AlunoNaBusca[] {
+  const soma = new Map<string, { dadas: number; presencas: number; modulo: number }>();
+
+  for (const f of frequencia) {
+    const chave = `${f.aluno_id}|${f.turma_id}`;
+    const atual = soma.get(chave);
+    if (atual) {
+      atual.dadas += f.aulas_dadas;
+      atual.presencas += f.presencas;
+    } else {
+      soma.set(chave, { dadas: f.aulas_dadas, presencas: f.presencas, modulo: f.modulo });
+    }
+  }
+
+  const porAluno = new Map<string, MatriculaNaBusca[]>();
+  for (const [chave, v] of soma) {
+    const [alunoId, turmaId] = chave.split("|");
+    const lista = porAluno.get(alunoId) ?? [];
+    lista.push({
+      turmaId,
+      turma: rotuloDaTurma(turmaId),
+      modulo: v.modulo,
+      // Sem nenhuma chamada fechada não é 0% — é "ainda não se sabe".
+      percentual: v.dadas === 0 ? null : Math.round((v.presencas * 1000) / v.dadas) / 10,
+    });
+    porAluno.set(alunoId, lista);
+  }
+
+  return alunos
+    .map(a => ({ id: a.id, nome: a.nome, matriculas: porAluno.get(a.id) ?? [] }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+}
+
+/** Busca sem acento e sem caixa: quem digita "jose" acha "José". */
+export function buscarAluno(
+  indice: readonly AlunoNaBusca[],
+  termo: string,
+  limite = 8,
+): AlunoNaBusca[] {
+  const alvo = normalizarNome(termo);
+  if (alvo.length < 2) return [];
+  return indice.filter(a => normalizarNome(a.nome).includes(alvo)).slice(0, limite);
 }

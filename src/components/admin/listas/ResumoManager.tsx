@@ -3,19 +3,23 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { moduloAtual, rotuloModulo } from "@/lib/calendario-escolar";
+import { PRESENCA_MINIMA } from "@/lib/aprovacao";
 import { useSemestreVigente } from "@/hooks/useSemestreVigente";
 import { rotuloDoTurno, HORARIOS } from "@/lib/aulas-do-dia";
 import { conflitosDeSala, descreverConflito, type Conflito, type DisciplinaNaGrade } from "@/lib/conflitos-grade";
 import {
   separarPendentes, atrasosPorProfessor, riscoDaEscola, separarRisco,
-  andamentoDoSemestre, estaTudoEmOrdem,
+  andamentoDoSemestre, estaTudoEmOrdem, lacunasDeConfiguracao,
+  indexarAlunos, buscarAluno,
   type ChamadaPendente, type FrequenciaDaEscola, type AtrasoDoProfessor,
-  type RiscoNaEscola, type AndamentoDoSemestre,
+  type RiscoNaEscola, type AndamentoDoSemestre, type Lacuna,
+  type DisciplinaConfigurada, type AlunoNaBusca,
 } from "@/lib/resumo-da-escola";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   AlertTriangle, CalendarCheck, CheckCircle2, ClipboardX, DoorOpen, Loader2,
-  Scale, TrendingDown, Users,
+  Scale, Search, TrendingDown, Users, Wrench,
 } from "lucide-react";
 
 /**
@@ -75,6 +79,9 @@ export default function ResumoManager({
   const [esperando, setEsperando] = useState<EsperandoDecisao[]>([]);
   const [conflitos, setConflitos] = useState<Conflito[]>([]);
   const [andamento, setAndamento] = useState<AndamentoDoSemestre | null>(null);
+  const [lacunas, setLacunas] = useState<Lacuna[]>([]);
+  const [indice, setIndice] = useState<AlunoNaBusca[]>([]);
+  const [termo, setTermo] = useState("");
   const [totais, setTotais] = useState({ turmas: 0, alunos: 0, professores: 0 });
 
   const carregar = useCallback(async () => {
@@ -86,7 +93,7 @@ export default function ResumoManager({
     const [
       { data: turmasData }, { data: pendentesData }, { data: freqData },
       { data: matriculasData }, { data: aulasHojeData }, { data: discData },
-      { count: totalAlunos }, { count: totalProfs },
+      { data: alunosData }, { count: totalProfs },
     ] = await Promise.all([
       supabase.from("turmas").select("id, curso, turno, entrada"),
       supabase.from("vw_chamadas_pendentes").select("*"),
@@ -95,8 +102,8 @@ export default function ResumoManager({
       supabase.from("aulas")
         .select("id, numero, turma_id, chamada_finalizada, professor:professores(nome), disciplina:disciplinas(nome, sala:salas(nome))")
         .eq("data_aula", hoje),
-      supabase.from("disciplinas").select("id, nome, curso, modulo, dia_da_semana, sala_id, sala:salas(nome)"),
-      supabase.from("alunos").select("id", { count: "exact", head: true }),
+      supabase.from("disciplinas").select("id, nome, curso, modulo, dia_da_semana, sala_id, professor_id, sala:salas(nome)"),
+      supabase.from("alunos").select("id, nome"),
       supabase.from("professores").select("id", { count: "exact", head: true }),
     ]);
 
@@ -173,9 +180,26 @@ export default function ResumoManager({
     }));
     setConflitos(conflitosDeSala(disciplinas));
 
+    // ── Lacunas de configuração ──
+    const turmasComAluno = new Set(
+      ((matriculasData ?? []) as { turma_id: string }[]).map(m => m.turma_id),
+    );
+    setLacunas(lacunasDeConfiguracao({
+      disciplinas: (discData ?? []) as unknown as DisciplinaConfigurada[],
+      cursoModuloEmUso: new Set(turnosPorCursoModulo.keys()),
+      turmas,
+      turmasComAluno,
+      // `semestre` sai do cronograma que cobre hoje: null significa que não há.
+      temCalendario: semestre !== null,
+    }));
+
+    // ── Busca ──
+    const alunos = (alunosData ?? []) as { id: string; nome: string }[];
+    setIndice(indexarAlunos(alunos, frequencia, rotuloDaTurma));
+
     setTotais({
       turmas: turmas.length,
-      alunos: totalAlunos ?? 0,
+      alunos: alunos.length,
       professores: totalProfs ?? 0,
     });
     setCarregando(false);
@@ -191,8 +215,13 @@ export default function ResumoManager({
     );
   }
 
+  const achados = buscarAluno(indice, termo);
+
+  // As lacunas entram na conta: "Nada pendente" acima de uma lista de quatro
+  // buracos de configuração seria o resumo se contradizendo na mesma tela.
   const tudoEmOrdem = estaTudoEmOrdem([
-    totalAtrasadas, semRecuperacao.length, porUmFio.length, conflitos.length,
+    totalAtrasadas, semRecuperacao.length, porUmFio.length,
+    conflitos.length, lacunas.length,
   ]);
 
   const Ir = ({ para, children }: { para: string; children: React.ReactNode }) => (
@@ -229,6 +258,53 @@ export default function ResumoManager({
           )}
         </CardContent>
       </Card>
+
+      {/* A pergunta mais frequente de qualquer secretaria — e que hoje exige
+          acertar a turma no dropdown ANTES de poder procurar. */}
+      <div>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Input
+            value={termo}
+            onChange={e => setTermo(e.target.value)}
+            placeholder="Procurar aluno pelo nome..."
+            className="bg-white pl-9"
+          />
+        </div>
+        {termo.trim().length >= 2 && (
+          <ul className="mt-2 divide-y divide-gray-100 overflow-hidden rounded-lg border border-gray-200 bg-white">
+            {achados.length === 0 ? (
+              <li className="px-3 py-2 text-sm text-gray-500">
+                Ninguém com esse nome. A busca ignora acento e maiúscula.
+              </li>
+            ) : achados.map(a => (
+              <li key={a.id} className="px-3 py-2 text-sm">
+                <strong className="text-gray-800">{a.nome}</strong>
+                {a.matriculas.length === 0 ? (
+                  <span className="ml-2 text-xs text-gray-500">
+                    sem turma — cadastrado, mas não está cursando
+                  </span>
+                ) : (
+                  <span className="ml-2 text-xs text-gray-600">
+                    {a.matriculas.map(m => (
+                      <span key={m.turmaId} className="mr-3">
+                        {m.turma} ·{" "}
+                        {m.percentual === null ? (
+                          <span className="text-gray-400">sem chamada fechada</span>
+                        ) : (
+                          <strong className={m.percentual < PRESENCA_MINIMA ? "text-red-600" : "text-green-700"}>
+                            {m.percentual}%
+                          </strong>
+                        )}
+                      </span>
+                    ))}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {tudoEmOrdem && (
         <Card className="border-green-300 bg-green-50">
@@ -369,6 +445,28 @@ export default function ResumoManager({
           acao={<Ir para="relatorios">Ver frequência</Ir>}
         >
           <ListaDeRisco itens={porUmFio} />
+        </Bloco>
+      )}
+
+      {/* ── Configuração ─────────────────────────────────────────────────
+          Por último e em cinza: é o que se olha em fevereiro, montando o
+          semestre, não em maio no meio das aulas. */}
+      {lacunas.length > 0 && (
+        <Bloco
+          icone={<Wrench className="h-4 w-4 text-gray-500" />}
+          titulo={`${lacunas.length} ponto(s) da configuração pela metade`}
+          borda="border-gray-300"
+          fundo="bg-gray-50"
+          ajuda="Nada quebra por causa disso — a coisa só não acontece, em silêncio."
+        >
+          <ul className="space-y-1.5">
+            {lacunas.map((l, i) => (
+              <li key={i} className="flex flex-wrap items-baseline gap-2 text-sm text-gray-700">
+                <span>{l.texto}</span>
+                <Ir para={l.onde}>Corrigir</Ir>
+              </li>
+            ))}
+          </ul>
         </Bloco>
       )}
     </div>

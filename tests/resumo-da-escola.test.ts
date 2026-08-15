@@ -145,3 +145,118 @@ test("tudo em ordem só quando todos os blocos estão zerados", () => {
   assert.equal(estaTudoEmOrdem([0, 1, 0]), false);
   assert.equal(estaTudoEmOrdem([]), true);
 });
+
+// ── Lacunas de configuração ──────────────────────────────────────────────────
+
+import {
+  lacunasDeConfiguracao, indexarAlunos, buscarAluno,
+  type DisciplinaConfigurada,
+} from "../src/lib/resumo-da-escola.ts";
+
+function disc(d: Partial<DisciplinaConfigurada>): DisciplinaConfigurada {
+  return {
+    id: "d1", nome: "Roteiro", curso: "Animação", modulo: 1,
+    professor_id: "p1", sala_id: "s1", dia_da_semana: 2, ...d,
+  };
+}
+
+const semLacunas = {
+  disciplinas: [disc({})],
+  cursoModuloEmUso: new Set(["Animação|1"]),
+  turmas: [{ id: "t1", curso: "Animação", turno: "Manhã", entrada: "2026/1" }],
+  turmasComAluno: new Set(["t1"]),
+  temCalendario: true,
+};
+
+test("escola configurada não gera lacuna nenhuma", () => {
+  assert.deepEqual(lacunasDeConfiguracao(semLacunas), []);
+});
+
+test("disciplina de módulo que nenhuma turma cursa não vira alarme falso", () => {
+  // A tabela guarda as matérias dos 3 módulos dos 2 cursos. Cobrar sala de
+  // uma do módulo 3 sem turma no módulo 3 seria acusar o que não existe.
+  const lacunas = lacunasDeConfiguracao({
+    ...semLacunas,
+    disciplinas: [disc({}), disc({ id: "d9", nome: "TCC", modulo: 3, sala_id: null, professor_id: null })],
+  });
+  assert.deepEqual(lacunas, []);
+});
+
+test("disciplina em uso sem professor, sem dia e sem sala vira três avisos", () => {
+  const lacunas = lacunasDeConfiguracao({
+    ...semLacunas,
+    disciplinas: [disc({ professor_id: null, sala_id: null, dia_da_semana: null })],
+  });
+  assert.equal(lacunas.length, 3);
+  assert.ok(lacunas.every(l => l.onde === "disciplinas"));
+  assert.ok(lacunas.some(l => l.texto.includes("sem professor")));
+  assert.ok(lacunas.some(l => l.texto.includes("sem dia da semana")));
+});
+
+test("calendario que nao cobre hoje e a primeira lacuna, porque trava as outras", () => {
+  // Sem semestre vigente o modulo de toda turma fica desconhecido: ele sai da
+  // entrada MAIS o semestre corrente. Nao adianta apontar sala faltando se o
+  // sistema nem sabe em que modulo a turma esta.
+  const lacunas = lacunasDeConfiguracao({ ...semLacunas, temCalendario: false });
+  assert.equal(lacunas[0].onde, "cronograma");
+  assert.ok(lacunas[0].texto.includes("módulo"));
+});
+
+test("turma sem nenhum aluno cursando é uma turma que não existe de verdade", () => {
+  const [so] = lacunasDeConfiguracao({ ...semLacunas, turmasComAluno: new Set<string>() });
+  assert.equal(so.onde, "turmas");
+  assert.ok(so.texto.includes("Animação Manhã"));
+});
+
+// ── Busca de aluno ───────────────────────────────────────────────────────────
+
+const alunos = [
+  { id: "al1", nome: "José da Silva" },
+  { id: "al2", nome: "Ana Souza" },
+  { id: "al3", nome: "Carlos Concluído" },
+];
+
+test("a busca acha quem tem acento sem que se digite o acento", () => {
+  const indice = indexarAlunos(alunos, [], rotulo);
+  assert.deepEqual(buscarAluno(indice, "jose").map(a => a.nome), ["José da Silva"]);
+  assert.deepEqual(buscarAluno(indice, "SOUZA").map(a => a.nome), ["Ana Souza"]);
+});
+
+test("uma letra só não busca — devolveria a escola inteira", () => {
+  assert.deepEqual(buscarAluno(indexarAlunos(alunos, [], rotulo), "a"), []);
+});
+
+test("aluno sem turma nenhuma continua encontrável", () => {
+  // Ele existe, só não está cursando. Sumir da busca seria o pior desfecho.
+  const [achado] = buscarAluno(indexarAlunos(alunos, [], rotulo), "concluido");
+  assert.equal(achado.nome, "Carlos Concluído");
+  assert.deepEqual(achado.matriculas, []);
+});
+
+test("a busca soma a frequência de todas as disciplinas da turma", () => {
+  const indice = indexarAlunos(alunos, [
+    freq({ aluno_id: "al1", disciplina_id: "d1", aulas_dadas: 20, presencas: 20 }),
+    freq({ aluno_id: "al1", disciplina_id: "d2", aulas_dadas: 20, presencas: 10 }),
+  ], rotulo);
+  const [jose] = buscarAluno(indice, "jose");
+  assert.equal(jose.matriculas.length, 1);
+  assert.equal(jose.matriculas[0].percentual, 75);
+  assert.equal(jose.matriculas[0].turma, "turma t1");
+});
+
+test("sem chamada fechada a frequência é desconhecida, e não zero", () => {
+  const indice = indexarAlunos(alunos, [
+    freq({ aluno_id: "al1", aulas_dadas: 0, presencas: 0 }),
+  ], rotulo);
+  assert.equal(buscarAluno(indice, "jose")[0].matriculas[0].percentual, null);
+});
+
+test("o aluno em duas turmas aparece uma vez, com as duas matrículas", () => {
+  const indice = indexarAlunos(alunos, [
+    freq({ aluno_id: "al1", turma_id: "t1" }),
+    freq({ aluno_id: "al1", turma_id: "t2" }),
+  ], rotulo);
+  const achados = buscarAluno(indice, "jose");
+  assert.equal(achados.length, 1);
+  assert.equal(achados[0].matriculas.length, 2);
+});
