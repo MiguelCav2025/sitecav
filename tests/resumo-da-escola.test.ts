@@ -260,3 +260,60 @@ test("o aluno em duas turmas aparece uma vez, com as duas matrículas", () => {
   assert.equal(achados.length, 1);
   assert.equal(achados[0].matriculas.length, 2);
 });
+
+// ── A matriz da escola ───────────────────────────────────────────────────────
+
+import { matrizDeTurmas } from "../src/lib/resumo-da-escola.ts";
+
+const turmasReais = [
+  { turmaId: "a", curso: "Cine/TV",  turno: "Manhã", modulo: 1, quantidade: 13 },
+  { turmaId: "b", curso: "Cine/TV",  turno: "Manhã", modulo: 2, quantidade: 9 },
+  { turmaId: "c", curso: "Cine/TV",  turno: "Manhã", modulo: 3, quantidade: 7 },
+  { turmaId: "d", curso: "Cine/TV",  turno: "Noite", modulo: 1, quantidade: 16 },
+  { turmaId: "e", curso: "Cine/TV",  turno: "Noite", modulo: 2, quantidade: 16 },
+  { turmaId: "f", curso: "Cine/TV",  turno: "Noite", modulo: 3, quantidade: 10 },
+  { turmaId: "g", curso: "Animação", turno: "Manhã", modulo: 2, quantidade: 11 },
+  { turmaId: "h", curso: "Animação", turno: "Manhã", modulo: 3, quantidade: 6 },
+  { turmaId: "i", curso: "Animação", turno: "Noite", modulo: 1, quantidade: 9 },
+  { turmaId: "j", curso: "Animação", turno: "Noite", modulo: 2, quantidade: 11 },
+  { turmaId: "k", curso: "Animação", turno: "Noite", modulo: 3, quantidade: 5 },
+];
+
+test("a matriz sai por curso, em ordem alfabética", () => {
+  assert.deepEqual(matrizDeTurmas(turmasReais, 3).map(c => c.curso), ["Animação", "Cine/TV"]);
+});
+
+test("manhã vem antes de noite, e não em ordem alfabética por acaso", () => {
+  const [animacao] = matrizDeTurmas(turmasReais, 3);
+  assert.deepEqual(animacao.linhas.map(l => l.turno), ["Manhã", "Noite"]);
+});
+
+test("a turma que NÃO existe vira um buraco visível, e não some", () => {
+  // Este é o ponto da matriz. Numa lista de pílulas, turma ausente não tem
+  // pílula — é invisível por definição.
+  const [animacao] = matrizDeTurmas(turmasReais, 3);
+  const manha = animacao.linhas.find(l => l.turno === "Manhã")!;
+  assert.equal(manha.celulas[0], null);       // módulo 1 não existe
+  assert.equal(manha.celulas[1]?.quantidade, 11);
+  assert.equal(animacao.vazias, 1);
+});
+
+test("curso sem buraco nenhum acusa zero vazias", () => {
+  const cine = matrizDeTurmas(turmasReais, 3).find(c => c.curso === "Cine/TV")!;
+  assert.equal(cine.vazias, 0);
+  assert.equal(cine.total, 71);
+});
+
+test("o total por curso soma só as turmas dele", () => {
+  const [animacao] = matrizDeTurmas(turmasReais, 3);
+  assert.equal(animacao.total, 42);
+});
+
+test("turno fora do esperado vai para o fim, em vez de sumir", () => {
+  const m = matrizDeTurmas(
+    [...turmasReais, { turmaId: "z", curso: "Animação", turno: "Integral", modulo: 1, quantidade: 3 }],
+    3,
+  );
+  const [animacao] = m;
+  assert.deepEqual(animacao.linhas.map(l => l.turno), ["Manhã", "Noite", "Integral"]);
+});

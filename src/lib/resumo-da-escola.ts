@@ -444,3 +444,72 @@ export function buscarAluno(
   if (alvo.length < 2) return [];
   return indice.filter(a => normalizarNome(a.nome).includes(alvo)).slice(0, limite);
 }
+
+// ── A escola como ela é: uma matriz ──────────────────────────────────────────
+
+export interface TurmaNaMatriz {
+  turmaId: string;
+  quantidade: number;
+}
+
+export interface CursoNaMatriz {
+  curso: string;
+  total: number;
+  turnos: string[];
+  /** Uma linha por turno; cada célula é um módulo, ou null se a turma não existe. */
+  linhas: { turno: string; celulas: (TurmaNaMatriz | null)[] }[];
+  /** Quantos dos módulos × turnos possíveis não têm turma. */
+  vazias: number;
+}
+
+/**
+ * 2 cursos × 3 módulos × 2 turnos = 12 turmas possíveis.
+ *
+ * Essa estrutura é o desenho da escola, e uma fila de etiquetas ordenada por
+ * tamanho a destrói: "Cine/TV" aparecia seis vezes, "Animação" cinco, e o
+ * módulo virava texto no meio da frase em vez de eixo.
+ *
+ * Em matriz, o que estava escondido salta: hoje existem 11 turmas das 12, e a
+ * que falta é Animação · Manhã · Módulo 1. Numa lista de pílulas, uma turma
+ * ausente é invisível por definição — ela simplesmente não tem pílula.
+ */
+export function matrizDeTurmas(
+  itens: readonly {
+    turmaId: string; curso: string; turno: string; modulo: number; quantidade: number;
+  }[],
+  modulos: number,
+): CursoNaMatriz[] {
+  // A ordem do dia: manhã antes da noite. Turno desconhecido vai para o fim,
+  // em ordem alfabética, em vez de sumir.
+  const PREFERIDA = ["Manhã", "Noite"];
+  const ordemDoTurno = (t: string) => {
+    const i = PREFERIDA.indexOf(t);
+    return i === -1 ? PREFERIDA.length : i;
+  };
+
+  const cursos = [...new Set(itens.map(i => i.curso))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+  return cursos.map(curso => {
+    const doCurso = itens.filter(i => i.curso === curso);
+    const turnos = [...new Set(doCurso.map(i => i.turno))]
+      .sort((a, b) => ordemDoTurno(a) - ordemDoTurno(b) || a.localeCompare(b, "pt-BR"));
+
+    let vazias = 0;
+    const linhas = turnos.map(turno => ({
+      turno,
+      celulas: Array.from({ length: modulos }, (_, i) => {
+        const achado = doCurso.find(d => d.turno === turno && d.modulo === i + 1);
+        if (!achado) { vazias++; return null; }
+        return { turmaId: achado.turmaId, quantidade: achado.quantidade };
+      }),
+    }));
+
+    return {
+      curso,
+      total: doCurso.reduce((s, d) => s + d.quantidade, 0),
+      turnos,
+      linhas,
+      vazias,
+    };
+  });
+}

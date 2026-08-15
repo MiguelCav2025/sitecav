@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { moduloAtual, rotuloModulo } from "@/lib/calendario-escolar";
+import { moduloAtual, rotuloModulo, MODULOS_DO_CURSO } from "@/lib/calendario-escolar";
 import { PRESENCA_MINIMA } from "@/lib/aprovacao";
 import { useSemestreVigente } from "@/hooks/useSemestreVigente";
 import { rotuloDoTurno, HORARIOS } from "@/lib/aulas-do-dia";
@@ -10,10 +10,10 @@ import { conflitosDeSala, descreverConflito, type Conflito, type DisciplinaNaGra
 import {
   separarPendentes, atrasosPorProfessor, riscoDaEscola, separarRisco,
   andamentoDoSemestre, estaTudoEmOrdem, lacunasDeConfiguracao,
-  indexarAlunos, buscarAluno,
+  indexarAlunos, buscarAluno, matrizDeTurmas,
   type ChamadaPendente, type FrequenciaDaEscola, type AtrasoDoProfessor,
   type RiscoNaEscola, type AndamentoDoSemestre, type Lacuna,
-  type DisciplinaConfigurada, type AlunoNaBusca,
+  type DisciplinaConfigurada, type AlunoNaBusca, type CursoNaMatriz,
 } from "@/lib/resumo-da-escola";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,7 +53,10 @@ interface AulaDeHoje {
   finalizada: boolean;
 }
 
-interface EsperandoDecisao { turmaId: string; turma: string; modulo: number; quantidade: number; }
+interface EsperandoDecisao {
+  turmaId: string; turma: string; curso: string; turno: string;
+  modulo: number; quantidade: number;
+}
 
 /** Quantos itens cabem antes da lista virar parede. */
 const LIMITE_DA_LISTA = 8;
@@ -143,6 +146,8 @@ export default function ResumoManager({
       if (atual) atual.quantidade++;
       else contagem.set(chave, {
         turmaId: m.turma_id, turma: rotuloDaTurma(m.turma_id),
+        curso: porId.get(m.turma_id)?.curso ?? "—",
+        turno: porId.get(m.turma_id)?.turno ?? "—",
         modulo: m.modulo, quantidade: 1,
       });
     }
@@ -467,14 +472,11 @@ export default function ResumoManager({
           ajuda="Retrato de quem está matriculado agora. Vira decisão no fim do módulo."
           acao={<Ir para="fechamento">Ir ao fechamento</Ir>}
         >
-          <ul className="flex flex-wrap gap-2">
-            {esperando.map(e => (
-              <li key={`${e.turmaId}|${e.modulo}`}
-                  className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-700">
-                {e.turma} · <strong className="text-gray-900">{e.quantidade}</strong>
-              </li>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {matrizDeTurmas(esperando, MODULOS_DO_CURSO).map(c => (
+              <MatrizDoCurso key={c.curso} curso={c} />
             ))}
-          </ul>
+          </div>
         </Bloco>
       )}
 
@@ -602,6 +604,71 @@ function Bloco({
       </CardHeader>
       {children && <CardContent className="pt-0 pl-5">{children}</CardContent>}
     </Card>
+  );
+}
+
+/**
+ * Um curso desenhado como ele é: turnos nas linhas, módulos nas colunas.
+ *
+ * A fila de etiquetas ordenada por tamanho repetia "Cine/TV" seis vezes e
+ * transformava o módulo em texto no meio da frase. Pior: turma que não existe
+ * simplesmente não tinha etiqueta, então o buraco era invisível — e num
+ * desenho de 2 cursos × 3 módulos × 2 turnos, o buraco é justamente o que se
+ * quer ver.
+ */
+function MatrizDoCurso({ curso }: { curso: CursoNaMatriz }) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <h4 className="text-sm font-semibold text-gray-800">{curso.curso}</h4>
+        <span className="text-xs text-gray-500">
+          <strong className="text-gray-800 tabular-nums">{curso.total}</strong> alunos
+        </span>
+      </div>
+
+      <table className="w-full table-fixed border-collapse text-center">
+        <thead>
+          <tr>
+            <th className="w-14" />
+            {Array.from({ length: MODULOS_DO_CURSO }, (_, i) => (
+              <th key={i} className="pb-1 text-[11px] font-medium text-gray-500">
+                Mód. {i + 1}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {curso.linhas.map(l => (
+            <tr key={l.turno}>
+              <th className="py-1 text-left text-[11px] font-medium text-gray-500">{l.turno}</th>
+              {l.celulas.map((c, i) => (
+                <td key={i} className="p-0.5">
+                  {c === null ? (
+                    // O buraco precisa ler como buraco, e não como zero aluno.
+                    <span
+                      title="Não há turma neste módulo e turno"
+                      className="block rounded border border-dashed border-gray-300 py-1 text-xs text-gray-300"
+                    >
+                      —
+                    </span>
+                  ) : (
+                    <span className="block rounded border border-gray-200 bg-white py-1 text-sm font-semibold tabular-nums text-gray-800">
+                      {c.quantidade}
+                    </span>
+                  )}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {curso.vazias > 0 && (
+        <p className="mt-2 text-[11px] text-amber-700">
+          {curso.vazias === 1 ? "1 combinação sem turma" : `${curso.vazias} combinações sem turma`}
+        </p>
+      )}
+    </div>
   );
 }
 
