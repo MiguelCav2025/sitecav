@@ -10,7 +10,7 @@ import { conflitosDeSala, descreverConflito, type Conflito, type DisciplinaNaGra
 import {
   separarPendentes, atrasosPorProfessor, riscoDaEscola, separarRisco,
   andamentoDoSemestre, estaTudoEmOrdem, lacunasDeConfiguracao,
-  indexarAlunos, buscarAluno, matrizDeTurmas,
+  indexarAlunos, buscarAluno, matrizDeTurmas, agruparTurmasDoProfessor,
   type ChamadaPendente, type FrequenciaDaEscola, type AtrasoDoProfessor,
   type RiscoNaEscola, type AndamentoDoSemestre, type Lacuna,
   type DisciplinaConfigurada, type AlunoNaBusca, type CursoNaMatriz,
@@ -127,7 +127,10 @@ export default function ResumoManager({
 
     // ── Chamadas ──
     const { atrasadas } = separarPendentes((pendentesData ?? []) as ChamadaPendente[]);
-    setAtrasos(atrasosPorProfessor(atrasadas, rotuloDaTurma));
+    setAtrasos(atrasosPorProfessor(atrasadas, id => {
+      const t = porId.get(id);
+      return t ? moduloAtual(t.entrada, semestre) : null;
+    }));
     setTotalAtrasadas(atrasadas.length);
     setMaisAntiga(atrasadas[0] ?? null);
 
@@ -387,9 +390,18 @@ export default function ResumoManager({
                   <span className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-red-800">
                     {a.quantidade} {plural(a.quantidade, "aula", "aulas")}
                   </span>
-                  {a.turmas.map(t => (
-                    <span key={t} className="rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[11px] text-gray-500">
-                      {t}
+                  {agruparTurmasDoProfessor(a.turmas).map(g => (
+                    <span key={g.curso}
+                          className="rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[11px] text-gray-500">
+                      <strong className="font-medium text-gray-700">{g.curso}</strong>
+                      {g.porTurno.map(t => (
+                        <span key={t.turno} className="ml-1.5">
+                          {t.turno}{" "}
+                          <span className="tabular-nums">
+                            {t.modulos.map(m => (m === null ? "?" : m)).join("·")}
+                          </span>
+                        </span>
+                      ))}
                     </span>
                   ))}
                 </div>
@@ -626,12 +638,14 @@ function MatrizDoCurso({ curso }: { curso: CursoNaMatriz }) {
         </span>
       </div>
 
-      <table className="w-full table-fixed border-collapse text-center">
+      {/* Sem `w-full`: esticada, cada numero ficava numa caixa de 190px por
+          24px. A tabela agora tem o tamanho do conteudo. */}
+      <table className="border-collapse text-center">
         <thead>
           <tr>
-            <th className="w-14" />
+            <th className="w-12" />
             {Array.from({ length: MODULOS_DO_CURSO }, (_, i) => (
-              <th key={i} className="pb-1 text-[11px] font-medium text-gray-500">
+              <th key={i} className="w-14 pb-1 text-[11px] font-medium text-gray-500">
                 Mód. {i + 1}
               </th>
             ))}
@@ -647,12 +661,12 @@ function MatrizDoCurso({ curso }: { curso: CursoNaMatriz }) {
                     // O buraco precisa ler como buraco, e não como zero aluno.
                     <span
                       title="Não há turma neste módulo e turno"
-                      className="block rounded border border-dashed border-gray-300 py-1 text-xs text-gray-300"
+                      className="block rounded border border-dashed border-gray-300 py-1.5 text-xs text-gray-400"
                     >
                       —
                     </span>
                   ) : (
-                    <span className="block rounded border border-gray-200 bg-white py-1 text-sm font-semibold tabular-nums text-gray-800">
+                    <span className="block rounded border border-gray-200 bg-white py-1.5 text-base font-bold tabular-nums text-gray-800">
                       {c.quantidade}
                     </span>
                   )}

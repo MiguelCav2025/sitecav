@@ -78,12 +78,65 @@ export function separarPendentes(pendentes: readonly ChamadaPendente[]) {
   };
 }
 
+export interface TurmaDoAtraso {
+  curso: string;
+  turno: string;
+  modulo: number | null;
+}
+
 export interface AtrasoDoProfessor {
   professor: string;
   quantidade: number;
   /** Há quantos dias está a mais antiga — é o número que dói. */
   diasDaMaisAntiga: number;
-  turmas: string[];
+  turmas: TurmaDoAtraso[];
+}
+
+/** As turmas de um professor, agrupadas para o nome do curso não se repetir. */
+export interface TurmasAgrupadas {
+  curso: string;
+  porTurno: { turno: string; modulos: (number | null)[] }[];
+}
+
+/**
+ * "Cine/TV · Manhã · Módulo 3", "Cine/TV · Noite · Módulo 3", "Cine/TV ·
+ * Manhã · Módulo 2", "Cine/TV · Noite · Módulo 2" — quatro etiquetas para
+ * dizer uma coisa só: ele dá aula em Cine/TV, nos dois turnos, nos módulos 2
+ * e 3. O mesmo erro que a matriz das turmas veio consertar, repetido aqui.
+ *
+ * Agrupa em: Cine/TV — Manhã 2·3, Noite 2·3.
+ */
+export function agruparTurmasDoProfessor(
+  turmas: readonly TurmaDoAtraso[],
+): TurmasAgrupadas[] {
+  const PREFERIDA = ["Manhã", "Noite"];
+  const ordemDoTurno = (t: string) => {
+    const i = PREFERIDA.indexOf(t);
+    return i === -1 ? PREFERIDA.length : i;
+  };
+
+  const porCurso = new Map<string, Map<string, Set<number | null>>>();
+  for (const t of turmas) {
+    const turnos = porCurso.get(t.curso) ?? new Map<string, Set<number | null>>();
+    const modulos = turnos.get(t.turno) ?? new Set<number | null>();
+    modulos.add(t.modulo);
+    turnos.set(t.turno, modulos);
+    porCurso.set(t.curso, turnos);
+  }
+
+  return [...porCurso.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], "pt-BR"))
+    .map(([curso, turnos]) => ({
+      curso,
+      porTurno: [...turnos.entries()]
+        .sort((a, b) => ordemDoTurno(a[0]) - ordemDoTurno(b[0]) || a[0].localeCompare(b[0], "pt-BR"))
+        .map(([turno, modulos]) => ({
+          turno,
+          // Módulo desconhecido (sem semestre vigente) vai para o fim, e não
+          // some: some seria dizer que a turma não existe.
+          modulos: [...modulos].sort((x, y) => (x ?? 99) - (y ?? 99)),
+        })),
+    }));
 }
 
 /**
@@ -95,24 +148,29 @@ export interface AtrasoDoProfessor {
  */
 export function atrasosPorProfessor(
   atrasadas: readonly ChamadaPendente[],
-  rotuloDaTurma: (turmaId: string) => string,
+  moduloDaTurma: (turmaId: string) => number | null,
 ): AtrasoDoProfessor[] {
   const por = new Map<string, AtrasoDoProfessor>();
 
   for (const a of atrasadas) {
     const nome = a.professor ?? "Sem professor definido";
+    const turma: TurmaDoAtraso = {
+      curso: a.curso, turno: a.turno, modulo: moduloDaTurma(a.turma_id),
+    };
+    const jaTem = (lista: TurmaDoAtraso[]) =>
+      lista.some(t => t.curso === turma.curso && t.turno === turma.turno && t.modulo === turma.modulo);
+
     const atual = por.get(nome);
     if (atual) {
       atual.quantidade++;
       atual.diasDaMaisAntiga = Math.max(atual.diasDaMaisAntiga, a.dias_atras);
-      const turma = rotuloDaTurma(a.turma_id);
-      if (!atual.turmas.includes(turma)) atual.turmas.push(turma);
+      if (!jaTem(atual.turmas)) atual.turmas.push(turma);
     } else {
       por.set(nome, {
         professor: nome,
         quantidade: 1,
         diasDaMaisAntiga: a.dias_atras,
-        turmas: [rotuloDaTurma(a.turma_id)],
+        turmas: [turma],
       });
     }
   }

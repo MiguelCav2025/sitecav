@@ -7,6 +7,7 @@ import {
 } from "../src/lib/resumo-da-escola.ts";
 
 const rotulo = (id: string) => `turma ${id}`;
+const moduloFixo = () => 2;
 
 function pendente(p: Partial<ChamadaPendente>): ChamadaPendente {
   return {
@@ -53,17 +54,18 @@ test("o atraso se agrupa por professor, com o pior no topo", () => {
     pendente({ professor: "Evil", dias_atras: 5, turma_id: "t1" }),
   ];
 
-  const [primeiro, segundo] = atrasosPorProfessor(linhas, rotulo);
+  const [primeiro, segundo] = atrasosPorProfessor(linhas, moduloFixo);
 
   assert.equal(primeiro.professor, "Camila");
   assert.equal(primeiro.quantidade, 2);
   assert.equal(primeiro.diasDaMaisAntiga, 12);
-  assert.deepEqual(primeiro.turmas, ["turma t1", "turma t2"]);
+  // Mesmo curso, turno e modulo nas duas: uma turma so na lista.
+  assert.equal(primeiro.turmas.length, 1);
   assert.equal(segundo.professor, "Evil");
 });
 
 test("aula sem professor definido não some do agrupamento", () => {
-  const [so] = atrasosPorProfessor([pendente({ professor: null })], rotulo);
+  const [so] = atrasosPorProfessor([pendente({ professor: null })], moduloFixo);
   assert.equal(so.professor, "Sem professor definido");
   assert.equal(so.quantidade, 1);
 });
@@ -316,4 +318,44 @@ test("turno fora do esperado vai para o fim, em vez de sumir", () => {
   );
   const [animacao] = m;
   assert.deepEqual(animacao.linhas.map(l => l.turno), ["Manhã", "Noite", "Integral"]);
+});
+
+// ── Turmas do professor, sem repetir o curso ─────────────────────────────────
+
+import { agruparTurmasDoProfessor } from "../src/lib/resumo-da-escola.ts";
+
+test("quatro etiquetas de Cine/TV viram uma, com os turnos dentro", () => {
+  // Era exatamente o problema das pilulas de turma, repetido na lista de
+  // atraso: o nome do curso quatro vezes para dizer uma coisa so.
+  const grupos = agruparTurmasDoProfessor([
+    { curso: "Cine/TV", turno: "Manhã", modulo: 3 },
+    { curso: "Cine/TV", turno: "Noite", modulo: 3 },
+    { curso: "Cine/TV", turno: "Manhã", modulo: 2 },
+    { curso: "Cine/TV", turno: "Noite", modulo: 2 },
+  ]);
+
+  assert.equal(grupos.length, 1);
+  assert.equal(grupos[0].curso, "Cine/TV");
+  assert.deepEqual(grupos[0].porTurno, [
+    { turno: "Manhã", modulos: [2, 3] },
+    { turno: "Noite", modulos: [2, 3] },
+  ]);
+});
+
+test("professor nos dois cursos ganha um grupo para cada", () => {
+  const grupos = agruparTurmasDoProfessor([
+    { curso: "Cine/TV", turno: "Noite", modulo: 1 },
+    { curso: "Animação", turno: "Manhã", modulo: 2 },
+  ]);
+  assert.deepEqual(grupos.map(g => g.curso), ["Animação", "Cine/TV"]);
+});
+
+test("módulo desconhecido não some do grupo", () => {
+  // Sem semestre vigente o modulo e null. Sumir seria dizer que a turma nao
+  // existe, que e outra coisa.
+  const [g] = agruparTurmasDoProfessor([
+    { curso: "Cine/TV", turno: "Manhã", modulo: null },
+    { curso: "Cine/TV", turno: "Manhã", modulo: 1 },
+  ]);
+  assert.deepEqual(g.porTurno[0].modulos, [1, null]);
 });

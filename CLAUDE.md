@@ -63,6 +63,10 @@ Como confirmar, antes de culpar o CSS:
 grep -c "bg-green-200" .next/static/css/*.css   # 0 = não foi gerada
 ```
 
+Cuidado com o **escape no seletor**: o Tailwind escreve `sm\:grid-cols-2`,
+`bg-red-50\/60` e `py-1\.5`. Procurar `sm:grid-cols-2` dá zero e parece a
+armadilha acima — mas é só o grep. Busque a forma escapada, ou só o prefixo.
+
 **Já está resolvido**: o script `prebuild` apaga `.next/cache` antes de cada
 build, aqui e na Vercel. Não peça mais "Redeploy sem cache" — era um passo
 manual que dependia de alguém lembrar. Se voltar a acontecer, o primeiro
