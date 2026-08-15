@@ -58,6 +58,9 @@ interface EsperandoDecisao { turmaId: string; turma: string; modulo: number; qua
 /** Quantos itens cabem antes da lista virar parede. */
 const LIMITE_DA_LISTA = 8;
 
+/** "8 chamadas", "1 chamada" — o "(s)" nunca ajudou ninguém a ler. */
+const plural = (n: number, um: string, muitos: string) => (n === 1 ? um : muitos);
+
 const formatarData = (iso: string) => {
   const [a, m, d] = iso.split("-");
   return `${d}/${m}/${a.slice(2)}`;
@@ -338,13 +341,22 @@ export default function ResumoManager({
       {/* ── Precisa de você ─────────────────────────────────────────────── */}
       {totalAtrasadas > 0 && (
         <Bloco
+          nivel="urgente"
+          numero={totalAtrasadas}
           icone={<ClipboardX className="h-4 w-4 text-red-600" />}
-          titulo={`${totalAtrasadas} chamada(s) em atraso`}
-          borda="border-red-300"
-          fundo="bg-red-50"
-          ajuda={maisAntiga
-            ? `A mais antiga é de ${formatarData(maisAntiga.data_aula)} — ${maisAntiga.dias_atras} dias.`
-            : undefined}
+          titulo={`${plural(totalAtrasadas, "chamada", "chamadas")} em atraso`}
+          // "8 chamadas" lia como "8 chamadas de alunos". Cada uma e um DIA de
+          // uma disciplina numa turma — dizer isso na tela evita a conta errada
+          // de cabeca que qualquer um faria.
+          ajuda={
+            <>
+              Uma por dia de aula de cada disciplina — não é por aluno.
+              {maisAntiga && (
+                <> A mais antiga é de <strong>{formatarData(maisAntiga.data_aula)}</strong>,
+                  há {maisAntiga.dias_atras} dias.</>
+              )}
+            </>
+          }
           acao={<Ir para="relatorios">Ver nos relatórios</Ir>}
         >
           {/* Agrupado por professor, e não por turma: a conversa que resolve
@@ -355,21 +367,27 @@ export default function ResumoManager({
               mais velha, que e por onde se comeca. */}
           <ul className="divide-y divide-red-100">
             {(verTodosAtrasos ? atrasos : atrasos.slice(0, LIMITE_DA_LISTA)).map(a => (
-              <li key={a.professor} className="flex flex-wrap items-baseline gap-x-2 py-1.5 text-sm">
-                <strong className="text-gray-800">{a.professor}</strong>
-                <span className="text-gray-600">
-                  {a.quantidade} chamada{a.quantidade > 1 ? "s" : ""}
-                </span>
-                <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
-                  a mais antiga há {a.diasDaMaisAntiga} dias
-                </span>
-                <span className="flex flex-wrap gap-1">
+              // Duas linhas em vez de uma fileira de coisas soltas: os nomes
+              // formam uma coluna que se lê de cima a baixo, e a gravidade
+              // forma outra, alinhada a direita. Antes tudo tinha o mesmo peso
+              // e o olho nao tinha por onde comecar.
+              <li key={a.professor} className="py-2">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="font-semibold text-gray-900">{a.professor}</span>
+                  <span className="shrink-0 text-xs font-medium text-red-700">
+                    há {a.diasDaMaisAntiga} dias
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  <span className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-red-800">
+                    {a.quantidade} {plural(a.quantidade, "aula", "aulas")}
+                  </span>
                   {a.turmas.map(t => (
-                    <span key={t} className="rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[11px] text-gray-600">
+                    <span key={t} className="rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[11px] text-gray-500">
                       {t}
                     </span>
                   ))}
-                </span>
+                </div>
               </li>
             ))}
           </ul>
@@ -388,10 +406,10 @@ export default function ResumoManager({
 
       {conflitos.length > 0 && (
         <Bloco
+          nivel="urgente"
+          numero={conflitos.length}
           icone={<DoorOpen className="h-4 w-4 text-red-600" />}
-          titulo={`${conflitos.length} conflito(s) de sala`}
-          borda="border-red-300"
-          fundo="bg-red-50"
+          titulo={`${plural(conflitos.length, "conflito", "conflitos")} de sala`}
           ajuda="Duas disciplinas no mesmo espaço, no mesmo dia e turno."
           acao={<Ir para="disciplinas">Ajustar a grade</Ir>}
         >
@@ -402,14 +420,20 @@ export default function ResumoManager({
       )}
 
       {/* ── Hoje ────────────────────────────────────────────────────────── */}
+      {/* Sábado não merece um card do tamanho de uma emergência. Sem aula, isto
+          vira uma linha; com aula, vira bloco. */}
+      {aulasDeHoje.length === 0 ? (
+        <p className="flex items-center gap-2 px-1 text-sm text-blue-200">
+          <CalendarCheck className="h-4 w-4 shrink-0 opacity-60" />
+          Nenhuma aula hoje — fim de semana, feriado, ou o semestre ainda não começou.
+        </p>
+      ) : (
       <Bloco
-        icone={<CalendarCheck className="h-4 w-4 text-blue-600" />}
-        titulo={aulasDeHoje.length === 0 ? "Nenhuma aula hoje" : `${aulasDeHoje.length} aula(s) hoje`}
-        borda="border-gray-200"
-        fundo="bg-white"
-        ajuda={aulasDeHoje.length === 0
-          ? "Fim de semana, feriado, ou o semestre ainda não começou."
-          : "O que acontece hoje, e quem já fechou a chamada."}
+        nivel="panorama"
+        numero={aulasDeHoje.length}
+        icone={<CalendarCheck className="h-4 w-4 text-blue-500" />}
+        titulo={`${plural(aulasDeHoje.length, "aula", "aulas")} hoje`}
+        ajuda="O que acontece hoje, e quem já fechou a chamada."
       >
         {aulasDeHoje.length > 0 && (
           <ul className="divide-y divide-gray-100">
@@ -433,13 +457,13 @@ export default function ResumoManager({
           </ul>
         )}
       </Bloco>
+      )}
 
       {esperando.length > 0 && (
         <Bloco
-          icone={<Users className="h-4 w-4 text-gray-500" />}
+          nivel="panorama"
+          icone={<Users className="h-4 w-4 text-gray-400" />}
           titulo={`${esperando.reduce((s, e) => s + e.quantidade, 0)} alunos cursando, por turma`}
-          borda="border-gray-200"
-          fundo="bg-white"
           ajuda="Retrato de quem está matriculado agora. Vira decisão no fim do módulo."
           acao={<Ir para="fechamento">Ir ao fechamento</Ir>}
         >
@@ -457,10 +481,10 @@ export default function ResumoManager({
       {/* ── Vigiar ──────────────────────────────────────────────────────── */}
       {semRecuperacao.length > 0 && (
         <Bloco
+          nivel="urgente"
+          numero={semRecuperacao.length}
           icone={<AlertTriangle className="h-4 w-4 text-red-600" />}
-          titulo={`${semRecuperacao.length} aluno(s) já não alcançam os 70%`}
-          borda="border-red-300"
-          fundo="bg-red-50"
+          titulo={`${plural(semRecuperacao.length, "aluno", "alunos")} já não alcançam os 70%`}
           ajuda="Nem vindo a todas as aulas restantes. Aqui só cabe conversar — e quanto antes."
           acao={<Ir para="relatorios">Ver frequência</Ir>}
         >
@@ -470,10 +494,10 @@ export default function ResumoManager({
 
       {porUmFio.length > 0 && (
         <Bloco
+          nivel="atencao"
+          numero={porUmFio.length}
           icone={<TrendingDown className="h-4 w-4 text-amber-600" />}
-          titulo={`${porUmFio.length} aluno(s) por um fio`}
-          borda="border-amber-300"
-          fundo="bg-amber-50"
+          titulo={`${plural(porUmFio.length, "aluno", "alunos")} por um fio`}
           ajuda="Ainda cabem uma ou duas faltas. É onde um telefonema resolve."
           acao={<Ir para="relatorios">Ver frequência</Ir>}
         >
@@ -486,10 +510,10 @@ export default function ResumoManager({
           semestre, não em maio no meio das aulas. */}
       {lacunas.length > 0 && (
         <Bloco
-          icone={<Wrench className="h-4 w-4 text-gray-500" />}
-          titulo={`${lacunas.length} ponto(s) da configuração pela metade`}
-          borda="border-gray-300"
-          fundo="bg-gray-50"
+          nivel="atencao"
+          numero={lacunas.length}
+          icone={<Wrench className="h-4 w-4 text-amber-600" />}
+          titulo={`${plural(lacunas.length, "ponto", "pontos")} da configuração pela metade`}
           ajuda="Nada quebra por causa disso — a coisa só não acontece, em silêncio."
         >
           <ul className="space-y-1.5">
@@ -515,27 +539,64 @@ function Numero({ rotulo, valor }: { rotulo: string; valor: string | number }) {
   );
 }
 
+type Nivel = "urgente" | "atencao" | "panorama";
+
+/**
+ * O peso visual vem da urgência, não da moldura.
+ *
+ * Antes todo bloco era o mesmo retângulo com o mesmo título: uma emergência de
+ * 110 chamadas atrasadas e o fato de 113 alunos estarem matriculados liam
+ * igual. Sem hierarquia, o olho não sabe onde pousar e a tela vira lista.
+ *
+ * Agora o número é o herói do bloco urgente — grande, colorido, à esquerda —
+ * e a faixa lateral repete a cor. O panorama fica sem faixa e com título
+ * menor: ele informa, não chama.
+ */
+const NIVEIS: Record<Nivel, {
+  faixa: string; borda: string; fundo: string; numero: string; titulo: string;
+}> = {
+  urgente:  { faixa: "bg-red-500",   borda: "border-red-200",   fundo: "bg-red-50/60",   numero: "text-red-600",   titulo: "text-lg font-bold text-gray-900" },
+  atencao:  { faixa: "bg-amber-500", borda: "border-amber-200", fundo: "bg-amber-50/60", numero: "text-amber-600", titulo: "text-base font-semibold text-gray-900" },
+  panorama: { faixa: "bg-transparent", borda: "border-gray-200", fundo: "bg-white",      numero: "text-gray-400",  titulo: "text-base font-semibold text-gray-700" },
+};
+
 function Bloco({
-  icone, titulo, ajuda, borda, fundo, acao, children,
+  nivel, numero, icone, titulo, ajuda, acao, children,
 }: {
+  nivel: Nivel;
+  /** O número que dói. Vira o elemento de maior peso do bloco. */
+  numero?: number;
   icone: React.ReactNode;
   titulo: string;
-  ajuda?: string;
-  borda: string;
-  fundo: string;
+  ajuda?: React.ReactNode;
   acao?: React.ReactNode;
   children?: React.ReactNode;
 }) {
+  const e = NIVEIS[nivel];
   return (
-    <Card className={`${borda} ${fundo}`}>
-      <CardHeader className="pb-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle className="flex items-center gap-2 text-base">{icone}{titulo}</CardTitle>
+    <Card className={`relative overflow-hidden ${e.borda} ${e.fundo}`}>
+      {nivel !== "panorama" && (
+        <span className={`absolute inset-y-0 left-0 w-1 ${e.faixa}`} aria-hidden />
+      )}
+      <CardHeader className="pb-2 pl-5">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="flex items-center gap-3">
+            {numero !== undefined && (
+              <span className={`text-3xl font-bold leading-none tabular-nums ${e.numero}`}>
+                {numero}
+              </span>
+            )}
+            <div>
+              <CardTitle className={`flex items-center gap-2 ${e.titulo}`}>
+                {icone}{titulo}
+              </CardTitle>
+              {ajuda && <p className="mt-0.5 text-sm text-gray-600">{ajuda}</p>}
+            </div>
+          </div>
           {acao}
         </div>
-        {ajuda && <p className="text-sm text-gray-600">{ajuda}</p>}
       </CardHeader>
-      {children && <CardContent className="pt-0">{children}</CardContent>}
+      {children && <CardContent className="pt-0 pl-5">{children}</CardContent>}
     </Card>
   );
 }
