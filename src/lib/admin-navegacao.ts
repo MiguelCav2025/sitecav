@@ -60,7 +60,7 @@ export const AREAS: AreaAdmin[] = [
       // Sem numero: o Resumo nao e etapa de configuracao, e o que se olha
       // depois que tudo esta configurado. Por isso vem antes do passo 1 e
       // fora da contagem.
-      { value: "resumo", label: "Resumo", ajuda: "O que precisa da sua atencao hoje", icone: LayoutDashboard },
+      { value: "resumo", label: "Resumo", ajuda: "O que precisa da sua atenção hoje", icone: LayoutDashboard },
       { passo: 1, value: "cronograma",  label: "Calendário letivo", ajuda: "Início, fim e feriados do semestre", icone: CalendarDays },
       { passo: 2, value: "turmas",      label: "Turmas",      ajuda: "Turmas e os alunos de cada uma",       icone: GraduationCap },
       { passo: 3, value: "disciplinas", label: "Disciplinas", ajuda: "Matérias, sala, professor e aulas",   icone: BookMarked },

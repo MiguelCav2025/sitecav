@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   AlertTriangle, CalendarCheck, CheckCircle2, ClipboardX, DoorOpen, Loader2,
-  Scale, Search, TrendingDown, Users, Wrench,
+  Search, TrendingDown, Users, Wrench,
 } from "lucide-react";
 
 /**
@@ -55,6 +55,9 @@ interface AulaDeHoje {
 
 interface EsperandoDecisao { turmaId: string; turma: string; modulo: number; quantidade: number; }
 
+/** Quantos itens cabem antes da lista virar parede. */
+const LIMITE_DA_LISTA = 8;
+
 const formatarData = (iso: string) => {
   const [a, m, d] = iso.split("-");
   return `${d}/${m}/${a.slice(2)}`;
@@ -82,6 +85,7 @@ export default function ResumoManager({
   const [lacunas, setLacunas] = useState<Lacuna[]>([]);
   const [indice, setIndice] = useState<AlunoNaBusca[]>([]);
   const [termo, setTermo] = useState("");
+  const [verTodosAtrasos, setVerTodosAtrasos] = useState(false);
   const [totais, setTotais] = useState({ turmas: 0, alunos: 0, professores: 0 });
 
   const carregar = useCallback(async () => {
@@ -236,7 +240,7 @@ export default function ResumoManager({
   return (
     <div className="space-y-5">
       {/* ── Onde a escola está ─────────────────────────────────────────── */}
-      <Card className="border-blue-200 bg-blue-50/70">
+      <Card className="border-gray-200 bg-white">
         <CardContent className="flex flex-wrap items-center gap-x-8 gap-y-3 py-4">
           <Numero rotulo="Semestre" valor={semestre ?? "—"} />
           <Numero rotulo="Turmas" valor={totais.turmas} />
@@ -245,15 +249,25 @@ export default function ResumoManager({
           {andamento && andamento.aulasPrevistas > 0 && (
             <div className="min-w-45 flex-1">
               <p className="text-xs text-gray-500">
-                Andamento — <strong className="text-gray-800">{andamento.aulasDadas}</strong>{" "}
-                de {andamento.aulasPrevistas} aulas dadas
+                Chamadas fechadas —{" "}
+                <strong className="text-gray-800">{andamento.aulasDadas}</strong>{" "}
+                de {andamento.aulasPrevistas} aulas
+                {andamento.aulasDadas === 0 && (
+                  <span className="text-amber-700"> · nenhuma ainda</span>
+                )}
               </p>
-              <div className="mt-1 h-2 overflow-hidden rounded-full bg-blue-200">
+              <div className="mt-1 h-2 overflow-hidden rounded-full bg-gray-200">
                 <div
                   className="h-full rounded-full bg-blue-600 transition-all"
                   style={{ width: `${andamento.percentual}%` }}
                 />
               </div>
+              {/* A aula ACONTECEU; o que falta e a chamada. Dizer "aulas dadas"
+                  aqui era contar as 110 pendencias ao contrario e chamar isso
+                  de andamento do semestre. */}
+              <p className="mt-0.5 text-[11px] text-gray-400">
+                Mede o registro, não o semestre: a aula acontece mesmo sem a chamada.
+              </p>
             </div>
           )}
         </CardContent>
@@ -336,8 +350,11 @@ export default function ResumoManager({
           {/* Agrupado por professor, e não por turma: a conversa que resolve
               isto é com uma pessoa. Seis linhas espalhadas por três turmas
               não dizem a quem ligar. */}
+          {/* Vinte professores empilhados viram parede. Os piores primeiro, o
+              resto a um clique — a ordem ja poe no topo quem tem a chamada
+              mais velha, que e por onde se comeca. */}
           <ul className="divide-y divide-red-100">
-            {atrasos.map(a => (
+            {(verTodosAtrasos ? atrasos : atrasos.slice(0, LIMITE_DA_LISTA)).map(a => (
               <li key={a.professor} className="flex flex-wrap items-baseline gap-x-2 py-1.5 text-sm">
                 <strong className="text-gray-800">{a.professor}</strong>
                 <span className="text-gray-600">
@@ -346,10 +363,26 @@ export default function ResumoManager({
                 <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
                   a mais antiga há {a.diasDaMaisAntiga} dias
                 </span>
-                <span className="text-xs text-gray-500">{a.turmas.join(" · ")}</span>
+                <span className="flex flex-wrap gap-1">
+                  {a.turmas.map(t => (
+                    <span key={t} className="rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[11px] text-gray-600">
+                      {t}
+                    </span>
+                  ))}
+                </span>
               </li>
             ))}
           </ul>
+          {atrasos.length > LIMITE_DA_LISTA && (
+            <button
+              onClick={() => setVerTodosAtrasos(v => !v)}
+              className="mt-2 text-xs font-medium text-red-700 underline-offset-2 hover:underline"
+            >
+              {verTodosAtrasos
+                ? "Mostrar menos"
+                : `Ver os outros ${atrasos.length - LIMITE_DA_LISTA} professores`}
+            </button>
+          )}
         </Bloco>
       )}
 
@@ -364,26 +397,6 @@ export default function ResumoManager({
         >
           <ul className="space-y-1 text-sm text-gray-700">
             {conflitos.map((c, i) => <li key={i}>{descreverConflito(c)}</li>)}
-          </ul>
-        </Bloco>
-      )}
-
-      {esperando.length > 0 && (
-        <Bloco
-          icone={<Scale className="h-4 w-4 text-amber-600" />}
-          titulo={`${esperando.reduce((s, e) => s + e.quantidade, 0)} aluno(s) com matrícula em aberto`}
-          borda="border-amber-300"
-          fundo="bg-amber-50"
-          ajuda="Só vira decisão no fim do módulo — até lá, é só o retrato de quem está cursando."
-          acao={<Ir para="fechamento">Ir ao fechamento</Ir>}
-        >
-          <ul className="flex flex-wrap gap-2">
-            {esperando.map(e => (
-              <li key={`${e.turmaId}|${e.modulo}`}
-                  className="rounded-full border border-amber-200 bg-white px-2.5 py-1 text-xs text-gray-700">
-                {e.turma} · <strong>{e.quantidade}</strong>
-              </li>
-            ))}
           </ul>
         </Bloco>
       )}
@@ -420,6 +433,26 @@ export default function ResumoManager({
           </ul>
         )}
       </Bloco>
+
+      {esperando.length > 0 && (
+        <Bloco
+          icone={<Users className="h-4 w-4 text-gray-500" />}
+          titulo={`${esperando.reduce((s, e) => s + e.quantidade, 0)} alunos cursando, por turma`}
+          borda="border-gray-200"
+          fundo="bg-white"
+          ajuda="Retrato de quem está matriculado agora. Vira decisão no fim do módulo."
+          acao={<Ir para="fechamento">Ir ao fechamento</Ir>}
+        >
+          <ul className="flex flex-wrap gap-2">
+            {esperando.map(e => (
+              <li key={`${e.turmaId}|${e.modulo}`}
+                  className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-700">
+                {e.turma} · <strong className="text-gray-900">{e.quantidade}</strong>
+              </li>
+            ))}
+          </ul>
+        </Bloco>
+      )}
 
       {/* ── Vigiar ──────────────────────────────────────────────────────── */}
       {semRecuperacao.length > 0 && (
@@ -508,9 +541,12 @@ function Bloco({
 }
 
 function ListaDeRisco({ itens }: { itens: readonly RiscoNaEscola[] }) {
+  const [tudo, setTudo] = useState(false);
+  const visiveis = tudo ? itens : itens.slice(0, LIMITE_DA_LISTA);
   return (
+    <>
     <ul className="divide-y divide-black/5">
-      {itens.map(r => (
+      {visiveis.map(r => (
         <li key={`${r.alunoId}|${r.turmaId}|${r.disciplinaId}`}
             className="flex flex-wrap items-baseline gap-x-2 py-1.5 text-sm">
           <Users className="h-3.5 w-3.5 shrink-0 text-gray-400" />
@@ -525,5 +561,14 @@ function ListaDeRisco({ itens }: { itens: readonly RiscoNaEscola[] }) {
         </li>
       ))}
     </ul>
+    {itens.length > LIMITE_DA_LISTA && (
+      <button
+        onClick={() => setTudo(v => !v)}
+        className="mt-2 text-xs font-medium text-gray-700 underline-offset-2 hover:underline"
+      >
+        {tudo ? "Mostrar menos" : `Ver os outros ${itens.length - LIMITE_DA_LISTA}`}
+      </button>
+    )}
+    </>
   );
 }
